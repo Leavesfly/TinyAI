@@ -13,6 +13,7 @@
     <modules>
         <module>tinyai-ndarr</module>
         <module>tinyai-func</module>
+        <module>tinyai-util</module>
     </modules>
 
     <properties>

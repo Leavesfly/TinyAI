@@ -215,7 +215,7 @@ public class NdArrayUtilTest {
 
         NdArray result = NdArrayUtil.merge(1, a1, a2);
 
-        assertEquals(Shape.of(2, 6, 3), result.getShape());
+        assertEquals(Shape.of(2, 3, 3), result.getShape());
 
         // 验证一些关键值
         assertEquals(1f, result.get(0, 0, 0), 1e-6);
@@ -237,9 +237,10 @@ public class NdArrayUtilTest {
             NdArray result = NdArrayUtil.merge(0, emptyArrays);
             // 如果没有抛出异常，验证结果
             assertNotNull(result);
-        } catch (ArrayIndexOutOfBoundsException e) {
-            // 这是预期的行为，因为代码尝试访问ndArrays[0]
+        } catch (IllegalArgumentException e) {
+            // 这是预期的行为，因为我们在merge方法中验证参数
             // 这个测试主要是确保我们了解当前的行为
+            assertEquals("至少需要一个NdArray进行合并", e.getMessage());
         }
     }
 

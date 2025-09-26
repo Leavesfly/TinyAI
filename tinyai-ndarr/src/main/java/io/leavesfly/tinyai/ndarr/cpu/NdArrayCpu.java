@@ -118,6 +118,16 @@ public class NdArrayCpu implements NdArray, Serializable {
         this.shape = shape;
         this.buffer = new float[shape.size()];
     }
+    
+    /**
+     * 从指定形状接口创建空的NdArray，所有元素初始化为0
+     *
+     * @param shape 数组形状接口
+     */
+    public NdArrayCpu(Shape shape) {
+        this.shape = (ShapeCpu) shape;
+        this.buffer = new float[shape.size()];
+    }
 
     // 优化的初始化方法
     private void initFromArray(float[][] data) {

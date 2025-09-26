@@ -2,6 +2,7 @@ package io.leavesfly.tinyai.ndarr.gpu;
 
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
+import io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu;
 
 /**
  * NdArray的 GPU版本
@@ -12,6 +13,11 @@ public class NdArrayGpu implements NdArray {
 
     @Override
     public NdArray like(Number value) {
+        return null;
+    }
+
+    @Override
+    public NdArrayCpu add(NdArray other) {
         return null;
     }
 

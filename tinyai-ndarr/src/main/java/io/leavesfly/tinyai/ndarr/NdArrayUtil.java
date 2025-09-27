@@ -229,4 +229,19 @@ public class NdArrayUtil {
             copyRecursive(source, target, sourceShape, indices, currentDim + 1, mergeAxis, offset);
         }
     }
+
+
+    /**
+     * 将浮点数组转换为整型数组
+     *
+     * @param src 浮点数组
+     * @return 整型数组
+     */
+    public static int[] toInt(float[] src) {
+        int[] res = new int[src.length];
+        for (int i = 0; i < src.length; i++) {
+            res[i] = (int) src[i];
+        }
+        return res;
+    }
 }

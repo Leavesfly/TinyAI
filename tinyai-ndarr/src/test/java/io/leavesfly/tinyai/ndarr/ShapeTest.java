@@ -24,10 +24,10 @@ public class ShapeTest {
     @Before
     public void setUp() {
         // 初始化各种维度的Shape实例
-        scalar = Shape.of(1, 1);  // 标量（虽然实际是1x1矩阵）
-        vector = Shape.of(5);     // 一维向量
-        matrix = Shape.of(3, 4);  // 二维矩阵
-        tensor3d = Shape.of(2, 3, 4);    // 三维张量
+        scalar = Shape.of();           // 真正的标量（零维）
+        vector = Shape.of(5);          // 一维向量
+        matrix = Shape.of(3, 4);       // 二维矩阵
+        tensor3d = Shape.of(2, 3, 4);  // 三维张量
         tensor4d = Shape.of(2, 3, 4, 5); // 四维张量
     }
 
@@ -69,11 +69,16 @@ public class ShapeTest {
 
     @Test
     public void testShapeTypeIdentification() {
-        // 测试标量判断
-        Shape scalarShape = Shape.of(1, 1);
-        assertFalse(scalarShape.isScalar()); // 注意：1x1矩阵不是真正的标量
-        assertTrue(scalarShape.isMatrix());
-        assertFalse(scalarShape.isVector());
+        // 测试标量判断（零维）
+        assertTrue(scalar.isScalar());
+        assertFalse(scalar.isMatrix());
+        assertFalse(scalar.isVector());
+
+        // 测试1x1矩阵（不是标量）
+        Shape oneByOneMatrix = Shape.of(1, 1);
+        assertFalse(oneByOneMatrix.isScalar()); // 1x1矩阵不是真正的标量
+        assertTrue(oneByOneMatrix.isMatrix());
+        assertFalse(oneByOneMatrix.isVector());
 
         // 测试向量判断
         assertTrue(vector.isVector());
@@ -132,6 +137,18 @@ public class ShapeTest {
         vector.getColumn();
     }
 
+    @Test(expected = IllegalStateException.class)
+    public void testGetRowOnScalar() {
+        // 在标量上调用getRow应该抛出异常
+        scalar.getRow();
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void testGetColumnOnScalar() {
+        // 在标量上调用getColumn应该抛出异常
+        scalar.getColumn();
+    }
+
     @Test(expected = IndexOutOfBoundsException.class)
     public void testGetDimensionWithInvalidIndex() {
         // 使用无效索引获取维度大小
@@ -151,7 +168,7 @@ public class ShapeTest {
     @Test
     public void testSizeCalculation() {
         // 测试各种形状的大小计算
-        assertEquals(1, scalar.size());
+        assertEquals(1, scalar.size());  // 标量大小为1
         assertEquals(5, vector.size());
         assertEquals(12, matrix.size()); // 3 * 4 = 12
         assertEquals(24, tensor3d.size()); // 2 * 3 * 4 = 24
@@ -171,6 +188,9 @@ public class ShapeTest {
 
     @Test
     public void testIndexCalculation() {
+        // 测试标量索引计算（零维）
+        assertEquals(0, scalar.getIndex()); // 标量没有索引参数
+
         // 测试一维索引计算
         assertEquals(0, vector.getIndex(0));
         assertEquals(3, vector.getIndex(3));
@@ -334,5 +354,79 @@ public class ShapeTest {
         // 只有一个元素的情况
         assertEquals(0, edgeShape.getIndex(0, 0, 0));
         assertEquals(1, edgeShape.size());
+    }
+
+    // =============================================================================
+    // 新增的标量、向量、矩阵分类测试
+    // =============================================================================
+
+    @Test
+    public void testScalarDetailed() {
+        // 测试真正的标量（零维）
+        Shape trueScalar = Shape.of();
+        
+        assertTrue("Scalar should return true for isScalar()", trueScalar.isScalar());
+        assertFalse("Scalar should return false for isVector()", trueScalar.isVector());
+        assertFalse("Scalar should return false for isMatrix()", trueScalar.isMatrix());
+        
+        assertEquals("Scalar should have 0 dimensions", 0, trueScalar.getDimNum());
+        assertEquals("Scalar should have size 1", 1, trueScalar.size());
+        assertEquals("Scalar should have index 0", 0, trueScalar.getIndex());
+    }
+    
+    @Test
+    public void testVectorDetailed() {
+        // 测试各种大小的向量
+        Shape[] vectors = {
+            Shape.of(1),     // 单元素向量
+            Shape.of(5),     // 普通向量
+            Shape.of(100),   // 大向量
+            Shape.of(0)      // 空向量
+        };
+        
+        for (Shape v : vectors) {
+            assertFalse("Vector should return false for isScalar()", v.isScalar());
+            assertTrue("Vector should return true for isVector()", v.isVector());
+            assertFalse("Vector should return false for isMatrix()", v.isMatrix());
+            assertEquals("Vector should have 1 dimension", 1, v.getDimNum());
+        }
+    }
+    
+    @Test
+    public void testMatrixDetailed() {
+        // 测试各种大小的矩阵
+        Shape[] matrices = {
+            Shape.of(1, 1),   // 1x1矩阵
+            Shape.of(1, 5),   // 行向量
+            Shape.of(5, 1),   // 列向量
+            Shape.of(3, 4),   // 普通矩阵
+            Shape.of(0, 5),   // 空行矩阵
+            Shape.of(5, 0)    // 空列矩阵
+        };
+        
+        for (Shape m : matrices) {
+            assertFalse("Matrix should return false for isScalar()", m.isScalar());
+            assertFalse("Matrix should return false for isVector()", m.isVector());
+            assertTrue("Matrix should return true for isMatrix()", m.isMatrix());
+            assertEquals("Matrix should have 2 dimensions", 2, m.getDimNum());
+        }
+    }
+    
+    @Test
+    public void testHighDimensionalTensors() {
+        // 测试高维张量
+        Shape[] tensors = {
+            Shape.of(2, 3, 4),        // 3D
+            Shape.of(2, 3, 4, 5),     // 4D
+            Shape.of(2, 3, 4, 5, 6),  // 5D
+            Shape.of(1, 1, 1, 1, 1, 1) // 6D，所有维度都是1
+        };
+        
+        for (Shape t : tensors) {
+            assertFalse("High-dimensional tensor should return false for isScalar()", t.isScalar());
+            assertFalse("High-dimensional tensor should return false for isVector()", t.isVector());
+            assertFalse("High-dimensional tensor should return false for isMatrix()", t.isMatrix());
+            assertTrue("High-dimensional tensor should have more than 2 dimensions", t.getDimNum() > 2);
+        }
     }
 }

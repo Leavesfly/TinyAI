@@ -6,8 +6,6 @@ import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Layer;
 import io.leavesfly.tinyai.nnet.Parameter;
 
-import java.util.Arrays;
-import java.util.List;
 
 /**
  * 批量归一化层

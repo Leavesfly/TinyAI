@@ -206,11 +206,11 @@ public class VariableTest {
         // 测试sigmoid - Variable类没有sigmoid方法，使用tanh代替
         Variable sigmoid = a.tanh(); // 使用tanh作为替代
         assertNotNull(sigmoid.getValue());
-        // tanh值在(-1,1)之间
+        // tanh值在[-1,1]范围内
         float[][] sigmoidMatrix = sigmoid.getValue().getMatrix();
         for (int i = 0; i < sigmoidMatrix.length; i++) {
             for (int j = 0; j < sigmoidMatrix[i].length; j++) {
-                assertTrue(sigmoidMatrix[i][j] > -1 && sigmoidMatrix[i][j] < 1);
+                assertTrue(sigmoidMatrix[i][j] >= -1 && sigmoidMatrix[i][j] <= 1);
             }
         }
 

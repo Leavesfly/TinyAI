@@ -2,6 +2,7 @@ package io.leavesfly.tinyai.func.base;
 
 import io.leavesfly.tinyai.func.Function;
 import io.leavesfly.tinyai.ndarr.NdArray;
+import io.leavesfly.tinyai.ndarr.Shape;
 
 import java.util.Arrays;
 import java.util.List;
@@ -17,14 +18,61 @@ public class Mul extends Function {
     /**
      * 前向传播计算乘法
      * <p>
-     * 执行两个NdArray的乘法运算：inputs[0] * inputs[1]
+     * 执行两个NdArray的乘法运算，支持广播机制：inputs[0] * inputs[1]
      *
      * @param inputs 输入的NdArray数组，长度为2
      * @return 乘法运算结果的NdArray
      */
     @Override
     public NdArray forward(NdArray... inputs) {
-        return inputs[0].mul(inputs[1]);
+        NdArray input0 = inputs[0];
+        NdArray input1 = inputs[1];
+        
+        // 检查是否需要广播
+        if (input0.getShape().equals(input1.getShape())) {
+            // 形状相同，直接相乘
+            return input0.mul(input1);
+        } else {
+            // 需要广播
+            Shape shape0 = input0.getShape();
+            Shape shape1 = input1.getShape();
+            
+            // 判断广播方向
+            if (isScalarOrBroadcastable(shape1, shape0)) {
+                // input1 需要广播到 input0 的形状
+                return input0.mul(input1.broadcastTo(shape0));
+            } else if (isScalarOrBroadcastable(shape0, shape1)) {
+                // input0 需要广播到 input1 的形状
+                return input0.broadcastTo(shape1).mul(input1);
+            } else {
+                throw new IllegalArgumentException(
+                    String.format("乘法操作的形状不兼容：%s vs %s", shape0, shape1)
+                );
+            }
+        }
+    }
+    
+    /**
+     * 判断一个形状是否可以广播到另一个形状
+     * @param smallShape 小的形状
+     * @param largeShape 大的形状
+     * @return 是否可以广播
+     */
+    private boolean isScalarOrBroadcastable(Shape smallShape, Shape largeShape) {
+        // 简单的广播判断：支持标量广播
+        if (smallShape.size() == 1) {
+            return true;
+        }
+        
+        // 支持相同维度数且小形状的各维度都不大于大形状
+        if (smallShape.getDimNum() == largeShape.getDimNum()) {
+            if (smallShape.isMatrix() && largeShape.isMatrix()) {
+                return smallShape.getRow() <= largeShape.getRow() && 
+                       smallShape.getColumn() <= largeShape.getColumn();
+            }
+        }
+        
+        return false;
     }
 
     /**

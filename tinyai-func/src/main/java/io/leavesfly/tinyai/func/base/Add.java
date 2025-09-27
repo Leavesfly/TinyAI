@@ -16,7 +16,8 @@ import java.util.List;
  */
 public class Add extends Function {
 
-    private Shape inputShape;
+    private Shape x0Shape;
+    private Shape x1Shape;
 
     /**
      * 前向传播计算加法
@@ -29,10 +30,11 @@ public class Add extends Function {
      */
     @Override
     public NdArray forward(NdArray... inputs) {
-
-        if (!inputs[1].getShape().equals(inputs[0].getShape())) {
-            inputShape = inputs[1].getShape();
-            return inputs[0].add(inputs[1].broadcastTo(inputs[0].getShape()));
+        x0Shape = inputs[0].getShape();
+        x1Shape = inputs[1].getShape();
+        
+        if (!x1Shape.equals(x0Shape)) {
+            return inputs[0].add(inputs[1].broadcastTo(x0Shape));
         } else {
             return inputs[0].add(inputs[1]);
         }
@@ -49,7 +51,9 @@ public class Add extends Function {
      */
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        return Arrays.asList(yGrad, inputShape == null ? yGrad : yGrad.sumTo(inputShape));
+        NdArray gx0 = yGrad;
+        NdArray gx1 = x1Shape.equals(x0Shape) ? yGrad : yGrad.sumTo(x1Shape);
+        return Arrays.asList(gx0, gx1);
     }
 
     /**

@@ -18,7 +18,7 @@ public class MeanSE extends Function {
      * 前向传播计算均方误差
      * <p>
      * 计算公式：MSE = Σ(predict - label)² / n
-     * 其中n为样本数量
+     * 其中n为总元素数量
      *
      * @param inputs 输入的NdArray数组，包含预测值和真实标签
      * @return 均方误差值
@@ -28,7 +28,7 @@ public class MeanSE extends Function {
         NdArray predict = inputs[0];
         NdArray labelY = inputs[1];
 
-        int size = predict.getShape().getRow();
+        int size = predict.getShape().size(); // 使用总元素数而不是行数
         return predict.sub(labelY).square().sum().divNum(size);
     }
 
@@ -38,6 +38,7 @@ public class MeanSE extends Function {
      * 对于均方误差损失函数，梯度计算公式为：
      * - ∂MSE/∂predict = 2 * (predict - label) / n
      * - ∂MSE/∂label = -2 * (predict - label) / n
+     * 其中n为总元素数量
      *
      * @param yGrad 输出变量的梯度
      * @return 输入变量的梯度列表
@@ -49,7 +50,7 @@ public class MeanSE extends Function {
         NdArray labelY = inputs[1].getValue();
 
         NdArray diff = predict.sub(labelY);
-        int len = diff.getShape().getRow();
+        int len = diff.getShape().size(); // 使用总元素数
         NdArray gx0 = yGrad.broadcastTo(diff.getShape()).mul(diff).mulNum(2).divNum(len);
 
         return Arrays.asList(gx0, gx0.neg());

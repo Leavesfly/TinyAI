@@ -12,7 +12,7 @@ import java.util.List;
 /**
  * Sigmoid交叉熵损失函数
  * <p>
- * 用于二分类问题的损失函数，结合了Sigmoid激活函数和交叉熵损失。
+ * 用于多分类问题的损失函数，结合了Sigmoid激活函数和交叉熵损失。
  */
 public class SigmoidCE extends Function {
 
@@ -26,7 +26,7 @@ public class SigmoidCE extends Function {
      *
      * @param inputs 输入的NdArray数组，包含预测值和真实标签
      * @return Sigmoid交叉熵损失值
-     * @throws RuntimeException 当预测值列数不为1时抛出异常
+     * @throws RuntimeException 当预测值和标签列数不一致时抛出异常
      */
     @Override
     public NdArray forward(NdArray... inputs) {
@@ -35,8 +35,8 @@ public class SigmoidCE extends Function {
         NdArray labelY = inputs[1];
         sigmoid = predict.sigmoid();
 
-        if (predict.getShape().getColumn() != 1) {
-            throw new RuntimeException(" predict.getShape().getColumn() != 1 error!");
+        if (predict.getShape().getColumn() != labelY.getShape().getColumn()) {
+            throw new RuntimeException("predict和label的列数不一致！");
         }
         NdArray other = sigmoid.like(1f).sub(sigmoid);
 

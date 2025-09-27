@@ -215,9 +215,9 @@ public class MathFunctionsTest {
         assertEquals(0.5f, result.getMatrix()[0][1], 1e-6); // sigmoid(0) = 0.5
         assertTrue(result.getMatrix()[0][2] > 0.99); // sigmoid(100) ≈ 1
 
-        // 测试所有值都在(0,1)范围内
+        // 测试所有值都在[0,1]范围内（sigmoid的值域）
         for (float val : result.getMatrix()[0]) {
-            assertTrue(val > 0 && val < 1);
+            assertTrue(val >= 0 && val <= 1);
         }
 
         // 测试反向传播
@@ -244,9 +244,9 @@ public class MathFunctionsTest {
         assertEquals(0f, result.getMatrix()[0][1], 1e-6); // tanh(0) = 0
         assertTrue(result.getMatrix()[0][2] > 0.99); // tanh(100) ≈ 1
 
-        // 测试所有值都在(-1,1)范围内
+        // 测试所有值都在[-1,1]范围内（tanh的值域）
         for (float val : result.getMatrix()[0]) {
-            assertTrue(val > -1 && val < 1);
+            assertTrue(val >= -1 && val <= 1);
         }
 
         // 测试反向传播

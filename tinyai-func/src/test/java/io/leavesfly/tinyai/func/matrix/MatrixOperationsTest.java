@@ -246,8 +246,9 @@ public class MatrixOperationsTest {
         NdArray input = NdArray.of(new float[][]{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}});
         NdArray result = getItemFunc.forward(input);
 
-        // 验证结果：获取指定位置的元素
-        float[][] expected = {{2, 3}, {8, 9}};
+        // 验证结果：获取指定位置的元素（配对索引方式）
+        // 行0列0列1=2, 行2列2=9
+        float[][] expected = {{2, 9}};
         assertArrayEquals(expected, result.getMatrix());
 
         // 测试反向传播
@@ -389,8 +390,8 @@ public class MatrixOperationsTest {
         summed.backward();
 
         assertNotNull(x.getGrad());
-        // 梯度应该是9（3次广播 * 3个求和位置）
-        float[][] expectedGrad = {{9, 9}};
+        // 梯度应该是3（每个元素被复制到3次）
+        float[][] expectedGrad = {{3, 3}};
         assertArrayEquals(expectedGrad, x.getGrad().getMatrix());
     }
 

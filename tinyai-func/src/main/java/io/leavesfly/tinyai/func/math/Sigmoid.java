@@ -38,8 +38,9 @@ public class Sigmoid extends Function {
      */
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        NdArray y = getOutput().getValue();
-        return Collections.singletonList(yGrad.mul(y).mul(NdArray.ones(y.getShape()).sub(y)));
+        NdArray x = inputs[0].getValue();
+        NdArray sigmoidX = x.sigmoid();
+        return Collections.singletonList(yGrad.mul(sigmoidX).mul(NdArray.ones(sigmoidX.getShape()).sub(sigmoidX)));
     }
 
     /**

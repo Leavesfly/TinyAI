@@ -58,8 +58,8 @@ public class MatrixOperationsTest {
         assertEquals(w.getValue().getShape(), w.getGrad().getShape());
 
         // 矩阵乘法梯度的具体验证
-        float[][] expectedXGrad = {{2, 2}, {2, 2}}; // grad_y.dot(w.T)
-        float[][] expectedWGrad = {{4, 6}, {6, 8}}; // x.T.dot(grad_y)
+        float[][] expectedXGrad = {{2, 3}, {2, 3}}; // grad_y.dot(w.T)
+        float[][] expectedWGrad = {{4, 4}, {6, 6}}; // x.T.dot(grad_y)
         assertArrayEquals(expectedXGrad, x.getGrad().getMatrix());
         assertArrayEquals(expectedWGrad, w.getGrad().getMatrix());
     }
@@ -335,7 +335,7 @@ public class MatrixOperationsTest {
     public void testRequireInputNum() {
         // 测试各个函数需要的输入参数个数
         assertEquals(2, new MatMul().requireInputNum());
-        assertEquals(0, new Reshape(Shape.of(2, 2)).requireInputNum()); // 注意：Reshape返回0，可能是错误
+        assertEquals(1, new Reshape(Shape.of(2, 2)).requireInputNum()); // Reshape需要一个输入
         assertEquals(1, new BroadcastTo(Shape.of(2, 2)).requireInputNum());
         assertEquals(1, new Sum().requireInputNum());
         assertEquals(1, new SumTo(Shape.of(2, 2)).requireInputNum());

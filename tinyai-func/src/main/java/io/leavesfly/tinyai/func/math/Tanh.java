@@ -37,9 +37,10 @@ public class Tanh extends Function {
      */
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        NdArray outputValue = output.getValue();
+        NdArray x = inputs[0].getValue();
+        NdArray tanhX = x.tanh();
         return Collections.singletonList(
-                yGrad.mul(NdArray.ones(outputValue.getShape()).sub(outputValue.square())));
+                yGrad.mul(NdArray.ones(tanhX.getShape()).sub(tanhX.square())));
     }
 
     /**

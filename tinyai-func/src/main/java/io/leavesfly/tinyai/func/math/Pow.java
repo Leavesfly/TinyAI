@@ -50,7 +50,7 @@ public class Pow extends Function {
     @Override
     public List<NdArray> backward(NdArray yGrad) {
         NdArray x0 = inputs[0].getValue();
-        return Collections.singletonList(x0.mulNum(pow).pow(pow - 1f).mul(yGrad));
+        return Collections.singletonList(x0.pow(pow - 1f).mulNum(pow).mul(yGrad));
     }
 
     /**

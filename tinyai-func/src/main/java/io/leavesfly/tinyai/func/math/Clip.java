@@ -53,10 +53,23 @@ public class Clip extends Function {
     @Override
     public List<NdArray> backward(NdArray yGrad) {
         NdArray x = inputs[0].getValue();
-        if (x.isLar(NdArray.like(x.getShape(), min)) && !x.isLar(NdArray.like(x.getShape(), max))) {
-            return Collections.singletonList(yGrad);
+        // 直接创建一个新的数组来存储结果
+        float[][] xMatrix = x.getMatrix();
+        float[][] yGradMatrix = yGrad.getMatrix();
+        float[][] result = new float[xMatrix.length][xMatrix[0].length];
+        
+        for (int i = 0; i < xMatrix.length; i++) {
+            for (int j = 0; j < xMatrix[i].length; j++) {
+                // 只有在范围内的值才保留梯度
+                if (xMatrix[i][j] >= min && xMatrix[i][j] <= max) {
+                    result[i][j] = yGradMatrix[i][j];
+                } else {
+                    result[i][j] = 0f;
+                }
+            }
         }
-        return Collections.singletonList(yGrad.neg());
+        
+        return Collections.singletonList(NdArray.of(result));
     }
 
     /**

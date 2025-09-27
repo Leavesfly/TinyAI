@@ -37,7 +37,7 @@ public class Sin extends Function {
      */
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        return Collections.singletonList(inputs[0].getValue().cos().mul(yGrad.transpose()));
+        return Collections.singletonList(inputs[0].getValue().cos().mul(yGrad));
     }
 
     /**

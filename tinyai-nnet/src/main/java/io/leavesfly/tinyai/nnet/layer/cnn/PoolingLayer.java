@@ -86,7 +86,7 @@ public class PoolingLayer extends Layer {
         NdArray inputData = x.getValue();
         
         // 检查输入形状 (batch_size, channels, height, width)
-        if (inputData.getShape().size() != 4) {
+        if (inputData.getShape().getDimNum() != 4) {
             throw new RuntimeException("池化层输入必须是4维的: (batch_size, channels, height, width)");
         }
         

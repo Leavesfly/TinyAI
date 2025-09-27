@@ -437,7 +437,7 @@ public interface NdArray {
     /**
      * 矩阵均值运算，沿指定轴计算均值
      *
-     * @param axis 聚合轴，axis=0表示按列计算均值，axis=1表示按行计算均值
+     * @param axis 聚合轴
      * @return 均值运算结果数组
      */
     NdArray mean(int axis);
@@ -445,7 +445,7 @@ public interface NdArray {
     /**
      * 矩阵方差运算，沿指定轴计算方差
      *
-     * @param axis 聚合轴，axis=0表示按列计算方差，axis=1表示按行计算方差
+     * @param axis 聚合轴
      * @return 方差运算结果数组
      */
     NdArray var(int axis);
@@ -453,7 +453,7 @@ public interface NdArray {
     /**
      * 矩阵累和运算，沿指定轴计算累和
      *
-     * @param axis 聚合轴，axis=0表示按列累和，axis=1表示按行累和
+     * @param axis 聚合轴
      * @return 累和运算结果数组
      */
     NdArray sum(int axis);
@@ -465,7 +465,7 @@ public interface NdArray {
      *
      * @param _shape 目标形状
      * @return 压缩累加结果数组
-     * @throws IllegalArgumentException 当数组不是矩阵或形状不合法时抛出
+     * @throws IllegalArgumentException 当形状不合法时抛出
      */
     NdArray sumTo(Shape _shape);
 
@@ -476,7 +476,7 @@ public interface NdArray {
      *
      * @param _shape 目标广播形状
      * @return 广播结果数组
-     * @throws IllegalArgumentException 当数组不是矩阵或形状不合法时抛出
+     * @throws IllegalArgumentException 当形状不合法时抛出
      */
     NdArray broadcastTo(Shape _shape);
 

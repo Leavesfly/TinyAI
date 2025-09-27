@@ -50,12 +50,12 @@ public class SigmoidLayer extends Layer {
 
     @Override
     public NdArray forward(NdArray... inputs) {
-        return null;
+        return new Sigmoid().forward(inputs);
     }
 
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        return null;
+        return new Sigmoid().backward(yGrad);
     }
 
     @Override

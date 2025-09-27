@@ -52,8 +52,8 @@ public class BatchNorm extends Layer {
     public BatchNorm(String _name, Shape _inputShape) {
         super(_name, _inputShape);
         // 默认特征数为输入形状的最后一维
-        if (_inputShape != null && _inputShape.size() > 0) {
-            this.numFeatures = _inputShape.getDimension(_inputShape.size() - 1);
+        if (_inputShape != null && _inputShape.getDimNum() > 0) {
+            this.numFeatures = _inputShape.getDimension(_inputShape.getDimNum() - 1);
         } else {
             this.numFeatures = 1;
         }
@@ -84,7 +84,7 @@ public class BatchNorm extends Layer {
         NdArray inputData = x.getValue();
         
         // 计算批次维度的均值和方差
-        // 假设输入形状为 (batch_size, features) 或 (batch_size, height, width, channels)
+        // 假设输入形状为 (batch_size, features) 或 (batch_size, channels, height, width)
         Shape shape = inputData.getShape();
         
         // 计算除了特征维度外的所有维度的均值
@@ -97,7 +97,10 @@ public class BatchNorm extends Layer {
         Variable normalized = x.sub(mean).div(variance.add(new Variable(NdArray.of(eps))).pow(0.5f));
         
         // 应用缩放和偏移：γ * normalized + β
-        Variable output = normalized.mul(gamma).add(beta);
+        // 需要确保gamma和beta能够正确广播到normalized的形状
+        Variable gammaBroadcasted = gamma.broadcastTo(shape);
+        Variable betaBroadcasted = beta.broadcastTo(shape);
+        Variable output = normalized.mul(gammaBroadcasted).add(betaBroadcasted);
         
         return output;
     }
@@ -109,21 +112,15 @@ public class BatchNorm extends Layer {
         NdArray data = x.getValue();
         Shape shape = data.getShape();
         
-        if (shape.size() == 2) {
-            // 2D情况：(batch_size, features)
+        if (shape.getDimNum() >= 2) {
             // 沿着batch维度（轴0）计算均值
-            return computeMeanAlongAxis(x, 0);
-        } else if (shape.size() == 4) {
-            // 4D情况：(batch_size, height, width, channels)
-            // 沿着batch, height, width维度计算均值
-            Variable temp = computeMeanAlongAxis(x, 0);
-            temp = computeMeanAlongAxis(temp, 0);
-            temp = computeMeanAlongAxis(temp, 0);
-            return temp;
+            NdArray meanData = data.mean(0);
+            // 需要将均值广播回原始形状
+            return new Variable(meanData.broadcastTo(shape));
         } else {
             // 简化处理：计算所有元素的均值然后广播
-            Variable totalMean = x.sum().div(new Variable(NdArray.of(data.getShape().size())));
-            return totalMean.broadcastTo(Shape.of(numFeatures));
+            Variable totalMean = x.sum().div(new Variable(NdArray.of(shape.size())));
+            return totalMean.broadcastTo(shape);
         }
     }
     
@@ -137,35 +134,13 @@ public class BatchNorm extends Layer {
         NdArray data = x.getValue();
         Shape shape = data.getShape();
         
-        if (shape.size() == 2) {
-            return computeMeanAlongAxis(squaredDiff, 0);
-        } else if (shape.size() == 4) {
-            Variable temp = computeMeanAlongAxis(squaredDiff, 0);
-            temp = computeMeanAlongAxis(temp, 0);
-            temp = computeMeanAlongAxis(temp, 0);
-            return temp;
+        if (shape.getDimNum() >= 2) {
+            NdArray varData = squaredDiff.getValue().mean(0);
+            // 需要将方差广播回原始形状
+            return new Variable(varData.broadcastTo(shape));
         } else {
-            Variable totalVar = squaredDiff.sum().div(new Variable(NdArray.of(data.getShape().size())));
-            return totalVar.broadcastTo(Shape.of(numFeatures));
+            Variable totalVar = squaredDiff.sum().div(new Variable(NdArray.of(shape.size())));
+            return totalVar.broadcastTo(shape);
         }
-    }
-    
-    /**
-     * 沿指定轴计算均值（简化实现）
-     */
-    private Variable computeMeanAlongAxis(Variable x, int axis) {
-        // 这是一个简化的实现，实际中应该有更精确的轴向均值计算
-        NdArray data = x.getValue();
-        Shape shape = data.getShape();
-        
-        if (axis == 0 && shape.size() >= 2) {
-            // 沿第一个轴计算均值
-            int batchSize = shape.getDimension(0);
-            Variable sum = x.sum();
-            return sum.div(new Variable(NdArray.of(batchSize)));
-        }
-        
-        // 默认返回输入的平均值
-        return x.sum().div(new Variable(NdArray.of(data.getShape().size())));
     }
 }

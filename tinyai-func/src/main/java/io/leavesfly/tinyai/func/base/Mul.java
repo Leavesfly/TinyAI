@@ -64,11 +64,25 @@ public class Mul extends Function {
             return true;
         }
         
-        // 支持相同维度数且小形状的各维度都不大于大形状
-        if (smallShape.getDimNum() == largeShape.getDimNum()) {
-            if (smallShape.isMatrix() && largeShape.isMatrix()) {
-                return smallShape.getRow() <= largeShape.getRow() && 
-                       smallShape.getColumn() <= largeShape.getColumn();
+        // 支持多维数组的广播判断
+        // 从后往前检查维度是否兼容
+        if (smallShape.getDimNum() <= largeShape.getDimNum()) {
+            boolean compatible = true;
+            for (int i = 0; i < smallShape.getDimNum(); i++) {
+                int srcDimIndex = smallShape.getDimNum() - 1 - i;
+                int dstDimIndex = largeShape.getDimNum() - 1 - i;
+                
+                int srcDim = smallShape.getDimension(srcDimIndex);
+                int dstDim = largeShape.getDimension(dstDimIndex);
+                
+                // 广播规则：维度相等，或者源维度为1
+                if (srcDim != dstDim && srcDim != 1) {
+                    compatible = false;
+                    break;
+                }
+            }
+            if (compatible) {
+                return true;
             }
         }
         

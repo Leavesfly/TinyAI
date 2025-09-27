@@ -30,8 +30,8 @@ public class LayerNorm extends Layer {
 
     public LayerNorm(String _name, Shape _inputShape) {
         super(_name, _inputShape, _inputShape);
-        if (_inputShape != null && _inputShape.size() > 0) {
-            this.normalizedShape = _inputShape.getDimension(_inputShape.size() - 1);
+        if (_inputShape != null && _inputShape.getDimNum() > 0) {
+            this.normalizedShape = _inputShape.getDimension(_inputShape.getDimNum() - 1);
         } else {
             this.normalizedShape = 1;
         }
@@ -41,8 +41,8 @@ public class LayerNorm extends Layer {
 
     public LayerNorm(String _name, Shape _inputShape, Shape _outputShape) {
         super(_name, _inputShape, _outputShape);
-        if (_inputShape != null && _inputShape.size() > 0) {
-            this.normalizedShape = _inputShape.getDimension(_inputShape.size() - 1);
+        if (_inputShape != null && _inputShape.getDimNum() > 0) {
+            this.normalizedShape = _inputShape.getDimension(_inputShape.getDimNum() - 1);
         } else {
             this.normalizedShape = 1;
         }
@@ -100,7 +100,10 @@ public class LayerNorm extends Layer {
         );
         
         // 应用缩放和偏移：γ * normalized + β
-        Variable output = normalized.mul(gamma).add(beta);
+        // 需要确保gamma和beta能够正确广播到normalized的形状
+        Variable gammaBroadcasted = new Variable(gamma.getValue().broadcastTo(inputData.getShape()));
+        Variable betaBroadcasted = new Variable(beta.getValue().broadcastTo(inputData.getShape()));
+        Variable output = normalized.mul(gammaBroadcasted).add(betaBroadcasted);
         
         return output;
     }
@@ -112,14 +115,22 @@ public class LayerNorm extends Layer {
         NdArray data = x.getValue();
         Shape shape = data.getShape();
         
-        // 简化实现：计算每个样本最后一维的均值
-        if (shape.size() >= 2) {
-            int lastDim = shape.getDimension(shape.size() - 1);
-            Variable sum = x.sum();
-            Variable mean = sum.div(new Variable(NdArray.of(lastDim)));
+        // 对最后一个维度计算均值
+        if (shape.getDimNum() >= 1) {
+            // 计算最后一个维度的轴索引
+            int lastAxis = shape.getDimNum() - 1;
+            NdArray meanData = data.mean(lastAxis);
             
-            // 广播到与输入相同的形状
-            return mean.broadcastTo(shape);
+            // 创建一个新的形状，将最后一个维度设为1，以便能够广播回原始形状
+            int[] newDims = new int[shape.getDimNum()];
+            for (int i = 0; i < shape.getDimNum() - 1; i++) {
+                newDims[i] = shape.getDimension(i);
+            }
+            newDims[shape.getDimNum() - 1] = 1;
+            Shape broadcastShape = Shape.of(newDims);
+            
+            // 将均值广播到新形状，然后再广播回原始形状
+            return new Variable(meanData.reshape(broadcastShape).broadcastTo(shape));
         }
         
         return x;
@@ -132,16 +143,24 @@ public class LayerNorm extends Layer {
         Variable diff = x.sub(mean);
         Variable squaredDiff = diff.mul(diff);
         
-        NdArray data = x.getValue();
+        NdArray data = squaredDiff.getValue();
         Shape shape = data.getShape();
         
-        if (shape.size() >= 2) {
-            int lastDim = shape.getDimension(shape.size() - 1);
-            Variable sum = squaredDiff.sum();
-            Variable variance = sum.div(new Variable(NdArray.of(lastDim)));
+        if (shape.getDimNum() >= 1) {
+            // 计算最后一个维度的轴索引
+            int lastAxis = shape.getDimNum() - 1;
+            NdArray varData = data.mean(lastAxis);
             
-            // 广播到与输入相同的形状
-            return variance.broadcastTo(shape);
+            // 创建一个新的形状，将最后一个维度设为1，以便能够广播回原始形状
+            int[] newDims = new int[shape.getDimNum()];
+            for (int i = 0; i < shape.getDimNum() - 1; i++) {
+                newDims[i] = shape.getDimension(i);
+            }
+            newDims[shape.getDimNum() - 1] = 1;
+            Shape broadcastShape = Shape.of(newDims);
+            
+            // 将方差广播到新形状，然后再广播回原始形状
+            return new Variable(varData.reshape(broadcastShape).broadcastTo(shape));
         }
         
         return squaredDiff;

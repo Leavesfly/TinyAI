@@ -50,12 +50,12 @@ public class SoftMaxLayer extends Layer {
 
     @Override
     public NdArray forward(NdArray... inputs) {
-        return null;
+        return new SoftMax().forward(inputs[0]);
     }
 
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        return null;
+        return new SoftMax().backward(yGrad);
     }
 
     @Override

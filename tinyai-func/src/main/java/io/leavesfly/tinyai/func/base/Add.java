@@ -23,7 +23,7 @@ public class Add extends Function {
      * 前向传播计算加法
      * 
      * 执行两个NdArray的加法运算。如果两个输入的形状不同，
-     * 则对第二个输入进行广播以匹配第一个输入的形状。
+     * 则进行广播以匹配形状。
      * 
      * @param inputs 输入的NdArray数组，长度为2
      * @return 加法运算结果的NdArray
@@ -33,11 +33,57 @@ public class Add extends Function {
         x0Shape = inputs[0].getShape();
         x1Shape = inputs[1].getShape();
         
-        if (!x1Shape.equals(x0Shape)) {
-            return inputs[0].add(inputs[1].broadcastTo(x0Shape));
-        } else {
+        // 检查是否需要广播
+        if (x0Shape.equals(x1Shape)) {
+            // 形状相同，直接相加
             return inputs[0].add(inputs[1]);
+        } else {
+            // 需要广播
+            // 判断广播方向
+            if (isBroadcastable(x1Shape, x0Shape)) {
+                // input1 需要广播到 input0 的形状
+                return inputs[0].add(inputs[1].broadcastTo(x0Shape));
+            } else if (isBroadcastable(x0Shape, x1Shape)) {
+                // input0 需要广播到 input1 的形状
+                return inputs[0].broadcastTo(x1Shape).add(inputs[1]);
+            } else {
+                throw new IllegalArgumentException(
+                    String.format("加法操作的形状不兼容：%s vs %s", x0Shape, x1Shape)
+                );
+            }
         }
+    }
+    
+    /**
+     * 判断一个形状是否可以广播到另一个形状
+     * @param srcShape 源形状
+     * @param dstShape 目标形状
+     * @return 是否可以广播
+     */
+    private boolean isBroadcastable(Shape srcShape, Shape dstShape) {
+        // 支持多维数组的广播判断
+        // 从后往前检查维度是否兼容
+        if (srcShape.getDimNum() <= dstShape.getDimNum()) {
+            boolean compatible = true;
+            for (int i = 0; i < srcShape.getDimNum(); i++) {
+                int srcDimIndex = srcShape.getDimNum() - 1 - i;
+                int dstDimIndex = dstShape.getDimNum() - 1 - i;
+                
+                int srcDim = srcShape.getDimension(srcDimIndex);
+                int dstDim = dstShape.getDimension(dstDimIndex);
+                
+                // 广播规则：维度相等，或者源维度为1
+                if (srcDim != dstDim && srcDim != 1) {
+                    compatible = false;
+                    break;
+                }
+            }
+            if (compatible) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     /**

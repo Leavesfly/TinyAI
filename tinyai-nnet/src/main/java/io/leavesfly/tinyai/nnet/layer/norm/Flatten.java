@@ -30,18 +30,37 @@ public class Flatten extends Layer {
     }
     
     /**
+     * 获取输出形状
+     * 
+     * @return 输出形状
+     */
+    public Shape getOutputShape() {
+        return outputShape;
+    }
+    
+    /**
      * 计算输出形状
      */
     private static Shape calculateOutputShape(Shape inputShape) {
-        if (inputShape == null || inputShape.size() == 0) {
+        // 处理null或空形状
+        if (inputShape == null || inputShape.getDimNum() == 0) {
             return Shape.of(-1, 1);
         }
         
+        // 如果输入是一维的
+        if (inputShape.getDimNum() == 1) {
+            // 将一维输入转换为(batch_size, 1)的形式
+            // 这里假设一维输入的维度就是batch_size
+            int batchSize = inputShape.getDimension(0);
+            return Shape.of(batchSize, 1);
+        }
+        
+        // 如果输入是二维或更高维度
         int batchSize = inputShape.getDimension(0);
         int flattenedSize = 1;
         
         // 计算除了batch维度外的所有维度的乘积
-        for (int i = 1; i < inputShape.size(); i++) {
+        for (int i = 1; i < inputShape.getDimNum(); i++) {
             int dim = inputShape.getDimension(i);
             if (dim > 0) {
                 flattenedSize *= dim;
@@ -63,15 +82,7 @@ public class Flatten extends Layer {
         originalShape = x.getValue().getShape();
         
         // 计算输出形状
-        int batchSize = originalShape.getDimension(0);
-        int flattenedSize = 1;
-        
-        // 计算除了batch维度外的所有维度的乘积
-        for (int i = 1; i < originalShape.size(); i++) {
-            flattenedSize *= originalShape.getDimension(i);
-        }
-        
-        Shape outputShape = Shape.of(batchSize, flattenedSize);
+        Shape outputShape = calculateOutputShape(originalShape);
         
         // 重塑为二维
         return x.reshape(outputShape);
@@ -81,14 +92,9 @@ public class Flatten extends Layer {
     public NdArray forward(NdArray... inputs) {
         originalShape = inputs[0].getShape();
         
-        int batchSize = originalShape.getDimension(0);
-        int flattenedSize = 1;
+        // 计算输出形状
+        Shape outputShape = calculateOutputShape(originalShape);
         
-        for (int i = 1; i < originalShape.size(); i++) {
-            flattenedSize *= originalShape.getDimension(i);
-        }
-        
-        Shape outputShape = Shape.of(batchSize, flattenedSize);
         return inputs[0].reshape(outputShape);
     }
     

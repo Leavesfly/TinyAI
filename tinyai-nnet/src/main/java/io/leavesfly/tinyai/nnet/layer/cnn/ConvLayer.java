@@ -117,7 +117,7 @@ public class ConvLayer extends Layer {
         NdArray inputData = x.getValue();
         
         // 检查输入形状 (batch_size, channels, height, width)
-        if (inputData.getShape().size() != 4) {
+        if (inputData.getShape().getDimNum() != 4) {
             throw new RuntimeException("卷积层输入必须是4维的: (batch_size, channels, height, width)");
         }
         
@@ -142,13 +142,29 @@ public class ConvLayer extends Layer {
         NdArray weightReshaped = reshapeWeight();
         
         // 矩阵乘法计算卷积
+        // Im2Col结果形状为 [batch*out_h*out_w, in_channels*kernel_h*kernel_w]
+        // 权重形状为 [out_channels, in_channels*kernel_h*kernel_w]
+        // 需要 im2col × weight.T = [batch*out_h*out_w, in_channels*kernel_h*kernel_w] × [in_channels*kernel_h*kernel_w, out_channels]
         Variable im2colVar = new Variable(im2colResult);
-        Variable weightVar = new Variable(weightReshaped);
+        Variable weightVar = new Variable(weightReshaped.transpose());
         Variable output = im2colVar.matMul(weightVar);
         
         // 添加偏置(如果有)
         if (useBias) {
-            output = output.add(bias);
+            // 将偏置加到每个输出通道上
+            NdArray biasData = bias.getValue();
+            NdArray outputData = output.getValue();
+            
+            // 重塑输出为 [batch*out_h*out_w, out_channels]
+            // 然后对每个out_channels维度加上对应的偏置值
+            float[][] outputMatrix = outputData.getMatrix();
+            for (int i = 0; i < outputMatrix.length; i++) {
+                for (int j = 0; j < outputMatrix[i].length; j++) {
+                    outputMatrix[i][j] += biasData.get(j);
+                }
+            }
+            
+            output = new Variable(NdArray.of(outputMatrix));
         }
         
         // 重塑输出为4维 (batch_size, output_channels, output_height, output_width)
@@ -217,10 +233,11 @@ public class ConvLayer extends Layer {
      */
     private NdArray reshapeWeight() {
         // 权重形状从 (out_channels, in_channels, kernel_h, kernel_w)
-        // 重塑为 (in_channels * kernel_h * kernel_w, out_channels)
+        // 重塑为 (out_channels, in_channels * kernel_h * kernel_w)
         NdArray weightData = weight.getValue();
-        Shape newShape = Shape.of(inChannels * kernelHeight * kernelWidth, outChannels);
-        return weightData.reshape(newShape).transpose();
+        Shape newShape = Shape.of(outChannels, inChannels * kernelHeight * kernelWidth);
+        
+        return weightData.reshape(newShape);
     }
     
     @Override

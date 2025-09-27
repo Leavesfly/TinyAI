@@ -50,12 +50,12 @@ public class TanhLayer extends Layer {
 
     @Override
     public NdArray forward(NdArray... inputs) {
-        return null;
+        return new Tanh().forward(inputs[0]);
     }
 
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        return null;
+        return new Tanh().backward(yGrad);
     }
 
     @Override

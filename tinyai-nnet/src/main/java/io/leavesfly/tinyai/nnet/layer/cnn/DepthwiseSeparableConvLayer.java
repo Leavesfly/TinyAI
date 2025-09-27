@@ -115,7 +115,7 @@ public class DepthwiseSeparableConvLayer extends Layer {
         
         // 检查输入形状
         NdArray inputData = x.getValue();
-        if (inputData.getShape().size() != 4) {
+        if (inputData.getShape().getDimNum() != 4) {
             throw new RuntimeException("深度可分离卷积层输入必须是4维的: (batch_size, channels, height, width)");
         }
         

@@ -62,17 +62,17 @@ public class ReLuLayer extends Layer {
 
     @Override
     public NdArray forward(NdArray... inputs) {
-        return null;
+        return new ReLu().forward(inputs[0]);
     }
 
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        return null;
+        return new ReLu().backward(yGrad);
     }
 
     @Override
     public int requireInputNum() {
-        return 0;
+        return 1;
     }
 
 

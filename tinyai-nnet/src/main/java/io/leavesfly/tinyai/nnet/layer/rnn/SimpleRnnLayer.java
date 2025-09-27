@@ -174,13 +174,19 @@ public class SimpleRnnLayer extends RnnLayer {
 
         // 第一次前向传播，没有前一时间步的隐藏状态
         if (stateValue == null) {
-            NdArray linearResult = x.dot(x2h.getValue()).add(b.getValue().broadcastTo(x.getShape()));
+            NdArray xLinear = x.dot(x2h.getValue());
+            Shape xLinearShape = xLinear.getShape();
+            NdArray bias = b.getValue().broadcastTo(xLinearShape);
+            NdArray linearResult = xLinear.add(bias);
             stateValue = linearResult.tanh();
         } else {
             // 后续前向传播，包含前一时间步的隐藏状态
-            NdArray xLinear = x.dot(x2h.getValue()).add(b.getValue().broadcastTo(x.getShape()));
+            NdArray xLinear = x.dot(x2h.getValue());
+            Shape xLinearShape = xLinear.getShape();
+            NdArray bias = b.getValue().broadcastTo(xLinearShape);
+            NdArray xLinearWithBias = xLinear.add(bias);
             NdArray hLinear = stateValue.dot(h2h.getValue());
-            NdArray linearResult = xLinear.add(hLinear);
+            NdArray linearResult = xLinearWithBias.add(hLinear);
             stateValue = linearResult.tanh();
         }
         return stateValue;
@@ -220,5 +226,10 @@ public class SimpleRnnLayer extends RnnLayer {
         } else {
             return Arrays.asList(xGrad, x2hGrad, bGrad);
         }
+    }
+
+    @Override
+    public int requireInputNum() {
+        return 1;
     }
 }

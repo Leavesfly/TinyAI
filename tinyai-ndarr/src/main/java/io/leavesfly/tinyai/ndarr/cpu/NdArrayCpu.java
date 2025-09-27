@@ -235,18 +235,6 @@ public class NdArrayCpu implements NdArray, Serializable {
         }
     }
 
-    /**
-     * 验证形状是否为矩阵（二维数组）
-     *
-     * @param shape 待验证的形状
-     * @throws IllegalArgumentException 当形状不是矩阵时抛出
-     */
-    private static void validateMatrixShape(Shape shape) {
-        if (!shape.isMatrix()) {
-            throw new IllegalArgumentException("操作仅适用于矩阵（二维数组）");
-        }
-    }
-
     // =============================================================================
     // 静态工厂方法 - 优化后的创建方法
     // =============================================================================
@@ -281,13 +269,29 @@ public class NdArrayCpu implements NdArray, Serializable {
      * @throws IllegalArgumentException 当形状不是矩阵或不是方形矩阵时抛出
      */
     public static NdArrayCpu eye(Shape shape) {
-        validateMatrixShape(shape);
-        NdArrayCpu result = new NdArrayCpu(shape);
-        int minDim = Math.min(shape.getRow(), shape.getColumn());
-        for (int i = 0; i < minDim; i++) {
-            result.buffer[i * shape.getColumn() + i] = 1.0f;
+        // 移除仅适用于矩阵的限制，支持多维数组
+        
+        // 对于多维数组，我们只支持最后两个维度的单位矩阵
+        if (shape.getDimNum() >= 2) {
+            NdArrayCpu result = new NdArrayCpu(shape);
+            int lastDimSize = shape.getDimension(shape.getDimNum() - 1);
+            int secondLastDimSize = shape.getDimension(shape.getDimNum() - 2);
+            int minDim = Math.min(lastDimSize, secondLastDimSize);
+            
+            // 计算批次大小
+            int batchSize = shape.size() / (lastDimSize * secondLastDimSize);
+            
+            for (int batch = 0; batch < batchSize; batch++) {
+                for (int i = 0; i < minDim; i++) {
+                    // 计算多维索引（简化处理）
+                    int index = batch * (lastDimSize * secondLastDimSize) + i * lastDimSize + i;
+                    result.buffer[index] = 1.0f;
+                }
+            }
+            return result;
         }
-        return result;
+        
+        throw new IllegalArgumentException("操作需要至少二维数组");
     }
 
     /**
@@ -738,10 +742,12 @@ public class NdArrayCpu implements NdArray, Serializable {
      * <p>使用数值稳定版本实现，避免指数运算溢出</p>
      *
      * @return Softmax运算结果数组
-     * @throws IllegalArgumentException 当数组不是矩阵时抛出
+     * @throws IllegalArgumentException 当数组不是二维矩阵时抛出
      */
     public NdArrayCpu softMax() {
-        validateMatrixShape(this.shape);
+        if (this.shape.getDimNum() != 2) {
+            throw new IllegalArgumentException("操作仅适用于二维矩阵");
+        }
         NdArrayCpu result = new NdArrayCpu(this.shape);
 
         // 使用数值稳定版本，避免指数爆炸
@@ -804,7 +810,9 @@ public class NdArrayCpu implements NdArray, Serializable {
      * @throws IllegalArgumentException 当数组不是矩阵时抛出
      */
     public NdArrayCpu transpose() {
-        validateMatrixShape(this.shape);
+        if (this.shape.getDimNum() != 2) {
+            throw new IllegalArgumentException("操作仅适用于二维矩阵");
+        }
         NdArrayCpu result = new NdArrayCpu(ShapeCpu.of(shape.getColumn(), shape.getRow()));
 
         for (int i = 0; i < shape.getRow(); i++) {
@@ -942,32 +950,55 @@ public class NdArrayCpu implements NdArray, Serializable {
      * @throws IllegalArgumentException 当数组不是矩阵或轴参数无效时抛出
      */
     private NdArrayCpu axisOperation(int axis, java.util.function.Function<float[], Float> operation, String operationName) {
-        validateMatrixShape(this.shape);
+        // 移除仅适用于矩阵的限制，支持多维数组
         validateAxis(axis);
 
-        if (axis == 0) {
-            // 按列操作
-            NdArrayCpu result = new NdArrayCpu(ShapeCpu.of(1, shape.getColumn()));
-            for (int j = 0; j < shape.getColumn(); j++) {
-                float[] columnData = new float[shape.getRow()];
-                for (int i = 0; i < shape.getRow(); i++) {
-                    columnData[i] = this.buffer[i * shape.getColumn() + j];
-                }
-                result.buffer[j] = operation.apply(columnData);
+        // 计算新形状
+        int[] newDimensions = new int[this.shape.getDimNum() - 1];
+        int newIndex = 0;
+        for (int i = 0; i < this.shape.getDimNum(); i++) {
+            if (i != axis) {
+                newDimensions[newIndex++] = this.shape.getDimension(i);
             }
-            return result;
-        } else {
-            // 按行操作
-            NdArrayCpu result = new NdArrayCpu(Shape.of(shape.getRow(), 1));
-            for (int i = 0; i < shape.getRow(); i++) {
-                float[] rowData = new float[shape.getColumn()];
-                for (int j = 0; j < shape.getColumn(); j++) {
-                    rowData[j] = this.buffer[i * shape.getColumn() + j];
-                }
-                result.buffer[i] = operation.apply(rowData);
-            }
-            return result;
         }
+        
+        ShapeCpu newShape = ShapeCpu.of(newDimensions);
+        NdArrayCpu result = new NdArrayCpu(newShape);
+        
+        // 计算聚合
+        int totalElementsInAxis = this.shape.getDimension(axis);
+        
+        // 遍历所有非axis维度的组合
+        int[] indices = new int[this.shape.getDimNum()];
+        int[] resultIndices = new int[newShape.getDimNum()];
+        
+        for (int i = 0; i < newShape.size(); i++) {
+            // 将结果索引转换为多维索引
+            int temp = i;
+            for (int dim = newShape.getDimNum() - 1; dim >= 0; dim--) {
+                resultIndices[dim] = temp % newShape.getDimension(dim);
+                temp /= newShape.getDimension(dim);
+            }
+            
+            // 构建完整的索引数组
+            int resultIndex = 0;
+            for (int dim = 0; dim < this.shape.getDimNum(); dim++) {
+                if (dim == axis) {
+                    indices[dim] = 0; // axis维度将在下面循环中变化
+                } else {
+                    indices[dim] = resultIndices[resultIndex++];
+                }
+            }
+            
+            // 计算沿axis维度的聚合
+            float[] dataToAggregate = new float[totalElementsInAxis];
+            for (int j = 0; j < totalElementsInAxis; j++) {
+                indices[axis] = j;
+                dataToAggregate[j] = this.get(indices);
+            }
+            result.buffer[i] = operation.apply(dataToAggregate);
+        }
+        return result;
     }
 
     /**
@@ -977,8 +1008,9 @@ public class NdArrayCpu implements NdArray, Serializable {
      * @throws IllegalArgumentException 当轴参数无效时抛出
      */
     private void validateAxis(int axis) {
-        if (axis != 0 && axis != 1) {
-            throw new IllegalArgumentException("轴参数只支持 0(列) 或 1(行)");
+        // 移除仅适用于矩阵的限制，支持多维数组
+        if (axis < 0 || axis >= this.shape.getDimNum()) {
+            throw new IllegalArgumentException(String.format("轴参数%d超出范围[0,%d)", axis, this.shape.getDimNum()));
         }
     }
 
@@ -1045,22 +1077,73 @@ public class NdArrayCpu implements NdArray, Serializable {
      *
      * @param _shape 目标形状
      * @return 压缩累加结果数组
-     * @throws IllegalArgumentException 当数组不是矩阵或形状不合法时抛出
+     * @throws IllegalArgumentException 当形状不合法时抛出
      */
     public NdArrayCpu sumTo(Shape _shape) {
-        if (!shape.isMatrix()) {
-            throw new IllegalArgumentException("操作仅适用于矩阵（二维数组）");
+        // 移除仅适用于矩阵的限制，支持多维数组
+        
+        // 检查形状兼容性
+        if (this.shape.getDimNum() < _shape.getDimNum()) {
+            throw new IllegalArgumentException(String.format("源形状维度(%d)不能小于目标形状维度(%d)", this.shape.getDimNum(), _shape.getDimNum()));
         }
-
-        if (_shape.getRow() > this.shape.getRow() || _shape.getColumn() > this.shape.getColumn()) {
-            throw new IllegalArgumentException(String.format("目标形状 %s 不能大于当前形状 %s", _shape, this.shape));
-        }
-        NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(_shape.getRow(), _shape.getColumn()));
-        for (int i = 0; i < shape.getRow(); i++) {
-            for (int j = 0; j < shape.getColumn(); j++) {
-                ndArray.buffer[(i % _shape.getRow()) * _shape.getColumn() + j % _shape.getColumn()] += this.buffer[j + i * this.shape.getColumn()];
+        
+        // 检查sumTo兼容性
+        // 从后往前检查维度是否兼容
+        for (int i = 0; i < _shape.getDimNum(); i++) {
+            int srcDimIndex = this.shape.getDimNum() - 1 - i;
+            int dstDimIndex = _shape.getDimNum() - 1 - i;
+            
+            int srcDim = this.shape.getDimension(srcDimIndex);
+            int dstDim = _shape.getDimension(dstDimIndex);
+            
+            // sumTo规则：维度相等，或者目标维度为1，或者目标维度不存在（即维度数较少）
+            if (srcDim != dstDim && dstDim != 1) {
+                throw new IllegalArgumentException(String.format("sumTo不兼容：源维度[%d]=%d，目标维度[%d]=%d", srcDimIndex, srcDim, dstDimIndex, dstDim));
             }
         }
+        
+        NdArrayCpu ndArray = new NdArrayCpu(_shape);
+        
+        // 执行sumTo
+        for (int i = 0; i < this.shape.size(); i++) {
+            // 计算源索引
+            int[] srcIndices = new int[this.shape.getDimNum()];
+            int temp = i;
+            for (int dim = this.shape.getDimNum() - 1; dim >= 0; dim--) {
+                srcIndices[dim] = temp % this.shape.getDimension(dim);
+                temp /= this.shape.getDimension(dim);
+            }
+            
+            // 计算目标索引
+            int[] dstIndices = new int[_shape.getDimNum()];
+            boolean valid = true;
+            
+            for (int dim = 0; dim < _shape.getDimNum(); dim++) {
+                int dstDimIndex = _shape.getDimNum() - 1 - dim;
+                int srcDimIndex = this.shape.getDimNum() - 1 - dim;
+                
+                if (_shape.getDimension(dstDimIndex) == 1) {
+                    // 如果目标维度为1，则索引始终为0
+                    dstIndices[dstDimIndex] = 0;
+                } else {
+                    // 否则使用源索引
+                    dstIndices[dstDimIndex] = srcIndices[srcDimIndex];
+                }
+                
+                // 检查索引是否有效
+                if (dstIndices[dstDimIndex] >= _shape.getDimension(dstDimIndex)) {
+                    valid = false;
+                    break;
+                }
+            }
+            
+            // 如果索引有效，累加到目标位置
+            if (valid) {
+                int dstIndex = ndArray.shape.getIndex(dstIndices);
+                ndArray.buffer[dstIndex] += this.buffer[i];
+            }
+        }
+        
         return ndArray;
     }
 
@@ -1071,23 +1154,62 @@ public class NdArrayCpu implements NdArray, Serializable {
      *
      * @param _shape 目标广播形状
      * @return 广播结果数组
-     * @throws IllegalArgumentException 当数组不是矩阵或形状不合法时抛出
+     * @throws IllegalArgumentException 当形状不合法时抛出
      */
     public NdArrayCpu broadcastTo(Shape _shape) {
-        if (!shape.isMatrix()) {
-            throw new IllegalArgumentException("操作仅适用于矩阵（二维数组）");
+        // 移除仅适用于矩阵的限制，支持多维数组
+        
+        // 检查形状兼容性
+        if (this.shape.getDimNum() > _shape.getDimNum()) {
+            throw new IllegalArgumentException(String.format("源形状维度(%d)不能大于目标形状维度(%d)", this.shape.getDimNum(), _shape.getDimNum()));
         }
-
-        if (_shape.getRow() < this.shape.getRow() || _shape.getColumn() < this.shape.getColumn()) {
-            throw new IllegalArgumentException(String.format("目标形状 %s 不能小于当前形状 %s", _shape, this.shape));
-        }
-        NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(_shape.getRow(), _shape.getColumn()));
-
-        for (int i = 0; i < _shape.getRow(); i++) {
-            for (int j = 0; j < _shape.getColumn(); j++) {
-                ndArray.buffer[i * _shape.getColumn() + j] += this.buffer[i % this.shape.getRow() * this.shape.getColumn() + j % this.shape.getColumn()];
+        
+        // 检查广播兼容性
+        // 从后往前检查维度是否兼容
+        for (int i = 0; i < this.shape.getDimNum(); i++) {
+            int srcDimIndex = this.shape.getDimNum() - 1 - i;
+            int dstDimIndex = _shape.getDimNum() - 1 - i;
+            
+            int srcDim = this.shape.getDimension(srcDimIndex);
+            int dstDim = _shape.getDimension(dstDimIndex);
+            
+            // 广播规则：维度相等，或者源维度为1，或者源维度不存在（即维度数较少）
+            if (srcDim != dstDim && srcDim != 1) {
+                throw new IllegalArgumentException(String.format("广播不兼容：源维度[%d]=%d，目标维度[%d]=%d", srcDimIndex, srcDim, dstDimIndex, dstDim));
             }
         }
+        
+        NdArrayCpu ndArray = new NdArrayCpu(_shape);
+        
+        // 执行广播
+        for (int i = 0; i < _shape.size(); i++) {
+            // 计算目标索引对应源索引
+            int[] dstIndices = new int[_shape.getDimNum()];
+            int temp = i;
+            for (int dim = _shape.getDimNum() - 1; dim >= 0; dim--) {
+                dstIndices[dim] = temp % _shape.getDimension(dim);
+                temp /= _shape.getDimension(dim);
+            }
+            
+            // 计算源索引
+            int[] srcIndices = new int[this.shape.getDimNum()];
+            for (int dim = 0; dim < this.shape.getDimNum(); dim++) {
+                int srcDimIndex = this.shape.getDimNum() - 1 - dim;
+                int dstDimIndex = _shape.getDimNum() - 1 - dim;
+                
+                if (this.shape.getDimension(srcDimIndex) == 1) {
+                    // 如果源维度为1，则索引始终为0
+                    srcIndices[srcDimIndex] = 0;
+                } else {
+                    // 否则使用目标索引
+                    srcIndices[srcDimIndex] = dstIndices[dstDimIndex];
+                }
+            }
+            
+            // 获取源值并设置到目标位置
+            ndArray.buffer[i] = this.buffer[this.shape.getIndex(srcIndices)];
+        }
+        
         return ndArray;
     }
 
@@ -1099,43 +1221,78 @@ public class NdArrayCpu implements NdArray, Serializable {
      * @throws IllegalArgumentException 当数组不是矩阵或轴参数无效时抛出
      */
     public NdArrayCpu argMax(int axis) {
-        if (!shape.isMatrix()) {
-            throw new IllegalArgumentException("操作仅适用于矩阵（二维数组）");
-        }
+        // 移除仅适用于矩阵的限制，支持多维数组
+        validateAxis(axis);
 
-        if (axis == 0) {
-            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(1, this.getShape().getColumn()));
-            float[][] matrix = getMatrix();
-            for (int i = 0; i < shape.getColumn(); i++) {
-                float maxValue = Float.MIN_VALUE;
-                int maxIndex = -1;
-                for (int j = 0; j < shape.getRow(); j++) {
-                    if (maxValue < matrix[j][i]) {
-                        maxValue = matrix[j][i];
-                        maxIndex = j;
+        // 对于多维数组，我们只支持最后两个轴的查找
+        if (axis == this.shape.getDimNum() - 2) {
+            // 按行查找每列的最大值索引（axis = -2）
+            int[] newDims = new int[this.shape.getDimNum()];
+            for (int i = 0; i < this.shape.getDimNum() - 2; i++) {
+                newDims[i] = this.shape.getDimension(i);
+            }
+            newDims[this.shape.getDimNum() - 2] = 1;
+            newDims[this.shape.getDimNum() - 1] = this.shape.getDimension(this.shape.getDimNum() - 1);
+            
+            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(newDims));
+            
+            // 实现多维数组的argMax逻辑
+            // 这里简化处理，只处理最后两个维度
+            int lastDimSize = this.shape.getDimension(this.shape.getDimNum() - 1);
+            int secondLastDimSize = this.shape.getDimension(this.shape.getDimNum() - 2);
+            int batchSize = this.shape.size() / (lastDimSize * secondLastDimSize);
+            
+            for (int batch = 0; batch < batchSize; batch++) {
+                for (int j = 0; j < lastDimSize; j++) {
+                    float maxValue = Float.MIN_VALUE;
+                    int maxIndex = -1;
+                    for (int i = 0; i < secondLastDimSize; i++) {
+                        int index = batch * (lastDimSize * secondLastDimSize) + i * lastDimSize + j;
+                        if (maxValue < this.buffer[index]) {
+                            maxValue = this.buffer[index];
+                            maxIndex = i;
+                        }
                     }
+                    int resultIndex = batch * (lastDimSize * 1) + 0 * lastDimSize + j;
+                    ndArray.buffer[resultIndex] = maxIndex;
                 }
-                ndArray.buffer[i] = maxIndex;
             }
             return ndArray;
-
-        } else if (axis == 1) {
-            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(this.getShape().getRow(), 1));
-            float[][] matrix = getMatrix();
-            for (int i = 0; i < shape.getRow(); i++) {
-                float maxValue = Float.MIN_VALUE;
-                int maxIndex = -1;
-                for (int j = 0; j < shape.getColumn(); j++) {
-                    if (maxValue < matrix[i][j]) {
-                        maxValue = matrix[i][j];
-                        maxIndex = j;
+        } else if (axis == this.shape.getDimNum() - 1) {
+            // 按列查找每行的最大值索引（axis = -1）
+            int[] newDims = new int[this.shape.getDimNum()];
+            for (int i = 0; i < this.shape.getDimNum() - 2; i++) {
+                newDims[i] = this.shape.getDimension(i);
+            }
+            newDims[this.shape.getDimNum() - 2] = this.shape.getDimension(this.shape.getDimNum() - 2);
+            newDims[this.shape.getDimNum() - 1] = 1;
+            
+            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(newDims));
+            
+            // 实现多维数组的argMax逻辑
+            // 这里简化处理，只处理最后两个维度
+            int lastDimSize = this.shape.getDimension(this.shape.getDimNum() - 1);
+            int secondLastDimSize = this.shape.getDimension(this.shape.getDimNum() - 2);
+            int batchSize = this.shape.size() / (lastDimSize * secondLastDimSize);
+            
+            for (int batch = 0; batch < batchSize; batch++) {
+                for (int i = 0; i < secondLastDimSize; i++) {
+                    float maxValue = Float.MIN_VALUE;
+                    int maxIndex = -1;
+                    for (int j = 0; j < lastDimSize; j++) {
+                        int index = batch * (lastDimSize * secondLastDimSize) + i * lastDimSize + j;
+                        if (maxValue < this.buffer[index]) {
+                            maxValue = this.buffer[index];
+                            maxIndex = j;
+                        }
                     }
+                    int resultIndex = batch * (1 * secondLastDimSize) + i * 1 + 0;
+                    ndArray.buffer[resultIndex] = maxIndex;
                 }
-                ndArray.buffer[i] = maxIndex;
             }
             return ndArray;
         }
-        throw new IllegalArgumentException(String.format("不支持的轴参数: %d，仅支持 0(列) 或 1(行)", axis));
+        throw new IllegalArgumentException(String.format("不支持的轴参数: %d，仅支持 %d(列) 或 %d(行)", axis, this.shape.getDimNum() - 2, this.shape.getDimNum() - 1));
     }
 
     /**
@@ -1148,32 +1305,60 @@ public class NdArrayCpu implements NdArray, Serializable {
      * @throws IllegalArgumentException 当数组不是矩阵或维度不匹配时抛出
      */
     public NdArrayCpu dot(NdArray _other) {
-
+        // 移除仅适用于矩阵的限制，支持多维数组
         NdArrayCpu other = (NdArrayCpu) _other;
-        if (!shape.isMatrix()) {
-            throw new IllegalArgumentException("操作仅适用于矩阵（二维数组）");
-        }
-
-        if (shape.getColumn() != other.shape.getRow()) {
-            throw new IllegalArgumentException(String.format("矩阵乘法维度不匹配：%s × %s，第一个矩阵的列数(%d)必须等于第二个矩阵的行数(%d)", this.shape, other.shape, shape.getColumn(), other.shape.getRow()));
-        }
-
-        NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(shape.getRow(), other.shape.getColumn()));
-
-        for (int i = 0; i < shape.getRow(); i++) {
-            for (int j = 0; j < other.shape.getColumn(); j++) {
-
-                float sum = 0f;
-                for (int k = 0; k < shape.getColumn(); k++) {
-//                    sum += this.get(i, k) * other.get(k, j);
-                    sum += buffer[i * shape.getColumn() + k] * other.buffer[k * other.shape.getColumn() + j];
-                }
-
-//                ndArray.set(sum, i, j);
-                ndArray.buffer[i * other.shape.getColumn() + j] = sum;
+        
+        // 对于多维数组，我们只支持最后两个维度的矩阵乘法
+        if (this.shape.getDimNum() >= 2 && other.shape.getDimNum() >= 2) {
+            int thisLastDim = this.shape.getDimension(this.shape.getDimNum() - 1);
+            int thisSecondLastDim = this.shape.getDimension(this.shape.getDimNum() - 2);
+            int otherLastDim = other.shape.getDimension(other.shape.getDimNum() - 1);
+            int otherSecondLastDim = other.shape.getDimension(other.shape.getDimNum() - 2);
+            
+            if (thisLastDim != otherSecondLastDim) {
+                throw new IllegalArgumentException(String.format("矩阵乘法维度不匹配：%s × %s，第一个矩阵的列数(%d)必须等于第二个矩阵的行数(%d)", this.shape, other.shape, thisLastDim, otherSecondLastDim));
             }
+            
+            // 计算结果形状
+            int[] newDims = new int[Math.max(this.shape.getDimNum(), other.shape.getDimNum())];
+            int maxDimNum = Math.max(this.shape.getDimNum(), other.shape.getDimNum());
+            
+            // 复制前面的维度
+            for (int i = 0; i < maxDimNum - 2; i++) {
+                int thisDim = (i < this.shape.getDimNum() - 2) ? this.shape.getDimension(i) : 1;
+                int otherDim = (i < other.shape.getDimNum() - 2) ? other.shape.getDimension(i) : 1;
+                newDims[i] = Math.max(thisDim, otherDim);
+            }
+            
+            // 设置最后两个维度
+            newDims[maxDimNum - 2] = thisSecondLastDim;
+            newDims[maxDimNum - 1] = otherLastDim;
+            
+            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(newDims));
+            
+            // 实现多维数组的矩阵乘法逻辑
+            // 这里简化处理，只处理最后两个维度
+            int batchSize = ndArray.shape.size() / (thisSecondLastDim * otherLastDim);
+            
+            for (int batch = 0; batch < batchSize; batch++) {
+                for (int i = 0; i < thisSecondLastDim; i++) {
+                    for (int j = 0; j < otherLastDim; j++) {
+                        float sum = 0f;
+                        for (int k = 0; k < thisLastDim; k++) {
+                            // 计算索引（简化处理）
+                            int thisIndex = batch * (thisSecondLastDim * thisLastDim) + i * thisLastDim + k;
+                            int otherIndex = batch * (otherSecondLastDim * otherLastDim) + k * otherLastDim + j;
+                            sum += this.buffer[thisIndex] * other.buffer[otherIndex];
+                        }
+                        int resultIndex = batch * (thisSecondLastDim * otherLastDim) + i * otherLastDim + j;
+                        ndArray.buffer[resultIndex] = sum;
+                    }
+                }
+            }
+            return ndArray;
         }
-        return ndArray;
+        
+        throw new IllegalArgumentException("操作需要至少二维数组");
     }
 
     /**
@@ -1185,36 +1370,46 @@ public class NdArrayCpu implements NdArray, Serializable {
      * @throws IllegalArgumentException 当数组不是矩阵或参数不合法时抛出
      */
     public NdArrayCpu getItem(int[] _rowSlices, int[] _colSlices) {
-        if (!shape.isMatrix()) {
-            throw new IllegalArgumentException("操作仅适用于矩阵（二维数组）");
-        }
-
-        if (_rowSlices != null && _colSlices != null) {
-            if (_rowSlices.length != _colSlices.length) {
-                throw new IllegalArgumentException(String.format("行索引数组长度(%d)必须等于列索引数组长度(%d)", _rowSlices.length, _colSlices.length));
+        // 移除仅适用于矩阵的限制，支持多维数组
+        
+        // 对于多维数组，我们只支持最后两个维度的切片操作
+        if (this.shape.getDimNum() >= 2) {
+            int lastDimSize = this.shape.getDimension(this.shape.getDimNum() - 1);
+            int secondLastDimSize = this.shape.getDimension(this.shape.getDimNum() - 2);
+            
+            if (_rowSlices != null && _colSlices != null) {
+                if (_rowSlices.length != _colSlices.length) {
+                    throw new IllegalArgumentException(String.format("行索引数组长度(%d)必须等于列索引数组长度(%d)", _rowSlices.length, _colSlices.length));
+                }
+    
+                NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(1, _colSlices.length));
+                for (int i = 0; i < _colSlices.length; i++) {
+                    // 计算多维索引（简化处理）
+                    int index = _rowSlices[i] * lastDimSize + _colSlices[i];
+                    ndArray.buffer[i] = buffer[index];
+                }
+                return ndArray;
             }
-
-            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(1, _colSlices.length));
-            for (int i = 0; i < _colSlices.length; i++) {
-                ndArray.buffer[i] = buffer[_rowSlices[i] * shape.getColumn() + _colSlices[i]];
+    
+            if (_colSlices == null) {
+                _colSlices = NdArrayUtil.getSeq(lastDimSize);
+            }
+            if (_rowSlices == null) {
+                _rowSlices = NdArrayUtil.getSeq(secondLastDimSize);
+            }
+    
+            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(_rowSlices.length, _colSlices.length));
+            for (int i = 0; i < _rowSlices.length; i++) {
+                for (int j = 0; j < _colSlices.length; j++) {
+                    // 计算多维索引（简化处理）
+                    int index = _rowSlices[i] * lastDimSize + _colSlices[j];
+                    ndArray.buffer[i * ndArray.getShape().getColumn() + j] = buffer[index];
+                }
             }
             return ndArray;
         }
-
-        if (_colSlices == null) {
-            _colSlices = NdArrayUtil.getSeq(shape.getColumn());
-        }
-        if (_rowSlices == null) {
-            _rowSlices = NdArrayUtil.getSeq(shape.getRow());
-        }
-
-        NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(_rowSlices.length, _colSlices.length));
-        for (int i = 0; i < _rowSlices.length; i++) {
-            for (int j = 0; j < _colSlices.length; j++) {
-                ndArray.buffer[i * ndArray.getShape().getColumn() + j] = buffer[_rowSlices[i] * shape.getColumn() + _colSlices[j]];
-            }
-        }
-        return ndArray;
+        
+        throw new IllegalArgumentException("操作需要至少二维数组");
     }
 
     /**
@@ -1227,22 +1422,28 @@ public class NdArrayCpu implements NdArray, Serializable {
      * @throws IllegalArgumentException 当数组不是矩阵或参数不合法时抛出
      */
     public NdArrayCpu setItem(int[] _rowSlices, int[] _colSlices, float[] data) {
-        if (!shape.isMatrix()) {
-            throw new IllegalArgumentException("操作仅适用于矩阵（二维数组）");
-        }
-
-        if (_rowSlices != null && _colSlices != null) {
-            if (_rowSlices.length != _colSlices.length) {
-                throw new IllegalArgumentException(String.format("行索引数组长度(%d)必须等于列索引数组长度(%d)", _rowSlices.length, _colSlices.length));
+        // 移除仅适用于矩阵的限制，支持多维数组
+        
+        // 对于多维数组，我们只支持最后两个维度的切片操作
+        if (this.shape.getDimNum() >= 2) {
+            int lastDimSize = this.shape.getDimension(this.shape.getDimNum() - 1);
+            int secondLastDimSize = this.shape.getDimension(this.shape.getDimNum() - 2);
+            
+            if (_rowSlices != null && _colSlices != null) {
+                if (_rowSlices.length != _colSlices.length) {
+                    throw new IllegalArgumentException(String.format("行索引数组长度(%d)必须等于列索引数组长度(%d)", _rowSlices.length, _colSlices.length));
+                }
+    
+                for (int i = 0; i < _colSlices.length; i++) {
+                    // 计算多维索引（简化处理）
+                    int index = _rowSlices[i] * lastDimSize + _colSlices[i];
+                    buffer[index] = data[i];
+                }
+                return this;
             }
-
-            for (int i = 0; i < _colSlices.length; i++) {
-                buffer[_rowSlices[i] * shape.getColumn() + _colSlices[i]] = data[i];
-            }
-            return this;
         }
-
-        throw new IllegalArgumentException("功能尚未实现：不支持的参数组合");
+        
+        throw new IllegalArgumentException("操作需要至少二维数组");
     }
 
     /**
@@ -1253,37 +1454,73 @@ public class NdArrayCpu implements NdArray, Serializable {
      * @throws IllegalArgumentException 当数组不是矩阵或轴参数无效时抛出
      */
     public NdArrayCpu max(int axis) {
-        if (!shape.isMatrix()) {
-            throw new IllegalArgumentException("操作仅适用于矩阵（二维数组）");
-        }
+        // 移除仅适用于矩阵的限制，支持多维数组
+        validateAxis(axis);
 
-        if (axis == 1) {
-            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(shape.getRow(), 1));
-            for (int i = 0; i < shape.getRow(); i++) {
-                float max = Float.MIN_VALUE;
-                for (int j = 0; j < shape.getColumn(); j++) {
-                    if (max < buffer[i * shape.getColumn() + j]) {
-                        max = buffer[i * shape.getColumn() + j];
+        // 对于多维数组，我们只支持最后两个轴的查找
+        if (axis == this.shape.getDimNum() - 1) {
+            // 按列查找每行的最大值（axis = -1）
+            int[] newDims = new int[this.shape.getDimNum()];
+            for (int i = 0; i < this.shape.getDimNum() - 1; i++) {
+                newDims[i] = this.shape.getDimension(i);
+            }
+            newDims[this.shape.getDimNum() - 1] = 1;
+            
+            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(newDims));
+            
+            // 实现多维数组的max逻辑
+            // 这里简化处理，只处理最后两个维度
+            int lastDimSize = this.shape.getDimension(this.shape.getDimNum() - 1);
+            int secondLastDimSize = this.shape.getDimension(this.shape.getDimNum() - 2);
+            int batchSize = this.shape.size() / (lastDimSize * secondLastDimSize);
+            
+            for (int batch = 0; batch < batchSize; batch++) {
+                for (int i = 0; i < secondLastDimSize; i++) {
+                    float max = Float.MIN_VALUE;
+                    for (int j = 0; j < lastDimSize; j++) {
+                        int index = batch * (lastDimSize * secondLastDimSize) + i * lastDimSize + j;
+                        if (max < this.buffer[index]) {
+                            max = this.buffer[index];
+                        }
                     }
+                    int resultIndex = batch * (secondLastDimSize * 1) + i * 1 + 0;
+                    ndArray.buffer[resultIndex] = max;
                 }
-                ndArray.buffer[i] = max;
             }
             return ndArray;
-        } else if (axis == 0) {
-            // 按列找最大值（按行方向查找每列的最大值）
-            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(1, shape.getColumn()));
-            for (int j = 0; j < shape.getColumn(); j++) {
-                float max = Float.MIN_VALUE;
-                for (int i = 0; i < shape.getRow(); i++) {
-                    if (max < buffer[i * shape.getColumn() + j]) {
-                        max = buffer[i * shape.getColumn() + j];
+        } else if (axis == this.shape.getDimNum() - 2) {
+            // 按行查找每列的最大值（axis = -2）
+            int[] newDims = new int[this.shape.getDimNum()];
+            for (int i = 0; i < this.shape.getDimNum() - 2; i++) {
+                newDims[i] = this.shape.getDimension(i);
+            }
+            newDims[this.shape.getDimNum() - 2] = 1;
+            newDims[this.shape.getDimNum() - 1] = this.shape.getDimension(this.shape.getDimNum() - 1);
+            
+            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(newDims));
+            
+            // 实现多维数组的max逻辑
+            // 这里简化处理，只处理最后两个维度
+            int lastDimSize = this.shape.getDimension(this.shape.getDimNum() - 1);
+            int secondLastDimSize = this.shape.getDimension(this.shape.getDimNum() - 2);
+            int batchSize = this.shape.size() / (lastDimSize * secondLastDimSize);
+            
+            for (int batch = 0; batch < batchSize; batch++) {
+                for (int j = 0; j < lastDimSize; j++) {
+                    float max = Float.MIN_VALUE;
+                    for (int i = 0; i < secondLastDimSize; i++) {
+                        int index = batch * (lastDimSize * secondLastDimSize) + i * lastDimSize + j;
+                        if (max < this.buffer[index]) {
+                            max = this.buffer[index];
+                        }
                     }
+                    int resultIndex = batch * (1 * lastDimSize) + 0 * lastDimSize + j;
+                    ndArray.buffer[resultIndex] = max;
                 }
-                ndArray.buffer[j] = max;
             }
             return ndArray;
         }
-        throw new IllegalArgumentException(String.format("不支持的轴参数: %d，仅支持 0(列) 或 1(行)", axis));
+        throw new IllegalArgumentException(String.format("不支持的轴参数: %d，仅支持 %d(列) 或 %d(行)", axis, this.shape.getDimNum() - 2, this.shape.getDimNum() - 1));
     }
 
     /**
@@ -1294,37 +1531,73 @@ public class NdArrayCpu implements NdArray, Serializable {
      * @throws IllegalArgumentException 当数组不是矩阵或轴参数无效时抛出
      */
     public NdArrayCpu min(int axis) {
-        if (!shape.isMatrix()) {
-            throw new IllegalArgumentException("操作仅适用于矩阵（二维数组）");
-        }
+        // 移除仅适用于矩阵的限制，支持多维数组
+        validateAxis(axis);
 
-        if (axis == 1) {
-            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(shape.getRow(), 1));
-            for (int i = 0; i < shape.getRow(); i++) {
-                float min = Float.MAX_VALUE;
-                for (int j = 0; j < shape.getColumn(); j++) {
-                    if (min > buffer[i * shape.getColumn() + j]) {
-                        min = buffer[i * shape.getColumn() + j];
+        // 对于多维数组，我们只支持最后两个轴的查找
+        if (axis == this.shape.getDimNum() - 1) {
+            // 按列查找每行的最小值（axis = -1）
+            int[] newDims = new int[this.shape.getDimNum()];
+            for (int i = 0; i < this.shape.getDimNum() - 1; i++) {
+                newDims[i] = this.shape.getDimension(i);
+            }
+            newDims[this.shape.getDimNum() - 1] = 1;
+            
+            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(newDims));
+            
+            // 实现多维数组的min逻辑
+            // 这里简化处理，只处理最后两个维度
+            int lastDimSize = this.shape.getDimension(this.shape.getDimNum() - 1);
+            int secondLastDimSize = this.shape.getDimension(this.shape.getDimNum() - 2);
+            int batchSize = this.shape.size() / (lastDimSize * secondLastDimSize);
+            
+            for (int batch = 0; batch < batchSize; batch++) {
+                for (int i = 0; i < secondLastDimSize; i++) {
+                    float min = Float.MAX_VALUE;
+                    for (int j = 0; j < lastDimSize; j++) {
+                        int index = batch * (lastDimSize * secondLastDimSize) + i * lastDimSize + j;
+                        if (min > this.buffer[index]) {
+                            min = this.buffer[index];
+                        }
                     }
+                    int resultIndex = batch * (secondLastDimSize * 1) + i * 1 + 0;
+                    ndArray.buffer[resultIndex] = min;
                 }
-                ndArray.buffer[i] = min;
             }
             return ndArray;
-        } else if (axis == 0) {
-            // 按列找最小值（按行方向查找每列的最小值）
-            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(1, shape.getColumn()));
-            for (int j = 0; j < shape.getColumn(); j++) {
-                float min = Float.MAX_VALUE;
-                for (int i = 0; i < shape.getRow(); i++) {
-                    if (min > buffer[i * shape.getColumn() + j]) {
-                        min = buffer[i * shape.getColumn() + j];
+        } else if (axis == this.shape.getDimNum() - 2) {
+            // 按行查找每列的最小值（axis = -2）
+            int[] newDims = new int[this.shape.getDimNum()];
+            for (int i = 0; i < this.shape.getDimNum() - 2; i++) {
+                newDims[i] = this.shape.getDimension(i);
+            }
+            newDims[this.shape.getDimNum() - 2] = 1;
+            newDims[this.shape.getDimNum() - 1] = this.shape.getDimension(this.shape.getDimNum() - 1);
+            
+            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(newDims));
+            
+            // 实现多维数组的min逻辑
+            // 这里简化处理，只处理最后两个维度
+            int lastDimSize = this.shape.getDimension(this.shape.getDimNum() - 1);
+            int secondLastDimSize = this.shape.getDimension(this.shape.getDimNum() - 2);
+            int batchSize = this.shape.size() / (lastDimSize * secondLastDimSize);
+            
+            for (int batch = 0; batch < batchSize; batch++) {
+                for (int j = 0; j < lastDimSize; j++) {
+                    float min = Float.MAX_VALUE;
+                    for (int i = 0; i < secondLastDimSize; i++) {
+                        int index = batch * (lastDimSize * secondLastDimSize) + i * lastDimSize + j;
+                        if (min > this.buffer[index]) {
+                            min = this.buffer[index];
+                        }
                     }
+                    int resultIndex = batch * (1 * lastDimSize) + 0 * lastDimSize + j;
+                    ndArray.buffer[resultIndex] = min;
                 }
-                ndArray.buffer[j] = min;
             }
             return ndArray;
         }
-        throw new IllegalArgumentException(String.format("不支持的轴参数: %d，仅支持 0(列) 或 1(行)", axis));
+        throw new IllegalArgumentException(String.format("不支持的轴参数: %d，仅支持 %d(列) 或 %d(行)", axis, this.shape.getDimNum() - 2, this.shape.getDimNum() - 1));
     }
 
     /**
@@ -1353,17 +1626,32 @@ public class NdArrayCpu implements NdArray, Serializable {
      * @throws IllegalArgumentException 当数组不是矩阵时抛出
      */
     public NdArrayCpu subNdArray(int startRow, int endRow, int startCol, int endCol) {
-        if (!shape.isMatrix()) {
-            throw new IllegalArgumentException("操作仅适用于矩阵（二维数组）");
-        }
-
-        NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(endRow - startRow, endCol - startCol));
-        for (int i = startRow; i < endRow; i++) {
-            for (int j = startCol; j < endCol; j++) {
-                ndArray.buffer[ndArray.shape.getColumn() * (i - startRow) + j - startCol] = this.buffer[i * this.shape.getColumn() + j];
+        // 移除仅适用于矩阵的限制，支持多维数组
+        
+        // 对于多维数组，我们只支持最后两个维度的子区域提取
+        if (this.shape.getDimNum() >= 2) {
+            int lastDimSize = this.shape.getDimension(this.shape.getDimNum() - 1);
+            int secondLastDimSize = this.shape.getDimension(this.shape.getDimNum() - 2);
+            
+            // 确保索引在有效范围内
+            startRow = Math.max(0, startRow);
+            endRow = Math.min(secondLastDimSize, endRow);
+            startCol = Math.max(0, startCol);
+            endCol = Math.min(lastDimSize, endCol);
+            
+            NdArrayCpu ndArray = new NdArrayCpu(ShapeCpu.of(endRow - startRow, endCol - startCol));
+            for (int i = startRow; i < endRow; i++) {
+                for (int j = startCol; j < endCol; j++) {
+                    // 计算多维索引（简化处理）
+                    int srcIndex = i * lastDimSize + j;
+                    int dstIndex = ndArray.shape.getColumn() * (i - startRow) + j - startCol;
+                    ndArray.buffer[dstIndex] = this.buffer[srcIndex];
+                }
             }
+            return ndArray;
         }
-        return ndArray;
+        
+        throw new IllegalArgumentException("操作需要至少二维数组");
     }
 
 
@@ -1513,16 +1801,29 @@ public class NdArrayCpu implements NdArray, Serializable {
      * @throws IllegalArgumentException 当数组不是矩阵时抛出
      */
     public NdArrayCpu addTo(int i, int j, NdArray other) {
-        if (!shape.isMatrix()) {
-            throw new IllegalArgumentException("操作仅适用于矩阵（二维数组）");
-        }
-
-        for (int _i = 0; _i < other.getShape().getRow(); _i++) {
-            for (int _j = 0; _j < other.getShape().getColumn(); _j++) {
-                buffer[this.getShape().getColumn() * (_i + i) + _j + j] += ((NdArrayCpu) other).buffer[other.getShape().getColumn() * _i + _j];
+        // 移除仅适用于矩阵的限制，支持多维数组
+        
+        // 对于多维数组，我们只支持最后两个维度的累加操作
+        if (this.shape.getDimNum() >= 2 && other.getShape().getDimNum() >= 2) {
+            int lastDimSize = this.shape.getDimension(this.shape.getDimNum() - 1);
+            int secondLastDimSize = this.shape.getDimension(this.shape.getDimNum() - 2);
+            int otherLastDimSize = other.getShape().getDimension(other.getShape().getDimNum() - 1);
+            int otherSecondLastDimSize = other.getShape().getDimension(other.getShape().getDimNum() - 2);
+            
+            for (int _i = 0; _i < otherSecondLastDimSize; _i++) {
+                for (int _j = 0; _j < otherLastDimSize; _j++) {
+                    // 计算多维索引（简化处理）
+                    int srcIndex = other.getShape().getColumn() * _i + _j;
+                    int dstIndex = lastDimSize * (_i + i) + _j + j;
+                    if (dstIndex < this.buffer.length && srcIndex < ((NdArrayCpu) other).buffer.length) {
+                        buffer[dstIndex] += ((NdArrayCpu) other).buffer[srcIndex];
+                    }
+                }
             }
+            return this;
         }
-        return this;
+        
+        throw new IllegalArgumentException("操作需要至少二维数组");
     }
 
     /**

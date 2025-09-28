@@ -16,6 +16,8 @@
         <module>tinyai-util</module>
         <module>tinyai-nnet</module>
         <module>tinyai-mlearning</module>
+        <module>tinyai-modality</module>
+        <module>tinyai-rl</module>
     </modules>
 
     <properties>

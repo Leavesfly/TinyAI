@@ -15,7 +15,7 @@
         <module>tinyai-func</module>
         <module>tinyai-util</module>
         <module>tinyai-nnet</module>
-        <module>tinyai-mlearning</module>
+        <module>tinyai-ml</module>
         <module>tinyai-modality</module>
         <module>tinyai-rl</module>
         <module>tinyai-example</module>
@@ -61,7 +61,7 @@
             </dependency>
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-mlearning</artifactId>
+                <artifactId>tinyai-ml</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

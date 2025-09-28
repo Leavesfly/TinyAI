@@ -29,10 +29,10 @@
             <artifactId>tinyai-modality</artifactId>
         </dependency>
 
-        <!-- 依赖tinyai-mlearning模块 -->
+        <!-- 依赖tinyai-ml -->
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
-            <artifactId>tinyai-mlearning</artifactId>
+            <artifactId>tinyai-ml</artifactId>
         </dependency>
 
         <!-- 图表依赖 -->
@@ -47,6 +47,7 @@
             <artifactId>junit</artifactId>
             <scope>test</scope>
         </dependency>
+
     </dependencies>
 
     <build>

@@ -17,10 +17,10 @@
     <description>tinyai-rl</description>
 
     <dependencies>
-        <!-- 依赖tinyai-mlearning模块 -->
+        <!-- 依赖tinyai-ml 模块 -->
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
-            <artifactId>tinyai-mlearning</artifactId>
+            <artifactId>tinyai-ml</artifactId>
         </dependency>
 
         <!-- 图表依赖 -->

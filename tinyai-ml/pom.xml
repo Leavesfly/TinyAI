@@ -11,10 +11,10 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>tinyai-mlearning</artifactId>
+    <artifactId>tinyai-ml</artifactId>
     <packaging>jar</packaging>
-    <name>tinyai-mlearning</name>
-    <description>tinyai-mlearning</description>
+    <name>tinyai-ml</name>
+    <description>tinyai-ml</description>
 
     <dependencies>
         <!-- 依赖tinyai-func模块 -->

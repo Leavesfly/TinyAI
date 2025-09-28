@@ -89,6 +89,16 @@ public class LayerNorm extends Layer {
     public Variable layerForward(Variable... inputs) {
         Variable x = inputs[0];
         NdArray inputData = x.getValue();
+        Shape inputShape = inputData.getShape();
+        
+        // 验证输入形状的最后一维与归一化维度匹配
+        int inputLastDim = inputShape.getDimension(inputShape.getDimNum() - 1);
+        if (inputLastDim != normalizedShape) {
+            throw new IllegalArgumentException(
+                String.format("输入的最后一维 (%d) 与归一化维度 (%d) 不匹配", 
+                             inputLastDim, normalizedShape)
+            );
+        }
         
         // 计算最后一个维度的均值和方差
         Variable mean = calculateLastDimMean(x);
@@ -100,9 +110,9 @@ public class LayerNorm extends Layer {
         );
         
         // 应用缩放和偏移：γ * normalized + β
-        // 需要确保gamma和beta能够正确广播到normalized的形状
-        Variable gammaBroadcasted = new Variable(gamma.getValue().broadcastTo(inputData.getShape()));
-        Variable betaBroadcasted = new Variable(beta.getValue().broadcastTo(inputData.getShape()));
+        // 创建与输入形状兼容的gamma和beta
+        Variable gammaBroadcasted = broadcastParameterToInput(gamma.getValue(), inputShape);
+        Variable betaBroadcasted = broadcastParameterToInput(beta.getValue(), inputShape);
         Variable output = normalized.mul(gammaBroadcasted).add(betaBroadcasted);
         
         return output;
@@ -177,6 +187,27 @@ public class LayerNorm extends Layer {
         List<NdArray> result = new ArrayList<>();
         result.add(yGrad);
         return result;
+    }
+    
+    /**
+     * 将参数广播到输入形状
+     */
+    private Variable broadcastParameterToInput(NdArray param, Shape targetShape) {
+        // 参数形状: (normalizedShape,)
+        // 目标形状: (..., normalizedShape)
+        
+        int targetDims = targetShape.getDimNum();
+        int[] broadcastShape = new int[targetDims];
+        
+        // 前面的维度都设为1，最后一个维度保持不变
+        for (int i = 0; i < targetDims - 1; i++) {
+            broadcastShape[i] = 1;
+        }
+        broadcastShape[targetDims - 1] = normalizedShape;
+        
+        // 重塑参数并广播到目标形状
+        NdArray reshaped = param.reshape(Shape.of(broadcastShape));
+        return new Variable(reshaped.broadcastTo(targetShape));
     }
     
     @Override

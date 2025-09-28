@@ -96,27 +96,63 @@ public class BatchNorm extends Layer {
         
         // 应用缩放和偏移：γ * normalized + β
         // 需要确保gamma和beta能够正确广播到normalized的形状
-        Variable gammaBroadcasted = gamma.broadcastTo(shape);
-        Variable betaBroadcasted = beta.broadcastTo(shape);
+        Variable gammaBroadcasted = prepareParameterForBroadcast(gamma, shape);
+        Variable betaBroadcasted = prepareParameterForBroadcast(beta, shape);
         Variable output = normalized.mul(gammaBroadcasted).add(betaBroadcasted);
         
         return output;
     }
     
     /**
+     * 为广播准备参数（gamma或beta）
+     * 对于4D输入(N, C, H, W)，将参数从(C,)重塑为(1, C, 1, 1)然后广播
+     * 对于2D输入(N, C)，直接广播
+     */
+    private Variable prepareParameterForBroadcast(Parameter param, Shape targetShape) {
+        Variable paramVar = new Variable(param.getValue());
+        
+        if (targetShape.getDimNum() == 4) {
+            // 4D情况: (N, C, H, W)
+            // 将参数从(C,)重塑为(1, C, 1, 1)
+            int channels = param.getValue().getShape().getDimension(0);
+            Shape broadcastShape = Shape.of(1, channels, 1, 1);
+            Variable reshaped = paramVar.reshape(broadcastShape);
+            return reshaped.broadcastTo(targetShape);
+        } else if (targetShape.getDimNum() == 2) {
+            // 2D情况: (N, C)
+            // 直接广播
+            return paramVar.broadcastTo(targetShape);
+        } else {
+            // 其他情况，尝试直接广播
+            return paramVar.broadcastTo(targetShape);
+        }
+    }
+    
+    /**
      * 计算批次均值
+     * 对于2D输入(N, C): 沿轴0轴计算均值，结果形状(C,)
+     * 对于4D输入(N, C, H, W): 沿轴0,2,3轴计算均值，结果形状(C,)
      */
     private Variable calculateMean(Variable x) {
         NdArray data = x.getValue();
         Shape shape = data.getShape();
         
-        if (shape.getDimNum() >= 2) {
-            // 沿着batch维度（轴0）计算均值
-            NdArray meanData = data.mean(0);
-            // 需要将均值广播回原始形状
+        if (shape.getDimNum() == 2) {
+            // 2D情况: (N, C) -> 沿轴0轴计算均值
+            NdArray meanData = data.mean(0); // 结果: (C,)
             return new Variable(meanData.broadcastTo(shape));
+        } else if (shape.getDimNum() == 4) {
+            // 4D情况: (N, C, H, W) -> 沿轴0,2,3轴计算均值
+            // 首先沿轴2,3轴计算均值: (N, C, H, W) -> (N, C)
+            NdArray temp1 = data.mean(3); // (N, C, H)
+            NdArray temp2 = temp1.mean(2); // (N, C)
+            // 然后沿轴0轴计算均值: (N, C) -> (C,)
+            NdArray meanData = temp2.mean(0); // (C,)
+            // 使用prepareParameterForBroadcast方法处理广播
+            Parameter tempParam = new Parameter(meanData);
+            return prepareParameterForBroadcast(tempParam, shape);
         } else {
-            // 简化处理：计算所有元素的均值然后广播
+            // 其他情况，简化处理：计算所有元素的均值然后广播
             Variable totalMean = x.sum().div(new Variable(NdArray.of(shape.size())));
             return totalMean.broadcastTo(shape);
         }
@@ -124,6 +160,8 @@ public class BatchNorm extends Layer {
     
     /**
      * 计算批次方差
+     * 对于2D输入(N, C): 沿轴0轴计算方差，结果形状(C,)
+     * 对于4D输入(N, C, H, W): 沿轴0,2,3轴计算方差，结果形状(C,)
      */
     private Variable calculateVariance(Variable x, Variable mean) {
         Variable diff = x.sub(mean);
@@ -132,11 +170,22 @@ public class BatchNorm extends Layer {
         NdArray data = x.getValue();
         Shape shape = data.getShape();
         
-        if (shape.getDimNum() >= 2) {
-            NdArray varData = squaredDiff.getValue().mean(0);
-            // 需要将方差广播回原始形状
+        if (shape.getDimNum() == 2) {
+            // 2D情况: (N, C) -> 沿轴0轴计算方差
+            NdArray varData = squaredDiff.getValue().mean(0); // 结果: (C,)
             return new Variable(varData.broadcastTo(shape));
+        } else if (shape.getDimNum() == 4) {
+            // 4D情况: (N, C, H, W) -> 沿轴0,2,3轴计算方差
+            // 首先沿轴2,3轴计算均值: (N, C, H, W) -> (N, C)
+            NdArray temp1 = squaredDiff.getValue().mean(3); // (N, C, H)
+            NdArray temp2 = temp1.mean(2); // (N, C)
+            // 然后沿轴0轴计算均值: (N, C) -> (C,)
+            NdArray varData = temp2.mean(0); // (C,)
+            // 使用prepareParameterForBroadcast方法处理广播
+            Parameter tempParam = new Parameter(varData);
+            return prepareParameterForBroadcast(tempParam, shape);
         } else {
+            // 其他情况，简化处理
             Variable totalVar = squaredDiff.sum().div(new Variable(NdArray.of(shape.size())));
             return totalVar.broadcastTo(shape);
         }

@@ -82,7 +82,16 @@ public class MultiHeadAttention extends Layer {
         NdArray valueData = value.getValue();
 
         int batchSize = queryData.getShape().getDimension(0);
-        int seqLen = queryData.getShape().getDimension(1);
+        int querySeqLen = queryData.getShape().getDimension(1);
+        int keySeqLen = keyData.getShape().getDimension(1);
+        int valueSeqLen = valueData.getShape().getDimension(1);
+        
+        // 验证key和value的序列长度必须相同
+        if (keySeqLen != valueSeqLen) {
+            throw new IllegalArgumentException(
+                String.format("Key序列长度(%d)必须与Value序列长度(%d)相同", keySeqLen, valueSeqLen)
+            );
+        }
 
         // 将三维张量重塑为二维矩阵进行线性变换
         NdArray queryReshaped = reshapeTo2D(queryData);
@@ -95,27 +104,27 @@ public class MultiHeadAttention extends Layer {
         Variable V = valueLayer.layerForward(new Variable(valueReshaped));
 
         // 重塑回三维
-        NdArray qData = reshapeFrom2D(Q.getValue(), batchSize, seqLen, dModel);
-        NdArray kData = reshapeFrom2D(K.getValue(), batchSize, seqLen, dModel);
-        NdArray vData = reshapeFrom2D(V.getValue(), batchSize, seqLen, dModel);
+        NdArray qData = reshapeFrom2D(Q.getValue(), batchSize, querySeqLen, dModel);
+        NdArray kData = reshapeFrom2D(K.getValue(), batchSize, keySeqLen, dModel);
+        NdArray vData = reshapeFrom2D(V.getValue(), batchSize, valueSeqLen, dModel);
 
         // 重塑为多头形式：(batch_size, seq_len, num_heads, d_k)
-        NdArray qHeads = reshapeForHeads(qData, batchSize, seqLen, numHeads, dK);
-        NdArray kHeads = reshapeForHeads(kData, batchSize, seqLen, numHeads, dK);
-        NdArray vHeads = reshapeForHeads(vData, batchSize, seqLen, numHeads, dV);
+        NdArray qHeads = reshapeForHeads(qData, batchSize, querySeqLen, numHeads, dK);
+        NdArray kHeads = reshapeForHeads(kData, batchSize, keySeqLen, numHeads, dK);
+        NdArray vHeads = reshapeForHeads(vData, batchSize, valueSeqLen, numHeads, dV);
 
         // 计算注意力
-        NdArray attention = computeAttention(qHeads, kHeads, vHeads, batchSize, seqLen);
+        NdArray attention = computeAttention(qHeads, kHeads, vHeads, batchSize, querySeqLen, keySeqLen);
 
         // 合并多头结果
-        NdArray concatenated = concatenateHeads(attention, batchSize, seqLen);
+        NdArray concatenated = concatenateHeads(attention, batchSize, querySeqLen);
 
         // 输出投影
         NdArray concatReshaped = reshapeTo2D(concatenated);
         Variable output = outputLayer.layerForward(new Variable(concatReshaped));
 
         // 重塑回三维
-        NdArray result = reshapeFrom2D(output.getValue(), batchSize, seqLen, dModel);
+        NdArray result = reshapeFrom2D(output.getValue(), batchSize, querySeqLen, dModel);
         return new Variable(result);
     }
 
@@ -166,18 +175,19 @@ public class MultiHeadAttention extends Layer {
     /**
      * 计算缩放点积注意力
      */
-    private NdArray computeAttention(NdArray query, NdArray key, NdArray value, int batchSize, int seqLen) {
-        // query, key, value shape: (batch_size, num_heads, seq_len, head_dim)
-        NdArray attention = NdArray.of(Shape.of(batchSize, numHeads, seqLen, dV));
+    private NdArray computeAttention(NdArray query, NdArray key, NdArray value, int batchSize, int querySeqLen, int keySeqLen) {
+        // query shape: (batch_size, num_heads, query_seq_len, head_dim)
+        // key, value shape: (batch_size, num_heads, key_seq_len, head_dim)
+        NdArray attention = NdArray.of(Shape.of(batchSize, numHeads, querySeqLen, dV));
 
         double scale = 1.0 / Math.sqrt(dK);
 
         for (int b = 0; b < batchSize; b++) {
             for (int h = 0; h < numHeads; h++) {
                 // 计算attention scores: Q * K^T
-                NdArray scores = NdArray.of(Shape.of(seqLen, seqLen));
-                for (int i = 0; i < seqLen; i++) {
-                    for (int j = 0; j < seqLen; j++) {
+                NdArray scores = NdArray.of(Shape.of(querySeqLen, keySeqLen));
+                for (int i = 0; i < querySeqLen; i++) {
+                    for (int j = 0; j < keySeqLen; j++) {
                         float score = 0.0f;
                         for (int d = 0; d < dK; d++) {
                             score += query.get(b, h, i, d) * key.get(b, h, j, d);
@@ -188,17 +198,17 @@ public class MultiHeadAttention extends Layer {
 
                 // 应用掩码（如果需要）
                 if (useMask) {
-                    applyMask(scores, seqLen);
+                    applyMask(scores, querySeqLen, keySeqLen);
                 }
 
                 // Softmax
                 NdArray attentionWeights = scores.softMax();
 
                 // 应用权重到values
-                for (int i = 0; i < seqLen; i++) {
+                for (int i = 0; i < querySeqLen; i++) {
                     for (int d = 0; d < dV; d++) {
                         float output = 0.0f;
-                        for (int j = 0; j < seqLen; j++) {
+                        for (int j = 0; j < keySeqLen; j++) {
                             output += attentionWeights.get(i, j) * value.get(b, h, j, d);
                         }
                         attention.set(output, b, h, i, d);
@@ -213,10 +223,14 @@ public class MultiHeadAttention extends Layer {
     /**
      * 应用因果掩码（用于解码器）
      */
-    private void applyMask(NdArray scores, int seqLen) {
-        for (int i = 0; i < seqLen; i++) {
-            for (int j = i + 1; j < seqLen; j++) {
-                scores.set(Float.NEGATIVE_INFINITY, i, j);
+    private void applyMask(NdArray scores, int querySeqLen, int keySeqLen) {
+        // 对于因果掩码，只在查询位置i不能看到键位置j > i的情况下应用
+        // 这里实现简单的因果掩码：对于query的每个位置i，只能看到key的前i+1个位置
+        for (int i = 0; i < querySeqLen; i++) {
+            for (int j = i + 1; j < Math.min(keySeqLen, querySeqLen); j++) {
+                if (j < keySeqLen) {
+                    scores.set(Float.NEGATIVE_INFINITY, i, j);
+                }
             }
         }
     }

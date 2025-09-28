@@ -182,7 +182,7 @@ public class LayerNormTest {
     @Test
     public void testForwardBackwardMethods() {
         // 测试forward和backward方法
-        NdArray input = NdArray.likeRandomN(Shape.of(2, 5));
+        NdArray input = NdArray.likeRandomN(Shape.of(4, 10));  // 修正为与构造函数中的形状一致
         
         // 测试forward方法
         NdArray output = layerNorm2D.forward(input);
@@ -190,7 +190,7 @@ public class LayerNormTest {
         assertEquals("forward输出形状应该正确", input.getShape(), output.getShape());
         
         // 测试backward方法
-        NdArray grad = NdArray.likeRandomN(Shape.of(2, 5));
+        NdArray grad = NdArray.likeRandomN(Shape.of(4, 10));  // 修正为与输出形状一致
         try {
             layerNorm2D.backward(grad);
             // backward方法应该能正常执行而不抛出异常

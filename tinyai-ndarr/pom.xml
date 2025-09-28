@@ -13,7 +13,7 @@
 
     <artifactId>tinyai-ndarr</artifactId>
     <packaging>jar</packaging>
-    <name>TinyAI N-dimensional Array Module</name>
+    <name>tinyai-ndarr</name>
     <description>TinyAI项目的N维数组处理模块</description>
 
     <properties>

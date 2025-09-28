@@ -13,7 +13,7 @@
 
     <artifactId>tinyai-func</artifactId>
     <packaging>jar</packaging>
-    <name>TinyAI Function Module</name>
+    <name>tinyai-func</name>
     <description>TinyAI项目的函数计算模块</description>
 
     <properties>

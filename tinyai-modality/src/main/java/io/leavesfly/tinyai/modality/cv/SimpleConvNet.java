@@ -211,5 +211,65 @@ public class SimpleConvNet extends SequentialBlock {
         }
         System.out.println("==============================");
     }
+    
+    /**
+     * 获取网络层数
+     * 
+     * @return 网络中的层数
+     */
+    public int getLayersCount() {
+        return layers.size();
+    }
+    
+    /**
+     * 获取输出类别数
+     * 
+     * @return 输出类别数
+     */
+    public int getNumClasses() {
+        return numClasses;
+    }
+    
+    /**
+     * 是否使用批量归一化
+     * 
+     * @return 是否使用批量归一化
+     */
+    public boolean isUseBatchNorm() {
+        return useBatchNorm;
+    }
+    
+    /**
+     * 获取Dropout比例
+     * 
+     * @return Dropout比例
+     */
+    public float getDropoutRate() {
+        return dropoutRate;
+    }
+    
+    /**
+     * 获取指定索引的层
+     * 
+     * @param index 层的索引
+     * @return 对应的层对象
+     * @throws IndexOutOfBoundsException 如果索引超出范围
+     */
+    public LayerAble getLayer(int index) {
+        if (index < 0 || index >= layers.size()) {
+            throw new IndexOutOfBoundsException("层索引超出范围: " + index);
+        }
+        return layers.get(index);
+    }
+    
+    /**
+     * 获取网络的简要摘要信息
+     * 
+     * @return 网络摘要字符串
+     */
+    public String getSummary() {
+        return String.format("SimpleConvNet[类别数=%d, 层数=%d, 批量归一化=%s, Dropout=%.2f]",
+                numClasses, layers.size(), useBatchNorm, dropoutRate);
+    }
 
 }

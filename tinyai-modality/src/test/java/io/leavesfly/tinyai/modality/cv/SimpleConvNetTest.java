@@ -3,9 +3,10 @@ package io.leavesfly.tinyai.modality.cv;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.func.Variable;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.BeforeEach;
-import static org.junit.jupiter.api.Assertions.*;
+import io.leavesfly.tinyai.nnet.LayerAble;
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
 
 /**
  * SimpleConvNet的单元测试类
@@ -19,7 +20,7 @@ public class SimpleConvNetTest {
     private Shape inputShape;
     private int numClasses;
     
-    @BeforeEach
+    @Before
     public void setUp() {
         // 设置测试参数
         int batchSize = 2;
@@ -36,35 +37,39 @@ public class SimpleConvNetTest {
     
     @Test
     public void testNetworkConstruction() {
-        assertNotNull(convNet, "网络创建失败");
-        assertEquals("test_conv_net", convNet.name, "网络名称不匹配");
+        assertNotNull(convNet);
+        assertEquals("test_conv_net", convNet.getName());
     }
     
     @Test
     public void testNetworkInfo() {
         String info = convNet.getNetworkInfo();
-        assertNotNull(info, "网络信息获取失败");
-        assertTrue(info.contains("SimpleConvNet配置"), "网络信息格式不正确");
-        assertTrue(info.contains("输出类别数: " + numClasses), "输出类别数信息不正确");
+        assertNotNull(info);
+        assertTrue(info.contains("SimpleConvNet配置"));
+        assertTrue(info.contains("输出类别数: " + numClasses));
     }
     
     @Test
     public void testPrintArchitecture() {
         // 测试打印网络架构不会抛出异常
-        assertDoesNotThrow(() -> {
+        try {
             convNet.printArchitecture();
-        }, "打印网络架构时发生异常");
+        } catch (Exception e) {
+            fail("打印网络架构时发生异常: " + e.getMessage());
+        }
     }
     
     @Test
     public void testNetworkInitialization() {
         // 测试网络初始化
-        assertDoesNotThrow(() -> {
+        try {
             convNet.init();
-        }, "网络初始化时发生异常");
+        } catch (Exception e) {
+            fail("网络初始化时发生异常: " + e.getMessage());
+        }
         
         // 验证网络有层结构
-        assertTrue(convNet.layers.size() > 0, "网络应该包含多个层");
+        assertTrue(convNet.getLayersCount() > 0);
     }
     
     @Test
@@ -79,25 +84,23 @@ public class SimpleConvNetTest {
         // 执行前向传播
         Variable output = convNet.layerForward(input);
         
-        assertNotNull(output, "前向传播输出为空");
+        assertNotNull(output);
         
         Shape outputShape = output.getValue().getShape();
-        assertEquals(2, outputShape.getDimNum(), "输出应该是2维的");
-        assertEquals(inputShape.getDimension(0), outputShape.getDimension(0), 
-                    "批次大小应该保持不变");
-        assertEquals(numClasses, outputShape.getDimension(1), 
-                    "输出维度应该等于类别数");
+        assertEquals(2, outputShape.getDimNum());
+        assertEquals(inputShape.getDimension(0), outputShape.getDimension(0));
+        assertEquals(numClasses, outputShape.getDimension(1));
     }
     
     @Test
     public void testDifferentConfigurations() {
         // 测试不使用批量归一化的配置
         SimpleConvNet convNetNoBN = new SimpleConvNet("no_bn", inputShape, numClasses, false, 0.0f);
-        assertNotNull(convNetNoBN, "无批量归一化的网络创建失败");
+        assertNotNull(convNetNoBN);
         
         // 测试不同dropout率的配置
         SimpleConvNet convNetDropout = new SimpleConvNet("with_dropout", inputShape, numClasses, true, 0.3f);
-        assertNotNull(convNetDropout, "带dropout的网络创建失败");
+        assertNotNull(convNetDropout);
     }
     
     @Test
@@ -105,9 +108,12 @@ public class SimpleConvNetTest {
         // 测试无效的输入形状
         Shape invalidShape = Shape.of(32, 32); // 只有2维
         
-        assertThrows(IllegalArgumentException.class, () -> {
+        try {
             new SimpleConvNet("invalid", invalidShape, numClasses);
-        }, "应该抛出无效输入形状的异常");
+            fail("应该抛出无效输入形状的异常");
+        } catch (IllegalArgumentException e) {
+            // 期望的异常
+        }
     }
     
     @Test
@@ -115,12 +121,12 @@ public class SimpleConvNetTest {
         convNet.init();
         
         // 验证网络有参数
-        assertFalse(convNet.getAllParams().isEmpty(), "网络应该包含可训练参数");
+        assertFalse(convNet.getAllParams().isEmpty());
         
         // 打印参数数量信息
         int paramCount = convNet.getAllParams().size();
         System.out.println("网络参数数量: " + paramCount);
-        assertTrue(paramCount > 0, "参数数量应该大于0");
+        assertTrue(paramCount > 0);
     }
     
     @Test
@@ -128,9 +134,11 @@ public class SimpleConvNetTest {
         convNet.init();
         
         // 测试清除梯度不会抛出异常
-        assertDoesNotThrow(() -> {
+        try {
             convNet.clearGrads();
-        }, "清除梯度时发生异常");
+        } catch (Exception e) {
+            fail("清除梯度时发生异常: " + e.getMessage());
+        }
     }
     
     @Test
@@ -147,10 +155,52 @@ public class SimpleConvNetTest {
             
             Variable output = convNet.layerForward(testInput);
             
-            assertEquals(batchSize, output.getValue().getShape().getDimension(0),
-                        "批次大小 " + batchSize + " 的输出形状不正确");
-            assertEquals(numClasses, output.getValue().getShape().getDimension(1),
-                        "批次大小 " + batchSize + " 的输出类别数不正确");
+            assertEquals(batchSize, output.getValue().getShape().getDimension(0));
+            assertEquals(numClasses, output.getValue().getShape().getDimension(1));
         }
+    }
+    
+    @Test
+    public void testNewAccessorMethods() {
+        // 测试新增的getter方法
+        assertEquals(numClasses, convNet.getNumClasses());
+        assertTrue(convNet.isUseBatchNorm());
+        assertEquals(0.5f, convNet.getDropoutRate(), 0.001f);
+        
+        // 测试层数统计
+        convNet.init();
+        assertTrue(convNet.getLayersCount() > 0);
+        
+        // 测试获取指定层
+        LayerAble firstLayer = convNet.getLayer(0);
+        assertNotNull(firstLayer);
+        
+        // 测试边界条件
+        try {
+            convNet.getLayer(-1);
+            fail("应该抛出索引越界异常");
+        } catch (IndexOutOfBoundsException e) {
+            // 期望的异常
+        }
+        
+        try {
+            convNet.getLayer(convNet.getLayersCount());
+            fail("应该抛出索引越界异常");
+        } catch (IndexOutOfBoundsException e) {
+            // 期望的异常
+        }
+    }
+    
+    @Test
+    public void testNetworkSummary() {
+        // 测试网络摘要
+        String summary = convNet.getSummary();
+        assertNotNull(summary);
+        assertTrue(summary.contains("SimpleConvNet"));
+        assertTrue(summary.contains(String.valueOf(numClasses)));
+        assertTrue(summary.contains("true")); // BatchNorm启用
+        assertTrue(summary.contains("0.50")); // Dropout比例
+        
+        System.out.println("网络摘要: " + summary);
     }
 }

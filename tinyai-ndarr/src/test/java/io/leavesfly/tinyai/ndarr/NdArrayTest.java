@@ -214,7 +214,8 @@ public class NdArrayTest {
         assertArrayEquals(expectedSumAxis0, sumAxis0.getMatrix());
 
         NdArray sumAxis1 = a.sum(1);
-        float[][] expectedSumAxis1 = {{6}, {15}};
+        // sum(1) 沿轴1计算，得到形状[2]的一维数组，getMatrix()将其转换为[1][2]
+        float[][] expectedSumAxis1 = {{6, 15}};
         assertArrayEquals(expectedSumAxis1, sumAxis1.getMatrix());
 
         // 测试mean
@@ -223,11 +224,13 @@ public class NdArrayTest {
         assertArrayEquals(expectedMeanAxis0, meanAxis0.getMatrix());
 
         NdArray meanAxis1 = a.mean(1);
-        float[][] expectedMeanAxis1 = {{2f}, {5f}};
+        // mean(1) 沿轴1计算，得到形状[2]的一维数组，getMatrix()将其转换为[1][2]
+        float[][] expectedMeanAxis1 = {{2f, 5f}};
         assertArrayEquals(expectedMeanAxis1, meanAxis1.getMatrix());
 
         // 测试max
         NdArray maxAxis1 = a.max(1);
+        // max(1) 返回形状[2,1]，直接是[[3], [6]]
         float[][] expectedMaxAxis1 = {{3}, {6}};
         assertArrayEquals(expectedMaxAxis1, maxAxis1.getMatrix());
 
@@ -237,6 +240,7 @@ public class NdArrayTest {
         assertArrayEquals(expectedArgMaxAxis0, argMaxAxis0.getMatrix());
 
         NdArray argMaxAxis1 = a.argMax(1);
+        // argMax(1) 应该返回形状[2,1]，直接是[[2], [2]]
         float[][] expectedArgMaxAxis1 = {{2}, {2}};
         assertArrayEquals(expectedArgMaxAxis1, argMaxAxis1.getMatrix());
     }
@@ -549,12 +553,9 @@ public class NdArrayTest {
         NdArray varAxis1 = data.var(1);
         // 第一行: [1,2,3] 均值=2, 方差=((1-2)^2+(2-2)^2+(3-2)^2)/3 = 2/3
         // 第二行: [4,5,6] 均值=5, 方差=((4-5)^2+(5-5)^2+(6-5)^2)/3 = 2/3
-        float[][] expectedVar1 = {{2f/3f}, {2f/3f}};
-        for (int i = 0; i < expectedVar1.length; i++) {
-            for (int j = 0; j < expectedVar1[i].length; j++) {
-                assertEquals(expectedVar1[i][j], varAxis1.getMatrix()[i][j], 1e-5);
-            }
-        }
+        // var(1) 应该返回形状为 [2] 的一维数组，getMatrix() 会将其转为 [[val1, val2]]
+        float[][] expectedVar1 = {{2f/3f, 2f/3f}};
+        assertArrayEquals(expectedVar1, varAxis1.getMatrix());
     }
 
     @Test
@@ -652,11 +653,21 @@ public class NdArrayTest {
     public void testSumToOperation() {
         // 测试sumTo操作
         NdArray large = NdArray.of(new float[][]{{1, 2, 3, 4}, {5, 6, 7, 8}});
-        NdArray summed = large.sumTo(Shape.of(1, 2));
         
-        // 应该将4列压缩为2列：[1+3, 2+4] 和 [5+7, 6+8]
-        // 然后2行压缩为1行：[1+3+5+7, 2+4+6+8] = [16, 20]
-        assertEquals(Shape.of(1, 2), summed.getShape());
+        // sumTo操作需要维度兼容：源维度=目标维度 或 目标维度=1
+        // 从 [2,4] 到 [1,4] - 第一个维度从2压缩到1
+        NdArray summed1 = large.sumTo(Shape.of(1, 4));
+        assertEquals(Shape.of(1, 4), summed1.getShape());
+        // 结果应该是: [1+5, 2+6, 3+7, 4+8] = [6, 8, 10, 12]
+        float[][] expected1 = {{6, 8, 10, 12}};
+        assertArrayEquals(expected1, summed1.getMatrix());
+        
+        // 从 [2,4] 到 [2,1] - 第二个维度从4压缩到1
+        NdArray summed2 = large.sumTo(Shape.of(2, 1));
+        assertEquals(Shape.of(2, 1), summed2.getShape());
+        // 结果应该是: [[1+2+3+4], [5+6+7+8]] = [[10], [26]]
+        float[][] expected2 = {{10}, {26}};
+        assertArrayEquals(expected2, summed2.getMatrix());
     }
 
     @Test

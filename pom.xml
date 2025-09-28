@@ -65,14 +65,22 @@
                 <artifactId>tinyai-ml</artifactId>
                 <version>${project.version}</version>
             </dependency>
-            <dependency>
-                <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-modality</artifactId>
-                <version>${project.version}</version>
-            </dependency>
+
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
                 <artifactId>tinyai-rl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.leavesfly.tinyai</groupId>
+                <artifactId>tinyai-cv</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.leavesfly.tinyai</groupId>
+                <artifactId>tinyai-nlp</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

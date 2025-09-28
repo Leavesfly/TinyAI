@@ -1,7 +1,7 @@
 package io.leavesfly.tinyai.nlp;
 
-import io.leavesfly.tinyai.mlearning.dataset.Batch;
-import io.leavesfly.tinyai.mlearning.dataset.DataSet;
+import io.leavesfly.tinyai.ml.dataset.Batch;
+import io.leavesfly.tinyai.ml.dataset.DataSet;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 

@@ -1,7 +1,7 @@
 package io.leavesfly.tinyai.rl;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.mlearning.Model;
+import io.leavesfly.tinyai.ml.Model;
 import io.leavesfly.tinyai.nnet.Parameter;
 
 import java.util.HashMap;

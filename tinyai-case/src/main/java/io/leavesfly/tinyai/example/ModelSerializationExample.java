@@ -1,10 +1,10 @@
 package io.leavesfly.tinyai.example;
 
 
-import io.leavesfly.tinyai.mlearning.Model;
-import io.leavesfly.tinyai.mlearning.ModelInfo;
-import io.leavesfly.tinyai.mlearning.ModelInfoExporter;
-import io.leavesfly.tinyai.mlearning.ParameterManager;
+import io.leavesfly.tinyai.ml.Model;
+import io.leavesfly.tinyai.ml.ModelInfo;
+import io.leavesfly.tinyai.ml.ModelInfoExporter;
+import io.leavesfly.tinyai.ml.ParameterManager;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.nnet.Parameter;
 import io.leavesfly.tinyai.nnet.block.MlpBlock;

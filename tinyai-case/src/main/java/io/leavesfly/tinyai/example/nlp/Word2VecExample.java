@@ -1,11 +1,11 @@
 package io.leavesfly.tinyai.example.nlp;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.mlearning.Model;
-import io.leavesfly.tinyai.mlearning.loss.SoftmaxCrossEntropy;
-import io.leavesfly.tinyai.mlearning.optimize.Optimizer;
-import io.leavesfly.tinyai.mlearning.optimize.SGD;
-import io.leavesfly.tinyai.modality.nlp.Word2Vec;
+import io.leavesfly.tinyai.ml.Model;
+import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
+import io.leavesfly.tinyai.ml.optimize.Optimizer;
+import io.leavesfly.tinyai.ml.optimize.SGD;
+import io.leavesfly.tinyai.nlp.Word2Vec;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
 import java.util.ArrayList;

@@ -1,9 +1,9 @@
 package io.leavesfly.tinyai.example.nlp;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.mlearning.Model;
-import io.leavesfly.tinyai.modality.nlp.MoEGPTModel;
-import io.leavesfly.tinyai.modality.nlp.SimpleTokenizer;
+import io.leavesfly.tinyai.ml.Model;
+import io.leavesfly.tinyai.nlp.MoEGPTModel;
+import io.leavesfly.tinyai.nlp.SimpleTokenizer;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 

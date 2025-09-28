@@ -1,13 +1,13 @@
 package io.leavesfly.tinyai.example.nlp;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.mlearning.Model;
-import io.leavesfly.tinyai.mlearning.dataset.*;
-import io.leavesfly.tinyai.mlearning.loss.SoftmaxCrossEntropy;
-import io.leavesfly.tinyai.mlearning.optimize.Adam;
-import io.leavesfly.tinyai.modality.nlp.GPT2Model;
-import io.leavesfly.tinyai.modality.nlp.GPT2TextDataset;
-import io.leavesfly.tinyai.modality.nlp.SimpleTokenizer;
+import io.leavesfly.tinyai.ml.Model;
+import io.leavesfly.tinyai.ml.dataset.Batch;
+import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
+import io.leavesfly.tinyai.ml.optimize.Adam;
+import io.leavesfly.tinyai.nlp.GPT2Model;
+import io.leavesfly.tinyai.nlp.GPT2TextDataset;
+import io.leavesfly.tinyai.nlp.SimpleTokenizer;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 
@@ -168,7 +168,7 @@ public class GPT2Example {
                 System.out.println("\n--- Epoch " + (epoch + 1) + "/" + epochs + " ---");
 
                 dataset.prepare();
-                List<Batch> batches = dataset.getBatches();
+                List<io.leavesfly.tinyai.ml.dataset.Batch> batches = dataset.getBatches();
 
                 float totalLoss = 0.0f;
                 int batchCount = 0;

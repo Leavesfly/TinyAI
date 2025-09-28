@@ -1,11 +1,11 @@
 package io.leavesfly.tinyai.example.parallel;
 
-import io.leavesfly.tinyai.mlearning.*;
-import io.leavesfly.tinyai.mlearning.dataset.simple.SpiralDateSet;
-import io.leavesfly.tinyai.mlearning.evaluator.AccuracyEval;
-import io.leavesfly.tinyai.mlearning.loss.Classify;
-import io.leavesfly.tinyai.mlearning.loss.SoftmaxCrossEntropy;
-import io.leavesfly.tinyai.mlearning.optimize.Adam;
+import io.leavesfly.tinyai.ml.Model;
+import io.leavesfly.tinyai.ml.dataset.simple.SpiralDateSet;
+import io.leavesfly.tinyai.ml.evaluator.AccuracyEval;
+import io.leavesfly.tinyai.ml.loss.Classify;
+import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
+import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.nnet.block.MlpBlock;
 import io.leavesfly.tinyai.util.Config;
 
@@ -38,7 +38,7 @@ public class ParallelTrainingTest {
             SpiralDateSet dataSet = new SpiralDateSet(batchSize);
 
             // 创建模型
-            Model model = createModel("并行训练模型");
+            io.leavesfly.tinyai.ml.Model model = createModel("并行训练模型");
 
             // 创建损失函数和优化器
             SoftmaxCrossEntropy loss = new SoftmaxCrossEntropy();
@@ -62,10 +62,10 @@ public class ParallelTrainingTest {
      * @param name 模型名称
      * @return 创建的MLP模型
      */
-    private static Model createModel(String name) {
+    private static io.leavesfly.tinyai.ml.Model createModel(String name) {
         MlpBlock mlpBlock = new MlpBlock(name, 32, Config.ActiveFunc.ReLU, 2, 16, 16, 3);
 
-        return new Model(name, mlpBlock);
+        return new io.leavesfly.tinyai.ml.Model(name, mlpBlock);
     }
 
     /**
@@ -83,12 +83,12 @@ public class ParallelTrainingTest {
                                              int maxEpoch, int threadCount) {
         long startTime = System.currentTimeMillis();
 
-        Monitor monitor = new Monitor();
+        io.leavesfly.tinyai.ml.Monitor monitor = new io.leavesfly.tinyai.ml.Monitor();
         Classify classify = new Classify();
         AccuracyEval evaluator = new AccuracyEval(classify, model, dataSet);
 
         // 创建并行训练器
-        Trainer trainer = new Trainer(maxEpoch, monitor, evaluator, true, threadCount);
+        io.leavesfly.tinyai.ml.Trainer trainer = new io.leavesfly.tinyai.ml.Trainer(maxEpoch, monitor, evaluator, true, threadCount);
         trainer.init(dataSet, model, loss, optimizer);
 
         System.out.println("并行训练配置: 线程数=" + trainer.getParallelThreadCount() +

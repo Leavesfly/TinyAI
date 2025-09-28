@@ -1,11 +1,11 @@
 package io.leavesfly.tinyai.rl.agent;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.mlearning.Model;
-import io.leavesfly.tinyai.mlearning.loss.Loss;
-import io.leavesfly.tinyai.mlearning.loss.MeanSquaredLoss;
-import io.leavesfly.tinyai.mlearning.optimize.Adam;
-import io.leavesfly.tinyai.mlearning.optimize.Optimizer;
+import io.leavesfly.tinyai.ml.Model;
+import io.leavesfly.tinyai.ml.loss.Loss;
+import io.leavesfly.tinyai.ml.loss.MeanSquaredLoss;
+import io.leavesfly.tinyai.ml.optimize.Adam;
+import io.leavesfly.tinyai.ml.optimize.Optimizer;
 import io.leavesfly.tinyai.rl.Agent;
 import io.leavesfly.tinyai.rl.Experience;
 import io.leavesfly.tinyai.rl.ReplayBuffer;

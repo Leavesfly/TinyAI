@@ -1,13 +1,13 @@
 package io.leavesfly.tinyai.example.rnn;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.mlearning.Model;
-import io.leavesfly.tinyai.mlearning.dataset.Batch;
-import io.leavesfly.tinyai.mlearning.dataset.DataSet;
-import io.leavesfly.tinyai.mlearning.dataset.simple.SinDataSet;
-import io.leavesfly.tinyai.mlearning.loss.Loss;
-import io.leavesfly.tinyai.mlearning.loss.MeanSquaredLoss;
-import io.leavesfly.tinyai.mlearning.optimize.Adam;
+import io.leavesfly.tinyai.ml.Model;
+import io.leavesfly.tinyai.ml.dataset.Batch;
+import io.leavesfly.tinyai.ml.dataset.DataSet;
+import io.leavesfly.tinyai.ml.dataset.simple.SinDataSet;
+import io.leavesfly.tinyai.ml.loss.Loss;
+import io.leavesfly.tinyai.ml.loss.MeanSquaredLoss;
+import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.nnet.block.GruBlock;
 import io.leavesfly.tinyai.nnet.block.LstmBlock;

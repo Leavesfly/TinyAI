@@ -23,10 +23,14 @@
             <artifactId>tinyai-rl</artifactId>
         </dependency>
 
-        <!-- 依赖tinyai-modality模块 -->
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
-            <artifactId>tinyai-modality</artifactId>
+            <artifactId>tinyai-cv</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.leavesfly.tinyai</groupId>
+            <artifactId>tinyai-nlp</artifactId>
         </dependency>
 
         <!-- 依赖tinyai-ml -->

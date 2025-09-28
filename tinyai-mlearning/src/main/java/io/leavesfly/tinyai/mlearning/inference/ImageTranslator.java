@@ -402,8 +402,9 @@ public class ImageTranslator implements Translator<Object, String> {
             for (int i = 0; i < indices.length; i++) {
                 indices[i] = i;
             }
-            
-            Arrays.sort(indices, (a, b) -> Float.compare(probabilities[b], probabilities[a]));
+
+            float[] finalProbabilities = probabilities;
+            Arrays.sort(indices, (a, b) -> Float.compare(finalProbabilities[b], finalProbabilities[a]));
             
             int topK = Math.min(3, probabilities.length);
             for (int i = 0; i < topK; i++) {

@@ -98,7 +98,7 @@ public class MultiArmedBanditEnvironment extends Environment {
     @Override
     public Variable reset() {
         currentStep = 0;
-        done = false;
+        done = maxSteps <= 0; // 如果maxSteps为0或负数，直接结束
         totalReward = 0.0f;
         totalRegret = 0.0f;
         

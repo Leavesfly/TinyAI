@@ -1,6 +1,7 @@
 package io.leavesfly.tinyai.mlearning.loss;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.mlearning.loss.MaskedSoftmaxCELoss;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
 /**

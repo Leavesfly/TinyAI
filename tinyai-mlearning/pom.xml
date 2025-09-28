@@ -16,33 +16,23 @@
     <name>tinyai-mlearning</name>
     <description>tinyai-mlearning</description>
 
-    <properties>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    </properties>
-
     <dependencies>
-
         <!-- 依赖tinyai-func模块 -->
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
             <artifactId>tinyai-func</artifactId>
-            <version>${project.version}</version>
         </dependency>
 
         <!-- 依赖tinyai-ndarr模块 -->
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
             <artifactId>tinyai-ndarr</artifactId>
-            <version>${project.version}</version>
         </dependency>
 
         <!-- 依赖tinyai-nnet模块 -->
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
             <artifactId>tinyai-nnet</artifactId>
-            <version>${project.version}</version>
         </dependency>
 
         <!-- 图表依赖 -->
@@ -64,18 +54,12 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.8.1</version>
-                <configuration>
-                    <source>8</source>
-                    <target>8</target>
-                </configuration>
             </plugin>
 
             <!-- Exec plugin for running main class -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
-                <version>3.1.0</version>
             </plugin>
         </plugins>
     </build>

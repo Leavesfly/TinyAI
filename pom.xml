@@ -25,22 +25,90 @@
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        
+        <!-- 插件版本统一管理 -->
+        <maven-compiler-plugin.version>3.8.1</maven-compiler-plugin.version>
+        <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version>
+        
+        <!-- 外部依赖版本统一管理 -->
+        <jfreechart.version>1.0.7</jfreechart.version>
+        <junit.version>4.13.2</junit.version>
     </properties>
+    
     <!-- 依赖管理，供子模块继承使用 -->
     <dependencyManagement>
         <dependencies>
+            <!-- 项目内部模块依赖管理 -->
+            <dependency>
+                <groupId>io.leavesfly.tinyai</groupId>
+                <artifactId>tinyai-util</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.leavesfly.tinyai</groupId>
+                <artifactId>tinyai-ndarr</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.leavesfly.tinyai</groupId>
+                <artifactId>tinyai-func</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.leavesfly.tinyai</groupId>
+                <artifactId>tinyai-nnet</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.leavesfly.tinyai</groupId>
+                <artifactId>tinyai-mlearning</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.leavesfly.tinyai</groupId>
+                <artifactId>tinyai-modality</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.leavesfly.tinyai</groupId>
+                <artifactId>tinyai-rl</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            
+            <!-- 外部依赖管理 -->
             <dependency>
                 <groupId>jfree</groupId>
                 <artifactId>jfreechart</artifactId>
-                <version>1.0.7</version>
+                <version>${jfreechart.version}</version>
             </dependency>
-
             <dependency>
                 <groupId>junit</groupId>
                 <artifactId>junit</artifactId>
-                <version>4.13.2</version>
+                <version>${junit.version}</version>
                 <scope>test</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
+    
+    <!-- 插件管理，供子模块继承使用 -->
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>${maven-compiler-plugin.version}</version>
+                    <configuration>
+                        <source>${maven.compiler.source}</source>
+                        <target>${maven.compiler.target}</target>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>exec-maven-plugin</artifactId>
+                    <version>${exec-maven-plugin.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
 </project>

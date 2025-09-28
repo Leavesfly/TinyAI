@@ -16,7 +16,7 @@ import io.leavesfly.tinyai.ndarr.Shape;
  * 2. CIFAR-10卷积网络
  * 3. 自定义卷积网络
  */
-public class SimpleConvNetTest {
+public class SimpleConvNetExample {
     
     /**
      * 主函数，执行SimpleConvNet测试

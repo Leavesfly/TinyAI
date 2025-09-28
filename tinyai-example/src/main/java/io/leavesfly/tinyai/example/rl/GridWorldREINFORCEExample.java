@@ -1,10 +1,10 @@
 package io.leavesfly.tinyai.example.rl;
 
-import io.leavesfly.tinydl.func.Variable;
-import io.leavesfly.tinydl.modality.rl.Environment;
-import io.leavesfly.tinydl.modality.rl.Experience;
-import io.leavesfly.tinydl.modality.rl.agent.REINFORCEAgent;
-import io.leavesfly.tinydl.modality.rl.environment.GridWorldEnvironment;
+import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.rl.Environment;
+import io.leavesfly.tinyai.rl.Experience;
+import io.leavesfly.tinyai.rl.agent.REINFORCEAgent;
+import io.leavesfly.tinyai.rl.environment.GridWorldEnvironment;
 
 import java.util.Map;
 

@@ -16,25 +16,26 @@
         <module>tinyai-util</module>
         <module>tinyai-nnet</module>
         <module>tinyai-ml</module>
-        <module>tinyai-modality</module>
         <module>tinyai-rl</module>
-        <module>tinyai-example</module>
+        <module>tinyai-nlp</module>
+        <module>tinyai-cv</module>
+        <module>tinyai-case</module>
     </modules>
 
     <properties>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        
+
         <!-- 插件版本统一管理 -->
         <maven-compiler-plugin.version>3.8.1</maven-compiler-plugin.version>
         <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version>
-        
+
         <!-- 外部依赖版本统一管理 -->
         <jfreechart.version>1.0.7</jfreechart.version>
         <junit.version>4.13.2</junit.version>
     </properties>
-    
+
     <!-- 依赖管理，供子模块继承使用 -->
     <dependencyManagement>
         <dependencies>
@@ -74,7 +75,7 @@
                 <artifactId>tinyai-rl</artifactId>
                 <version>${project.version}</version>
             </dependency>
-            
+
             <!-- 外部依赖管理 -->
             <dependency>
                 <groupId>jfree</groupId>
@@ -89,7 +90,7 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
-    
+
     <!-- 插件管理，供子模块继承使用 -->
     <build>
         <pluginManagement>

@@ -224,6 +224,210 @@ public class MoEGPTModel extends Block {
     }
     
     /**
+     * 创建小型MoE-GPT模型的工厂方法
+     * 
+     * @param name 模型名称
+     * @param vocabSize 词汇表大小
+     * @return 小型MoE-GPT模型实例
+     */
+    public static MoEGPTModel createSmallModel(String name, int vocabSize) {
+        // 使用小型配置参数
+        return new MoEGPTModel(
+            name,
+            vocabSize,
+            384,      // dModel: 小型模型维度
+            4,        // numLayers: 4层
+            6,        // numHeads: 6个注意力头
+            4,        // numExperts: 4个专家
+            1536,     // dExpert: 专家隐藏层维度
+            2,        // topK: 选择2个专家
+            256,      // maxSeqLength: 最大序列长度
+            0.1,      // dropoutRate: dropout比率
+            true,     // useNoise: 使用噪声
+            0.1       // noiseEpsilon: 噪声强度
+        );
+    }
+    
+    /**
+     * 打印模型配置信息
+     */
+    public void printModelInfo() {
+        System.out.println("\n=== MoE-GPT Model Information ===");
+        System.out.println(getModelConfig());
+        System.out.println("\nParameter Distribution:");
+        
+        // 统计参数数量
+        long totalParams = getTotalParameterCount();
+        long activeParams = getActiveParameterCount();
+        
+        // Token嵌入层参数
+        long tokenEmbedParams = (long) vocabSize * dModel;  // 词嵌入
+        long posEmbedParams = (long) maxSeqLength * dModel;  // 位置嵌入
+        
+        // MoE Transformer块参数
+        long moeBlockParams = 0;
+        for (MoETransformerBlock block : moeTransformerBlocks) {
+            moeBlockParams += block.getTotalParameterCount();
+        }
+        
+        // 最终层归一化参数
+        long finalLnParams = (long) dModel * 2;
+        
+        // 输出头参数
+        long outputHeadParams = (long) dModel * vocabSize;
+        
+        System.out.println("  - Token Embedding: " + formatNumber(tokenEmbedParams));
+        System.out.println("  - Position Embedding: " + formatNumber(posEmbedParams));
+        System.out.println("  - MoE Transformer Blocks (" + numLayers + "): " + formatNumber(moeBlockParams));
+        System.out.println("  - Final LayerNorm: " + formatNumber(finalLnParams));
+        System.out.println("  - Output Head: " + formatNumber(outputHeadParams));
+        System.out.println("  - Total Parameters: " + formatNumber(totalParams));
+        System.out.println("  - Active Parameters (per forward): " + formatNumber(activeParams));
+        System.out.printf("  - Parameter Efficiency: %.2f%% (%.2fx sparsity)\n", 
+                         (double) activeParams / totalParams * 100, 
+                         (double) totalParams / activeParams);
+        System.out.println("==========================================\n");
+    }
+    
+    /**
+     * 重置所有专家统计信息
+     */
+    public void resetAllExpertStatistics() {
+        for (MoETransformerBlock block : moeTransformerBlocks) {
+            block.resetMoEStats();
+        }
+    }
+    
+    /**
+     * 计算所有层的负载均衡损失
+     * 
+     * @return 总负载均衡损失
+     */
+    public float computeTotalLoadBalancingLoss() {
+        float totalLoss = 0.0f;
+        for (MoETransformerBlock block : moeTransformerBlocks) {
+            totalLoss += block.computeLoadBalancingLoss();
+        }
+        return totalLoss;
+    }
+    
+    /**
+     * 打印所有专家的统计信息
+     */
+    public void printAllExpertStatistics() {
+        System.out.println("\n=== Expert Usage Statistics ===");
+        List<MoELayer.LoadBalancingStats> allStats = getAllMoEStats();
+        
+        for (int i = 0; i < allStats.size(); i++) {
+            MoELayer.LoadBalancingStats stats = allStats.get(i);
+            System.out.printf("Layer %d:\n", i);
+            System.out.printf("  Total Tokens: %d\n", stats.totalTokens);
+            System.out.printf("  Average Usage: %.2f\n", stats.averageUsage);
+            System.out.printf("  Load Imbalance: %.4f\n", stats.loadImbalance);
+            System.out.print("  Expert Usage Count: [");
+            for (int j = 0; j < stats.expertUsageCount.length; j++) {
+                if (j > 0) System.out.print(", ");
+                System.out.print(stats.expertUsageCount[j]);
+            }
+            System.out.println("]");
+            
+            // 计算每个专家的使用率
+            System.out.print("  Expert Usage Rates: [");
+            for (int j = 0; j < stats.expertUsageCount.length; j++) {
+                if (j > 0) System.out.print(", ");
+                float rate = stats.totalTokens > 0 ? 
+                    (float) stats.expertUsageCount[j] / stats.totalTokens : 0.0f;
+                System.out.printf("%.2f%%", rate * 100);
+            }
+            System.out.println("]");
+        }
+        System.out.println("==============================\n");
+    }
+    
+    /**
+     * 获取所有层的专家使用率
+     * 
+     * @return 每层的专家使用率列表
+     */
+    public List<float[]> getAllLayersExpertUsageRates() {
+        List<float[]> usageRates = new ArrayList<>();
+        List<MoELayer.LoadBalancingStats> allStats = getAllMoEStats();
+        
+        for (MoELayer.LoadBalancingStats stats : allStats) {
+            float[] layerRates = new float[stats.expertUsageCount.length];
+            for (int i = 0; i < stats.expertUsageCount.length; i++) {
+                layerRates[i] = stats.totalTokens > 0 ? 
+                    (float) stats.expertUsageCount[i] / stats.totalTokens : 0.0f;
+            }
+            usageRates.add(layerRates);
+        }
+        
+        return usageRates;
+    }
+    
+    /**
+     * 获取模型总参数数量
+     * 
+     * @return 总参数数量
+     */
+    public long getParameterCount() {
+        return getTotalParameterCount();
+    }
+    
+    /**
+     * 获取模型活跃参数数量（每次前向传播使用的参数）
+     * 
+     * @return 活跃参数数量
+     */
+    public long getActiveParameterCount() {
+        long activeParams = 0;
+        
+        // Token嵌入层参数（全部活跃）
+        activeParams += vocabSize * dModel;  // token embedding
+        activeParams += maxSeqLength * dModel;  // position embedding
+        
+        // MoE Transformer块参数（只统计活跃的专家）
+        for (MoETransformerBlock block : moeTransformerBlocks) {
+            // 注意力层参数（全部活跃）
+            activeParams += 4L * dModel * dModel;  // Q,K,V,O矩阵
+            
+            // MoE层参数（只有topK个专家活跃）
+            long expertParams = 2L * dModel * dExpert;  // 每个专家的参数
+            activeParams += topK * expertParams;  // 只有topK个专家活跃
+            
+            // 门控网络参数（全部活跃）
+            activeParams += dModel * numExperts;  // 门控网络
+            
+            // 层归一化参数（全部活跃）
+            activeParams += 2L * dModel * 2;  // 两个LayerNorm层
+        }
+        
+        // 最终层归一化参数
+        activeParams += 2L * dModel;
+        
+        // 输出头参数
+        activeParams += dModel * vocabSize;
+        
+        return activeParams;
+    }
+    
+    /**
+     * 获取专家隐藏层维度
+     * 
+     * @return 专家隐藏层维度
+     */
+    public int getExpertHiddenDim() {
+        return dExpert;
+    }
+    
+    /**
+     * 格式化数字显示（添加千分位分隔符）
+     */
+    private String formatNumber(long number) {
+        return String.format("%,d", number);
+    }
+
+    /**
      * 获取所有MoE层的负载均衡统计信息
      */
     public List<MoELayer.LoadBalancingStats> getAllMoEStats() {

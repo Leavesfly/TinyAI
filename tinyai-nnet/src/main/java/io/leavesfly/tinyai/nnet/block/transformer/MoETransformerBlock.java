@@ -211,6 +211,24 @@ public class MoETransformerBlock extends Layer {
     }
     
     /**
+     * 计算负载均衡损失
+     * 
+     * @return 负载均衡损失值
+     */
+    public float computeLoadBalancingLoss() {
+        MoELayer.LoadBalancingStats stats = getMoEStats();
+        
+        // 如果没有处理任何token，返回0
+        if (stats.totalTokens == 0) {
+            return 0.0f;
+        }
+        
+        // 使用负载不均衡系数作为损失
+        // 负载不均衡系数越大，损失越大
+        return (float) stats.loadImbalance;
+    }
+    
+    /**
      * 重置MoE统计信息
      */
     public void resetMoEStats() {

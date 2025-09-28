@@ -20,6 +20,7 @@
         <module>tinyai-nlp</module>
         <module>tinyai-cv</module>
         <module>tinyai-case</module>
+        <module>tinyai-agent</module>
     </modules>
 
     <properties>
@@ -81,6 +82,11 @@
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
                 <artifactId>tinyai-nlp</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.leavesfly.tinyai</groupId>
+                <artifactId>tinyai-agent</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

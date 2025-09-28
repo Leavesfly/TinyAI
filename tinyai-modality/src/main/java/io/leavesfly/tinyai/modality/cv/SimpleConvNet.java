@@ -272,4 +272,80 @@ public class SimpleConvNet extends SequentialBlock {
                 numClasses, layers.size(), useBatchNorm, dropoutRate);
     }
 
+    // ==================== 静态工厂方法 ====================
+    
+    /**
+     * 构建适用于MNIST数据集的卷积神经网络
+     * 
+     * @return 配置好的SimpleConvNet实例
+     */
+    public static SimpleConvNet buildMnistConvNet() {
+        // MNIST图像: 28x28 灰度图像，10个类别
+        Shape inputShape = Shape.of(-1, 1, 28, 28);
+        int numClasses = 10;
+        
+        SimpleConvNet convNet = new SimpleConvNet("MnistConvNet", inputShape, numClasses, true, 0.3f);
+        convNet.init();
+        
+        System.out.println("MNIST卷积网络构建完成 - 输入: 28x28x1, 输出: 10类");
+        return convNet;
+    }
+    
+    /**
+     * 构建适用于CIFAR-10数据集的卷积神经网络
+     * 
+     * @return 配置好的SimpleConvNet实例
+     */
+    public static SimpleConvNet buildCifar10ConvNet() {
+        // CIFAR-10图像: 32x32 RGB图像，10个类别
+        Shape inputShape = Shape.of(-1, 3, 32, 32);
+        int numClasses = 10;
+        
+        SimpleConvNet convNet = new SimpleConvNet("Cifar10ConvNet", inputShape, numClasses, true, 0.4f);
+        convNet.init();
+        
+        System.out.println("CIFAR-10卷积网络构建完成 - 输入: 32x32x3, 输出: 10类");
+        return convNet;
+    }
+    
+    /**
+     * 构建自定义配置的卷积神经网络
+     * 
+     * @param name        网络名称
+     * @param channels    输入通道数
+     * @param height      输入图像高度
+     * @param width       输入图像宽度
+     * @param numClasses  输出类别数
+     * @return 配置好的SimpleConvNet实例
+     */
+    public static SimpleConvNet buildCustomConvNet(String name, int channels, 
+                                                   int height, int width, int numClasses) {
+        Shape inputShape = Shape.of(-1, channels, height, width);
+        
+        // 根据输入尺寸调整dropout率
+        float dropoutRate = height > 64 ? 0.5f : 0.3f;
+        
+        SimpleConvNet convNet = new SimpleConvNet(name, inputShape, numClasses, true, dropoutRate);
+        convNet.init();
+        
+        System.out.printf("自定义卷积网络构建完成 - 输入: %dx%dx%d, 输出: %d类\n", 
+                         height, width, channels, numClasses);
+        return convNet;
+    }
+    
+    /**
+     * 构建轻量级卷积神经网络（较少参数）
+     * 
+     * @param inputShape  输入形状
+     * @param numClasses  输出类别数
+     * @return 配置好的轻量级SimpleConvNet实例
+     */
+    public static SimpleConvNet buildLightweightConvNet(Shape inputShape, int numClasses) {
+        SimpleConvNet convNet = new SimpleConvNet("LightweightConvNet", inputShape, numClasses, false, 0.2f);
+        convNet.init();
+        
+        System.out.println("轻量级卷积网络构建完成 - 无BatchNorm，低Dropout");
+        return convNet;
+    }
+
 }

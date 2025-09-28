@@ -6,7 +6,7 @@ import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 
 /**
- * SimpleConvNet 测试示例
+ * SimpleConvNetExample
  * 
  * @author leavesfly
  * @version 0.01

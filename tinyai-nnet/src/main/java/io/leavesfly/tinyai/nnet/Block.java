@@ -104,7 +104,13 @@ public abstract class Block extends LayerAble {
     private void putAll(Map<String, Parameter> allParams) {
         allParams.putAll(params);
         for (LayerAble layer : layers) {
-            allParams.putAll(layer.getParams());
+            // 对于Block类型的层，使用getAllParams()递归收集参数
+            // 对于普通Layer，使用getParams()获取直接参数
+            if (layer instanceof Block) {
+                allParams.putAll(((Block) layer).getAllParams());
+            } else {
+                allParams.putAll(layer.getParams());
+            }
         }
     }
 

@@ -82,6 +82,12 @@ public class SimpleRnnLayer extends RnnLayer {
      * 隐藏层大小
      */
     private int hiddenSize;
+    
+    /**
+     * 当前状态的批大小
+     * 用于检测批大小变化并重置状态
+     */
+    private int currentBatchSize = -1;
 
     /**
      * 构造一个SimpleRnnLayer实例
@@ -104,6 +110,7 @@ public class SimpleRnnLayer extends RnnLayer {
     public void resetState() {
         state = null;
         stateValue = null;
+        currentBatchSize = -1; // 重置批大小记录
     }
 
     /**
@@ -135,6 +142,7 @@ public class SimpleRnnLayer extends RnnLayer {
 
     /**
      * 基于Variable的前向传播方法
+     * 支持动态批大小处理
      *
      * @param inputs 输入变量数组，通常只包含一个输入变量
      * @return 当前时间步的隐藏状态
@@ -142,6 +150,14 @@ public class SimpleRnnLayer extends RnnLayer {
     @Override
     public Variable layerForward(Variable... inputs) {
         Variable x = inputs[0];
+        int inputBatchSize = x.getValue().getShape().getRow();
+        
+        // 检测批大小变化，如果变化则重置状态
+        if (currentBatchSize != -1 && currentBatchSize != inputBatchSize) {
+            // 批大小变化，重置状态以适应新的批大小
+            resetState();
+        }
+        currentBatchSize = inputBatchSize;
 
         // 第一次前向传播，没有前一时间步的隐藏状态
         if (Objects.isNull(state)) {
@@ -152,6 +168,13 @@ public class SimpleRnnLayer extends RnnLayer {
             preTanh = state;
         } else {
             // 后续前向传播，包含前一时间步的隐藏状态
+            // 检查状态形状是否与当前输入匹配
+            if (state.getValue().getShape().getRow() != inputBatchSize) {
+                // 状态批大小不匹配，重新初始化状态
+                resetState();
+                return layerForward(inputs); // 递归调用处理重置后的状态
+            }
+            
             prevState = state;
             xLinear = x.linear(x2h, b);
             hLinear = new Variable(stateValue).linear(h2h, null);

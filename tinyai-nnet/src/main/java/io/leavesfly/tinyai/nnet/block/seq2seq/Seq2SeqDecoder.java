@@ -63,7 +63,7 @@ public class Seq2SeqDecoder extends Decoder {
     public void init() {
         if (!layersInitialized) {
             this.embedding = new Embedding(name + "_embedding", targetVocabSize, embeddingDim);
-            this.lstmLayer = new LstmLayer(name + "_lstm", Shape.of(-1, -1, embeddingDim), Shape.of(-1, -1, hiddenSize));
+            this.lstmLayer = new LstmLayer(name + "_lstm", Shape.of(-1, embeddingDim), Shape.of(-1, hiddenSize));
             this.linearLayer = new LinearLayer(name + "_linear", hiddenSize, outputVocabSize, true);
 
             addLayer(embedding);

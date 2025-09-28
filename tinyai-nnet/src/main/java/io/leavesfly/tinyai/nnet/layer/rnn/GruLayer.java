@@ -110,6 +110,12 @@ public class GruLayer extends Layer {
      * 隐藏层大小
      */
     private int hiddenSize;
+    
+    /**
+     * 当前状态的批大小
+     * 用于检测批大小变化并重置状态
+     */
+    private int currentBatchSize = -1;
 
     // 用于反向传播的缓存变量
     /**
@@ -188,6 +194,7 @@ public class GruLayer extends Layer {
     public void resetState() {
         state = null;
         stateValue = null;
+        currentBatchSize = -1; // 重置批大小记录
     }
 
     /**
@@ -253,6 +260,14 @@ public class GruLayer extends Layer {
     @Override
     public Variable layerForward(Variable... inputs) {
         Variable x = inputs[0];
+        int inputBatchSize = x.getValue().getShape().getRow();
+        
+        // 检测批大小变化，如果变化则重置状态
+        if (currentBatchSize != -1 && currentBatchSize != inputBatchSize) {
+            // 批大小变化，重置状态以适应新的批大小
+            resetState();
+        }
+        currentBatchSize = inputBatchSize;
 
         if (Objects.isNull(state)) {
             // 第一次前向传播
@@ -274,6 +289,13 @@ public class GruLayer extends Layer {
             stateValue = state.getValue();
         } else {
             // 后续前向传播
+            // 检查状态形状是否与当前输入匹配
+            if (state.getValue().getShape().getRow() != inputBatchSize) {
+                // 状态批大小不匹配，重新初始化状态
+                resetState();
+                return layerForward(inputs); // 递归调用处理重置后的状态
+            }
+            
             // 计算更新门
             x_z = x.linear(w_z, b_z);
             h_z = state.linear(u_z, null);

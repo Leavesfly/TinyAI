@@ -85,9 +85,30 @@ public class Embedding extends Layer {
             return wIn.getItem(slices, null);
         } else if (inputValue.getShape().getDimNum() == 2) {
             // 二维输入 (batch_size, sequence_length)
-            // 我们将处理第一个样本
-            int[] slices = NdArrayUtil.toInt(inputValue.getMatrix()[0]);
-            return wIn.getItem(slices, null);
+            int batchSize = inputValue.getShape().getRow();
+            int seqLength = inputValue.getShape().getColumn();
+            
+            // 创建结果数组: (batch_size, sequence_length, embedding_dim)
+            NdArray result = NdArray.zeros(Shape.of(batchSize, seqLength, embedSize));
+            
+            // 为每个样本处理嵌入
+            for (int i = 0; i < batchSize; i++) {
+                int[] slices = NdArrayUtil.toInt(inputValue.getMatrix()[i]);
+                Variable embeddedSample = wIn.getItem(slices, null);
+                // 将嵌入结果复制到结果数组中
+                for (int j = 0; j < seqLength; j++) {
+                    for (int k = 0; k < embedSize; k++) {
+                        result.set(embeddedSample.getValue().get(j, k), i, j, k);
+                    }
+                }
+            }
+            
+            // 如果序列长度为1，重新形状为 (batch_size, embedding_dim)
+            if (seqLength == 1) {
+                result = result.reshape(Shape.of(batchSize, embedSize));
+            }
+            
+            return new Variable(result);
         } else {
             throw new IllegalArgumentException("Embedding层不支持该输入形状: " + inputValue.getShape());
         }

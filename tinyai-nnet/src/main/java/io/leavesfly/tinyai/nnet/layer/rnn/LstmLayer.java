@@ -56,6 +56,12 @@ public class LstmLayer extends RnnLayer {
      * 隐藏层大小
      */
     private int hiddenSize;
+    
+    /**
+     * 当前状态的批大小
+     * 用于检测批大小变化并重置状态
+     */
+    private int currentBatchSize = -1;
 
     /**
      * 构造一个LSTM层实例
@@ -163,6 +169,7 @@ public class LstmLayer extends RnnLayer {
     public void resetState() {
         state = null;
         candidate = null;
+        currentBatchSize = -1; // 重置批大小记录
     }
 
     /**
@@ -175,6 +182,7 @@ public class LstmLayer extends RnnLayer {
 
     /**
      * LSTM层的前向传播方法
+     * 支持动态批大小处理
      *
      * @param inputs 输入变量数组，通常只包含一个输入变量
      * @return 当前时间步的隐藏状态
@@ -182,6 +190,14 @@ public class LstmLayer extends RnnLayer {
     @Override
     public Variable layerForward(Variable... inputs) {
         Variable x = inputs[0];
+        int inputBatchSize = x.getValue().getShape().getRow();
+        
+        // 检测批大小变化，如果变化则重置状态
+        if (currentBatchSize != -1 && currentBatchSize != inputBatchSize) {
+            // 批大小变化，重置状态以适应新的批大小
+            resetState();
+        }
+        currentBatchSize = inputBatchSize;
 
         Variable fGate = null;  // 遗忘门
         Variable iGate = null;  // 输入门
@@ -207,6 +223,12 @@ public class LstmLayer extends RnnLayer {
 
         } else {
             // 后续前向传播，包含前一时间步的隐藏状态
+            // 但需要确保状态形状与当前输入批大小一致
+            if (state.getValue().getShape().getRow() != inputBatchSize) {
+                // 状态批大小不匹配，重新初始化状态
+                resetState();
+                return layerForward(inputs); // 递归调用处理重置后的状态
+            }
 
             // 计算遗忘门: f_t = σ(W_f * x_t + W_hf * h_{t-1} + b_f)
             fGate = x.linear(getParamBy(getName() + ".x2f"), getParamBy(getName() + ".x2f-b"))
@@ -234,7 +256,13 @@ public class LstmLayer extends RnnLayer {
             candidate = iGate.mul(uState);
         } else {
             // 后续时间步，包含前一时间步的细胞状态
-            candidate = fGate.mul(candidate).add(iGate.mul(uState));
+            // 检查细胞状态的批大小是否匹配
+            if (candidate.getValue().getShape().getRow() != inputBatchSize) {
+                // 细胞状态批大小不匹配，重新初始化
+                candidate = iGate.mul(uState);
+            } else {
+                candidate = fGate.mul(candidate).add(iGate.mul(uState));
+            }
         }
 
         // 计算隐藏状态: h_t = o_t * tanh(C_t)

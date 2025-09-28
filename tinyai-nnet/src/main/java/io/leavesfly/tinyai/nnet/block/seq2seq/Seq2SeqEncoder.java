@@ -155,8 +155,8 @@ public class Seq2SeqEncoder extends Encoder {
                 // 创建LSTM层
                 this.lstmLayer = new LstmLayer(
                         name + "_lstm",
-                        Shape.of(-1, -1, embeddingDim),  // 输入形状
-                        Shape.of(-1, -1, hiddenSize)     // 输出形状
+                        Shape.of(-1, embeddingDim),      // 输入形状: (batch_size, embedding_dim)
+                        Shape.of(-1, hiddenSize)         // 输出形状: (batch_size, hidden_size)
                 );
 
                 // 创建Dropout层

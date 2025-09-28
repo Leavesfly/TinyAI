@@ -33,7 +33,6 @@ public abstract class ArrayDataset extends DataSet {
     public List<Batch> getBatches() {
 
         int size = xs.length;
-        // todo 最后不够一批的直接丢掉
         NdArray[][] ndArrayXs = new NdArray[size / batchSize][batchSize];
         NdArray[][] ndArrayYs = new NdArray[size / batchSize][batchSize];
 

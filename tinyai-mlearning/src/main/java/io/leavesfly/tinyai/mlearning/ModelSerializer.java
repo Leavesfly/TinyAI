@@ -146,11 +146,50 @@ public class ModelSerializer {
      *
      * @param model    目标模型
      * @param filePath 参数文件路径
-     *                                                                 todo
      */
     @SuppressWarnings("unchecked")
     public static void loadParameters(Model model, String filePath) {
-        //todo
+        try {
+            File file = new File(filePath);
+            if (!file.exists()) {
+                throw new RuntimeException("Parameters file does not exist: " + filePath);
+            }
+
+            Map<String, Parameter> loadedParams;
+            try (FileInputStream fis = new FileInputStream(file);
+                 ObjectInputStream ois = new ObjectInputStream(fis)) {
+                loadedParams = (Map<String, Parameter>) ois.readObject();
+            }
+
+            // 获取目标模型的参数
+            Map<String, Parameter> modelParams = model.getAllParams();
+
+            // 加载匹配的参数
+            int loadedCount = 0;
+            for (Map.Entry<String, Parameter> entry : loadedParams.entrySet()) {
+                String paramName = entry.getKey();
+                Parameter loadedParam = entry.getValue();
+
+                if (modelParams.containsKey(paramName)) {
+                    Parameter modelParam = modelParams.get(paramName);
+                    // 检查形状是否匹配
+                    if (modelParam.getValue().getShape().equals(loadedParam.getValue().getShape())) {
+                        // 复制参数值
+                        float[][] loadedData = loadedParam.getValue().getMatrix();
+                        modelParam.getValue().setItem(null, null, flatten2D(loadedData));
+                        loadedCount++;
+                    } else {
+                        System.out.println("警告: 参数 " + paramName + " 形状不匹配，跳过加载");
+                    }
+                } else {
+                    System.out.println("警告: 模型中不存在参数 " + paramName + "，跳过加载");
+                }
+            }
+
+            System.out.println("成功加载 " + loadedCount + " 个参数");
+        } catch (IOException | ClassNotFoundException e) {
+            throw new RuntimeException("Failed to load parameters: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -261,15 +300,83 @@ public class ModelSerializer {
     }
 
     /**
+     * 将二维数组展平为一维数组
+     *
+     * @param matrix 二维数组
+     * @return 一维数组
+     */
+    private static float[] flatten2D(float[][] matrix) {
+        int rows = matrix.length;
+        int cols = matrix[0].length;
+        float[] result = new float[rows * cols];
+        
+        int index = 0;
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                result[index++] = matrix[i][j];
+            }
+        }
+        
+        return result;
+    }
+
+    /**
      * 比较两个模型的参数
      *
      * @param model1 模型1
      * @param model2 模型2
      * @return 参数是否相同
-     * todo
      */
     public static boolean compareModelParameters(Model model1, Model model2) {
-        //todo
-        return false;
+        if (model1 == null || model2 == null) {
+            return false;
+        }
+
+        Map<String, Parameter> params1 = model1.getAllParams();
+        Map<String, Parameter> params2 = model2.getAllParams();
+
+        // 检查参数数量是否相同
+        if (params1.size() != params2.size()) {
+            return false;
+        }
+
+        // 检查每个参数是否相同
+        for (Map.Entry<String, Parameter> entry : params1.entrySet()) {
+            String paramName = entry.getKey();
+            Parameter param1 = entry.getValue();
+
+            if (!params2.containsKey(paramName)) {
+                return false;
+            }
+
+            Parameter param2 = params2.get(paramName);
+            
+            // 检查形状是否相同
+            if (!param1.getValue().getShape().equals(param2.getValue().getShape())) {
+                return false;
+            }
+
+            // 检查数值是否相同（使用较小的容差）
+            try {
+                float[][] matrix1 = param1.getValue().getMatrix();
+                float[][] matrix2 = param2.getValue().getMatrix();
+                
+                for (int i = 0; i < matrix1.length; i++) {
+                    for (int j = 0; j < matrix1[i].length; j++) {
+                        if (Math.abs(matrix1[i][j] - matrix2[i][j]) > 1e-7) {
+                            return false;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // 如果无法转换为矩阵，直接比较数值
+                if (Math.abs(param1.getValue().getNumber().floatValue() - 
+                           param2.getValue().getNumber().floatValue()) > 1e-7) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 }

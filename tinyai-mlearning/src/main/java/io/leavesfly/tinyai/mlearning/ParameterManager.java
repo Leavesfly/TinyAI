@@ -76,8 +76,74 @@ public class ParameterManager {
      * @return 成功复制的参数数量
      */
     public static int copyParameters(Model sourceModel, Model targetModel, boolean strict) {
-        //todo
-        return 0;
+        if (sourceModel == null || targetModel == null) {
+            throw new IllegalArgumentException("模型不能为空");
+        }
+
+        Map<String, Parameter> sourceParams = sourceModel.getAllParams();
+        Map<String, Parameter> targetParams = targetModel.getAllParams();
+        
+        int copiedCount = 0;
+        int skippedCount = 0;
+        
+        for (Map.Entry<String, Parameter> sourceEntry : sourceParams.entrySet()) {
+            String paramName = sourceEntry.getKey();
+            Parameter sourceParam = sourceEntry.getValue();
+            
+            if (targetParams.containsKey(paramName)) {
+                Parameter targetParam = targetParams.get(paramName);
+                
+                // 检查形状是否匹配
+                if (sourceParam.getValue().getShape().equals(targetParam.getValue().getShape())) {
+                    // 复制参数值
+                    try {
+                        float[][] sourceMatrix = sourceParam.getValue().getMatrix();
+                        targetParam.getValue().setItem(null, null, flatten2D(sourceMatrix));
+                        copiedCount++;
+                    } catch (Exception e) {
+                        // 如果不是矩阵，尝试作为标量复制
+                        try {
+                            float value = sourceParam.getValue().getNumber().floatValue();
+                            targetParam.getValue().set(value, 0);
+                            copiedCount++;
+                        } catch (Exception e2) {
+                            System.out.println("警告: 无法复制参数 " + paramName + ": " + e2.getMessage());
+                            skippedCount++;
+                        }
+                    }
+                } else {
+                    String message = "参数 " + paramName + " 形状不匹配: 源=" + 
+                                   sourceParam.getValue().getShape() + ", 目标=" + 
+                                   targetParam.getValue().getShape();
+                    if (strict) {
+                        throw new RuntimeException(message);
+                    } else {
+                        System.out.println("警告: " + message + "，跳过复制");
+                        skippedCount++;
+                    }
+                }
+            } else {
+                String message = "目标模型中不存在参数: " + paramName;
+                if (strict) {
+                    throw new RuntimeException(message);
+                } else {
+                    System.out.println("警告: " + message + "，跳过复制");
+                    skippedCount++;
+                }
+            }
+        }
+        
+        // 在严格模式下，检查目标模型是否有额外的参数
+        if (strict) {
+            for (String targetParamName : targetParams.keySet()) {
+                if (!sourceParams.containsKey(targetParamName)) {
+                    throw new RuntimeException("源模型中不存在参数: " + targetParamName);
+                }
+            }
+        }
+        
+        System.out.println("参数复制完成: 成功 " + copiedCount + " 个，跳过 " + skippedCount + " 个");
+        return copiedCount;
     }
 
     /**
@@ -100,8 +166,56 @@ public class ParameterManager {
      * @return 参数是否相同
      */
     public static boolean compareParameters(Model model1, Model model2, double tolerance) {
-        //todo
-        return false;
+        if (model1 == null || model2 == null) {
+            return false;
+        }
+
+        Map<String, Parameter> params1 = model1.getAllParams();
+        Map<String, Parameter> params2 = model2.getAllParams();
+
+        // 检查参数数量是否相同
+        if (params1.size() != params2.size()) {
+            return false;
+        }
+
+        // 检查每个参数是否相同
+        for (Map.Entry<String, Parameter> entry : params1.entrySet()) {
+            String paramName = entry.getKey();
+            Parameter param1 = entry.getValue();
+
+            if (!params2.containsKey(paramName)) {
+                return false;
+            }
+
+            Parameter param2 = params2.get(paramName);
+            
+            // 检查形状是否相同
+            if (!param1.getValue().getShape().equals(param2.getValue().getShape())) {
+                return false;
+            }
+
+            // 检查数值是否相同
+            try {
+                float[][] matrix1 = param1.getValue().getMatrix();
+                float[][] matrix2 = param2.getValue().getMatrix();
+                
+                for (int i = 0; i < matrix1.length; i++) {
+                    for (int j = 0; j < matrix1[i].length; j++) {
+                        if (Math.abs(matrix1[i][j] - matrix2[i][j]) > tolerance) {
+                            return false;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // 如果无法转换为矩阵，直接比较数值
+                if (Math.abs(param1.getValue().getNumber().doubleValue() - 
+                           param2.getValue().getNumber().doubleValue()) > tolerance) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -122,8 +236,59 @@ public class ParameterManager {
      * @return 统计信息
      */
     public static ParameterStats getParameterStats(Map<String, Parameter> parameters) {
-        //todo
-        return null;
+        if (parameters == null || parameters.isEmpty()) {
+            return new ParameterStats();
+        }
+        
+        ParameterStats stats = new ParameterStats();
+        stats.parameterCount = parameters.size();
+        
+        for (Map.Entry<String, Parameter> entry : parameters.entrySet()) {
+            Parameter param = entry.getValue();
+            Shape shape = param.getValue().getShape();
+            long paramSize = shape.size();
+            stats.totalParameters += paramSize;
+            
+            // 计算数值统计
+            try {
+                if (shape.getDimNum() == 0 || paramSize == 1) {
+                    // 标量参数
+                    float value = param.getValue().getNumber().floatValue();
+                    stats.minValue = Math.min(stats.minValue, value);
+                    stats.maxValue = Math.max(stats.maxValue, value);
+                    stats.sum += value;
+                } else {
+                    // 矩阵参数
+                    float[][] matrix = param.getValue().getMatrix();
+                    for (int i = 0; i < matrix.length; i++) {
+                        for (int j = 0; j < matrix[i].length; j++) {
+                            float value = matrix[i][j];
+                            stats.minValue = Math.min(stats.minValue, value);
+                            stats.maxValue = Math.max(stats.maxValue, value);
+                            stats.sum += value;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // 如果无法获取数值，跳过该参数
+                System.out.println("警告: 无法获取参数 " + entry.getKey() + " 的数值: " + e.getMessage());
+            }
+        }
+        
+        // 计算平均值
+        if (stats.totalParameters > 0) {
+            stats.meanValue = stats.sum / stats.totalParameters;
+        }
+        
+        // 如果没有找到任何数值，重置最小值和最大值
+        if (stats.minValue == Float.MAX_VALUE) {
+            stats.minValue = 0;
+        }
+        if (stats.maxValue == Float.MIN_VALUE) {
+            stats.maxValue = 0;
+        }
+        
+        return stats;
     }
 
     /**
@@ -133,8 +298,63 @@ public class ParameterManager {
      * @return 深拷贝的参数映射
      */
     public static Map<String, Parameter> deepCopyParameters(Map<String, Parameter> original) {
-        //todo
-        return null;
+        if (original == null) {
+            return null;
+        }
+        
+        Map<String, Parameter> copy = new HashMap<>();
+        
+        for (Map.Entry<String, Parameter> entry : original.entrySet()) {
+            String paramName = entry.getKey();
+            Parameter originalParam = entry.getValue();
+            
+            try {
+                // 创建新的NdArray拷贝
+                Shape shape = originalParam.getValue().getShape();
+                
+                if (shape.getDimNum() == 0 || shape.size() == 1) {
+                    // 标量参数
+                    float value = originalParam.getValue().getNumber().floatValue();
+                    NdArray newArray = NdArray.of(value);
+                    copy.put(paramName, new Parameter(newArray));
+                } else {
+                    // 矩阵参数
+                    float[][] matrix = originalParam.getValue().getMatrix();
+                    
+                    // 创建新的矩阵拷贝
+                    float[][] newMatrix = new float[matrix.length][];
+                    for (int i = 0; i < matrix.length; i++) {
+                        newMatrix[i] = matrix[i].clone();
+                    }
+                    
+                    // 创建新的NdArray
+                    NdArray newArray = NdArray.of(newMatrix);
+                    copy.put(paramName, new Parameter(newArray));
+                }
+            } catch (Exception e) {
+                // 如果拷贝失败，记录错误但继续处理其他参数
+                System.out.println("警告: 无法拷贝参数 " + paramName + ": " + e.getMessage());
+                
+                // 尝试使用序列化的方式拷贝
+                try {
+                    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                    ObjectOutputStream oos = new ObjectOutputStream(bos);
+                    oos.writeObject(originalParam);
+                    oos.close();
+                    
+                    ByteArrayInputStream bis = new ByteArrayInputStream(bos.toByteArray());
+                    ObjectInputStream ois = new ObjectInputStream(bis);
+                    Parameter clonedParam = (Parameter) ois.readObject();
+                    ois.close();
+                    
+                    copy.put(paramName, clonedParam);
+                } catch (Exception e2) {
+                    System.out.println("错误: 无法拷贝参数 " + paramName + "，跳过");
+                }
+            }
+        }
+        
+        return copy;
     }
 
     /**
@@ -214,5 +434,26 @@ public class ParameterManager {
         } catch (IOException e) {
             throw new RuntimeException("Failed to save parameter stats: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 将二维数组展平为一维数组
+     *
+     * @param matrix 二维数组
+     * @return 一维数组
+     */
+    private static float[] flatten2D(float[][] matrix) {
+        int rows = matrix.length;
+        int cols = matrix[0].length;
+        float[] result = new float[rows * cols];
+        
+        int index = 0;
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                result[index++] = matrix[i][j];
+            }
+        }
+        
+        return result;
     }
 }

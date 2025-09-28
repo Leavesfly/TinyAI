@@ -7,7 +7,7 @@ import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Block;
 import io.leavesfly.tinyai.nnet.Parameter;
-import io.leavesfly.tinyai.nnet.Uml;
+// import io.leavesfly.tinyai.nnet.Uml;
 
 import java.io.*;
 import java.util.Map;
@@ -86,7 +86,7 @@ public class Model implements Serializable {
             Shape shape = block.getInputShape();
             tmpPredict = block.layerForward(new Variable(NdArray.ones(shape)));
         }
-        System.out.println(Uml.getDotGraph(tmpPredict));
+        // System.out.println(Uml.getDotGraph(tmpPredict)); // 暂时注释，因为Uml类不可用
     }
 
     /**

@@ -1,3 +1,5 @@
+package io.leavesfly.tinyai.nnet;
+
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;

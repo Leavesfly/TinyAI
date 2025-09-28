@@ -24,6 +24,13 @@
 
     <dependencies>
 
+        <!-- 依赖tinyai-func模块 -->
+        <dependency>
+            <groupId>io.leavesfly.tinyai</groupId>
+            <artifactId>tinyai-func</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- 依赖tinyai-ndarr模块 -->
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>

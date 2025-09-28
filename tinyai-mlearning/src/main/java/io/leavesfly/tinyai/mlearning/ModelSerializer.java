@@ -175,8 +175,23 @@ public class ModelSerializer {
                     // 检查形状是否匹配
                     if (modelParam.getValue().getShape().equals(loadedParam.getValue().getShape())) {
                         // 复制参数值
-                        float[][] loadedData = loadedParam.getValue().getMatrix();
-                        modelParam.getValue().setItem(null, null, flatten2D(loadedData));
+                        if (loadedParam.getValue().getShape().getDimNum() == 2) {
+                            // 2D数组处理
+                            float[][] loadedData = loadedParam.getValue().getMatrix();
+                            for (int i = 0; i < loadedData.length; i++) {
+                                for (int j = 0; j < loadedData[i].length; j++) {
+                                    modelParam.getValue().set(loadedData[i][j], i, j);
+                                }
+                            }
+                        } else if (loadedParam.getValue().getShape().getDimNum() == 1) {
+                            // 1D数组处理
+                            float value = loadedParam.getValue().getNumber().floatValue();
+                            modelParam.getValue().set(value, 0);
+                        } else {
+                            // 标量处理
+                            float value = loadedParam.getValue().getNumber().floatValue();
+                            modelParam.getValue().set(value);
+                        }
                         loadedCount++;
                     } else {
                         System.out.println("警告: 参数 " + paramName + " 形状不匹配，跳过加载");
@@ -357,7 +372,7 @@ public class ModelSerializer {
             }
 
             // 检查数值是否相同（使用较小的容差）
-            try {
+            if (param1.getValue().getShape().getDimNum() == 2) {
                 float[][] matrix1 = param1.getValue().getMatrix();
                 float[][] matrix2 = param2.getValue().getMatrix();
                 
@@ -368,7 +383,7 @@ public class ModelSerializer {
                         }
                     }
                 }
-            } catch (Exception e) {
+            } else {
                 // 如果无法转换为矩阵，直接比较数值
                 if (Math.abs(param1.getValue().getNumber().floatValue() - 
                            param2.getValue().getNumber().floatValue()) > 1e-7) {

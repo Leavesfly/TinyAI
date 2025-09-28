@@ -68,14 +68,14 @@ public abstract class ArrayDataset extends DataSet {
         splitDatasetMap.put(Usage.TRAIN.name(), dataSet);
 
         start = end;
-        end = (int) (xs.length * testRatio);
+        end = start + (int) (xs.length * testRatio);
         _xs = Arrays.copyOfRange(xs, start, end);
         _ys = Arrays.copyOfRange(ys, start, end);
         dataSet = build(batchSize, _xs, _ys);
         splitDatasetMap.put(Usage.TEST.name(), dataSet);
 
         start = end;
-        end = (int) (xs.length * validaRation);
+        end = xs.length; // 使用剩余的所有数据作为验证集
         _xs = Arrays.copyOfRange(xs, start, end);
         _ys = Arrays.copyOfRange(ys, start, end);
         dataSet = build(batchSize, _xs, _ys);

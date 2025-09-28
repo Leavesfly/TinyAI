@@ -97,19 +97,31 @@ public class ParameterManager {
                 if (sourceParam.getValue().getShape().equals(targetParam.getValue().getShape())) {
                     // 复制参数值
                     try {
-                        float[][] sourceMatrix = sourceParam.getValue().getMatrix();
-                        targetParam.getValue().setItem(null, null, flatten2D(sourceMatrix));
-                        copiedCount++;
-                    } catch (Exception e) {
-                        // 如果不是矩阵，尝试作为标量复制
-                        try {
+                        // 尝试按维度复制
+                        if (sourceParam.getValue().getShape().getDimNum() == 2) {
+                            // 2D数组处理
+                            float[][] sourceMatrix = sourceParam.getValue().getMatrix();
+                            float[][] targetMatrix = targetParam.getValue().getMatrix();
+                            for (int i = 0; i < sourceMatrix.length; i++) {
+                                for (int j = 0; j < sourceMatrix[i].length; j++) {
+                                    targetParam.getValue().set(sourceMatrix[i][j], i, j);
+                                }
+                            }
+                            copiedCount++;
+                        } else if (sourceParam.getValue().getShape().getDimNum() == 1) {
+                            // 1D数组处理
                             float value = sourceParam.getValue().getNumber().floatValue();
                             targetParam.getValue().set(value, 0);
                             copiedCount++;
-                        } catch (Exception e2) {
-                            System.out.println("警告: 无法复制参数 " + paramName + ": " + e2.getMessage());
-                            skippedCount++;
+                        } else {
+                            // 标量处理
+                            float value = sourceParam.getValue().getNumber().floatValue();
+                            targetParam.getValue().set(value);
+                            copiedCount++;
                         }
+                    } catch (Exception e) {
+                        System.out.println("警告: 无法复制参数 " + paramName + ": " + e.getMessage());
+                        skippedCount++;
                     }
                 } else {
                     String message = "参数 " + paramName + " 形状不匹配: 源=" + 
@@ -194,25 +206,25 @@ public class ParameterManager {
                 return false;
             }
 
-            // 检查数值是否相同
-            try {
-                float[][] matrix1 = param1.getValue().getMatrix();
-                float[][] matrix2 = param2.getValue().getMatrix();
-                
-                for (int i = 0; i < matrix1.length; i++) {
-                    for (int j = 0; j < matrix1[i].length; j++) {
-                        if (Math.abs(matrix1[i][j] - matrix2[i][j]) > tolerance) {
+                    // 检查数值是否相同
+                    if (param1.getValue().getShape().getDimNum() == 2) {
+                        float[][] matrix1 = param1.getValue().getMatrix();
+                        float[][] matrix2 = param2.getValue().getMatrix();
+                        
+                        for (int i = 0; i < matrix1.length; i++) {
+                            for (int j = 0; j < matrix1[i].length; j++) {
+                                if (Math.abs(matrix1[i][j] - matrix2[i][j]) > tolerance) {
+                                    return false;
+                                }
+                            }
+                        }
+                    } else {
+                        // 如果不是矩阵，直接比较数值
+                        if (Math.abs(param1.getValue().getNumber().doubleValue() - 
+                                   param2.getValue().getNumber().doubleValue()) > tolerance) {
                             return false;
                         }
                     }
-                }
-            } catch (Exception e) {
-                // 如果无法转换为矩阵，直接比较数值
-                if (Math.abs(param1.getValue().getNumber().doubleValue() - 
-                           param2.getValue().getNumber().doubleValue()) > tolerance) {
-                    return false;
-                }
-            }
         }
 
         return true;

@@ -18,6 +18,7 @@
         <module>tinyai-mlearning</module>
         <module>tinyai-modality</module>
         <module>tinyai-rl</module>
+        <module>tinyai-example</module>
     </modules>
 
     <properties>

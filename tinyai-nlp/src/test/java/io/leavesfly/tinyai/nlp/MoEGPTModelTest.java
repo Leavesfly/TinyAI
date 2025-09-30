@@ -3,8 +3,8 @@ package io.leavesfly.tinyai.nlp;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.block.transformer.MoETransformerBlock;
 import io.leavesfly.tinyai.nnet.layer.moe.MoELayer;
+import io.leavesfly.tinyai.nnet.block.transformer.MoETransformerBlock;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -203,33 +203,33 @@ public class MoEGPTModelTest {
         
         // 验证每层都有统计信息
         for (MoELayer.LoadBalancingStats stats : allStats) {
-            assertTrue(\"应该有token被处理\", stats.totalTokens > 0);
-            assertTrue(\"平均使用率应该大于0\", stats.averageUsage > 0);
-            assertNotNull(\"专家使用计数不应为null\", stats.expertUsageCount);
-            assertEquals(\"专家使用计数数组长度应该等于专家数量\", 
+            assertTrue("应该有token被处理", stats.totalTokens > 0);
+            assertTrue("平均使用率应该大于0", stats.averageUsage > 0);
+            assertNotNull("专家使用计数不应为null", stats.expertUsageCount);
+            assertEquals("专家使用计数数组长度应该等于专家数量", 
                         smallModel.getNumExperts(), stats.expertUsageCount.length);
         }
         
         // 验证负载均衡报告生成
         String report = smallModel.getLoadBalancingReport();
         assertNotNull(report);
-        assertTrue(\"报告应该包含层信息\", report.contains(\"Layer\"));
+        assertTrue("报告应该包含层信息", report.contains("Layer"));
     }
     
     @Test
     public void testParameterCounting() {
         // 测试参数计数功能
         long totalParams = smallModel.getTotalParameterCount();
-        assertTrue(\"模型应该有参数\", totalParams > 0);
+        assertTrue("模型应该有参数", totalParams > 0);
         
         // 验证参数增加比例计算
         double increaseRatio = smallModel.getParameterIncreaseRatio();
-        assertTrue(\"MoE应该增加参数数量\", increaseRatio > 1.0);
+        assertTrue("MoE应该增加参数数量", increaseRatio > 1.0);
         
         // 验证每个MoE块的参数计数
         for (MoETransformerBlock block : smallModel.getMoeTransformerBlocks()) {
             long blockParams = block.getTotalParameterCount();
-            assertTrue(\"每个块应该有参数\", blockParams > 0);
+            assertTrue("每个块应该有参数", blockParams > 0);
         }
     }
     
@@ -238,10 +238,10 @@ public class MoEGPTModelTest {
         // 测试模型配置信息生成
         String config = smallModel.getModelConfig();
         assertNotNull(config);
-        assertTrue(\"配置应该包含模型名称\", config.contains(\"MoE-GPT\"));
-        assertTrue(\"配置应该包含词汇表大小\", config.contains(\"Vocab Size\"));
-        assertTrue(\"配置应该包含专家数量\", config.contains(\"Num Experts\"));
-        assertTrue(\"配置应该包含参数总数\", config.contains(\"Total Parameters\"));
+        assertTrue("配置应该包含模型名称", config.contains("MoE-GPT"));
+        assertTrue("配置应该包含词汇表大小", config.contains("Vocab Size"));
+        assertTrue("配置应该包含专家数量", config.contains("Num Experts"));
+        assertTrue("配置应该包含参数总数", config.contains("Total Parameters"));
     }
     
     @Test
@@ -265,7 +265,7 @@ public class MoEGPTModelTest {
         // 输出头
         assertEquals(smallModel.getDModel(), smallModel.getOutputHead().getDModel());
         assertEquals(smallModel.getVocabSize(), smallModel.getOutputHead().getVocabSize());
-        assertFalse(\"MoE-GPT通常不使用输出偏置\", smallModel.getOutputHead().isUseBias());
+        assertFalse("MoE-GPT通常不使用输出偏置", smallModel.getOutputHead().isUseBias());
     }
     
     @Test(expected = IndexOutOfBoundsException.class)
@@ -277,15 +277,15 @@ public class MoEGPTModelTest {
     @Test
     public void testStatisticsControl() {
         // 测试统计信息控制
-        assertTrue(\"默认应该收集统计信息\", smallModel.isCollectStats());
+        assertTrue("默认应该收集统计信息", smallModel.isCollectStats());
         
         // 禁用统计收集
         smallModel.setCollectStats(false);
-        assertFalse(\"应该禁用统计收集\", smallModel.isCollectStats());
+        assertFalse("应该禁用统计收集", smallModel.isCollectStats());
         
         // 重新启用
         smallModel.setCollectStats(true);
-        assertTrue(\"应该重新启用统计收集\", smallModel.isCollectStats());
+        assertTrue("应该重新启用统计收集", smallModel.isCollectStats());
     }
     
     @Test
@@ -305,7 +305,7 @@ public class MoEGPTModelTest {
             for (long usage : layerStats.expertUsageCount) {
                 totalUsage += usage;
             }
-            assertTrue(\"应该有专家被激活\", totalUsage > 0);
+            assertTrue("应该有专家被激活", totalUsage > 0);
         }
     }
     
@@ -313,7 +313,7 @@ public class MoEGPTModelTest {
     public void testInvalidTopK() {
         // 测试无效的topK参数
         new MoEGPTModel(
-            \"invalid_model\", 
+            "invalid_model", 
             1000, 128, 3, 4, 4, 
             5,  // topK > numExperts
             32
@@ -324,7 +324,7 @@ public class MoEGPTModelTest {
     public void testInvalidDModelHeadsRatio() {
         // 测试dModel不能被numHeads整除的情况
         new MoEGPTModel(
-            \"invalid_model\", 
+            "invalid_model", 
             1000, 
             65,  // 不能被numHeads(4)整除
             3, 4, 4, 2, 32
@@ -334,14 +334,14 @@ public class MoEGPTModelTest {
     @Test
     public void testDefaultConstructors() {
         // 测试默认构造函数
-        MoEGPTModel defaultModel1 = new MoEGPTModel(\"default1\", 1000, 64, 6, 8, 4, 2, 128);
+        MoEGPTModel defaultModel1 = new MoEGPTModel("default1", 1000, 64, 6, 8, 4, 2, 128);
         assertEquals(1000, defaultModel1.getVocabSize());
         assertEquals(64, defaultModel1.getDModel());
         assertEquals(6, defaultModel1.getNumLayers());
         assertEquals(8, defaultModel1.getNumHeads());
         assertEquals(4, defaultModel1.getNumExperts());
         
-        MoEGPTModel defaultModel2 = new MoEGPTModel(\"default2\", 2000, 256);
+        MoEGPTModel defaultModel2 = new MoEGPTModel("default2", 2000, 256);
         assertEquals(2000, defaultModel2.getVocabSize());
         assertEquals(768, defaultModel2.getDModel()); // 默认模型维度
         assertEquals(12, defaultModel2.getNumLayers()); // 默认层数
@@ -381,4 +381,4 @@ public class MoEGPTModelTest {
         
         return tokens;
     }
-}"
+}

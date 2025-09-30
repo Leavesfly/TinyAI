@@ -1,9 +1,8 @@
-package io.leavesfly.tinyai.nnet.layer.lora;
+package io.leavesfly.tinyai.nlp.lora;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.Parameter;
 
 import java.util.ArrayList;
 import java.util.List;

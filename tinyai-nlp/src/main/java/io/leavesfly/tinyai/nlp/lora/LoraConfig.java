@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.nnet.layer.lora;
+package io.leavesfly.tinyai.nlp.lora;
 
 /**
  * LoRA配置类 - 管理LoRA微调的超参数

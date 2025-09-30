@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.nnet.layer.lora;
+package io.leavesfly.tinyai.nlp.lora;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;

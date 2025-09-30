@@ -28,7 +28,7 @@ public class V3TransformerBlock extends LayerAble {
     private LayerNorm norm1;                  // 第一个层归一化
     private MixtureOfExperts moeFFN;          // MoE前馈网络
     private LayerNorm norm2;                  // 第二个层归一化
-    private Linear gateLayer;                 // 门控层
+    private LinearLayer gateLayer;                 // 门控层
     
     // ========== 配置参数 ==========
     private int dModel;                       // 模型维度
@@ -93,7 +93,7 @@ public class V3TransformerBlock extends LayerAble {
             moeFFN = new MixtureOfExperts(name + "_moe", dModel, numExperts, 2, 1.0);
             
             // 4. 初始化门控层
-            gateLayer = new Linear(name + "_gate", dModel, 1, false);
+            gateLayer = new LinearLayer(name + "_gate", dModel, 1, false);
             
             // 初始化所有组件
             attention.init();

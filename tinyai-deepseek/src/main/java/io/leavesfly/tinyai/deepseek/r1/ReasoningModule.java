@@ -403,7 +403,8 @@ public class ReasoningModule extends Layer {
         
         // 广播添加偏置
         for (int i = 0; i < inputArray.getShape().size(); i++) {
-            int[] indices = inputArray.getShape().getIndices(i);
+            // 获取多维索引  
+            int[] indices = getIndicesFromFlat(inputArray.getShape(), i);
             int biasIndex = indices[indices.length - 1]; // 最后一个维度索引
             float value = inputArray.get(i) + biasArray.get(biasIndex);
             result.set(value, i);
@@ -482,6 +483,22 @@ public class ReasoningModule extends Layer {
         }
         
         return count > 0 ? sum / count : 0.0;
+    }
+    
+    /**
+     * 从平坦索引获取多维索引
+     */
+    private static int[] getIndicesFromFlat(Shape shape, int flatIndex) {
+        int[] indices = new int[shape.getDimNum()];
+        int remaining = flatIndex;
+        
+        for (int dim = shape.getDimNum() - 1; dim >= 0; dim--) {
+            int dimSize = shape.getDimension(dim);
+            indices[dim] = remaining % dimSize;
+            remaining /= dimSize;
+        }
+        
+        return indices;
     }
     
     /**

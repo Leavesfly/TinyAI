@@ -5,9 +5,9 @@ import io.leavesfly.tinyai.ml.Model;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Block;
-import io.leavesfly.tinyai.nnet.layer.Linear;
-import io.leavesfly.tinyai.nnet.layer.embed.Embedding;
-import io.leavesfly.tinyai.nnet.layer.norm.LayerNorm;
+import io.leavesfly.tinyai.nnet.layer.dnn.LinearLayer;
+import io.leavesfly.tinyai.nnet.layer.embedd.Embedding;
+import io.leavesfly.tinyai.nnet.layer.transformer.LayerNorm;
 
 import java.util.*;
 

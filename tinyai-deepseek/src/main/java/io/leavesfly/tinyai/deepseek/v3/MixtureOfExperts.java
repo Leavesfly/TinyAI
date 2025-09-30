@@ -8,10 +8,10 @@ import io.leavesfly.tinyai.func.matrix.MatMul;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.LayerAble;
-import io.leavesfly.tinyai.nnet.layer.Linear;
-import io.leavesfly.tinyai.nnet.layer.norm.LayerNorm;
-import io.leavesfly.tinyai.nnet.layer.activate.ReLu;
-import io.leavesfly.tinyai.nnet.layer.activate.GELU;
+import io.leavesfly.tinyai.nnet.layer.dnn.LinearLayer;
+import io.leavesfly.tinyai.nnet.layer.transformer.LayerNorm;
+import io.leavesfly.tinyai.func.math.ReLu;
+import io.leavesfly.tinyai.func.math.GELU;
 
 import java.util.*;
 
@@ -37,7 +37,7 @@ public class MixtureOfExperts extends LayerAble {
     private double loadBalanceWeight;      // 负载均衡权重
     
     // ========== 网络组件 ==========
-    private Linear router;                 // 路由网络
+    private LinearLayer router;                 // 路由网络
     private List<LayerAble> experts;       // 专家网络列表
     
     // ========== 专家特化配置 ==========
@@ -93,7 +93,7 @@ public class MixtureOfExperts extends LayerAble {
     public void init() {
         if (!alreadyInit) {
             // 1. 初始化路由网络
-            router = new Linear(name + "_router", dModel, numExperts, false);
+            router = new LinearLayer(name + "_router", dModel, numExperts, false);
             router.init();
             
             // 2. 初始化专家网络
@@ -446,10 +446,10 @@ public class MixtureOfExperts extends LayerAble {
         @Override
         public void init() {
             if (!alreadyInit) {
-                layer1 = new Linear(name + "_layer1", inputShape.getDimension(-1), 
+                layer1 = new LinearLayer(name + "_layer1", inputShape.getDimension(-1), 
                     (int)(inputShape.getDimension(-1) * 2.7), false);
-                activation = new GELU(name + "_gelu");
-                layer2 = new Linear(name + "_layer2", (int)(inputShape.getDimension(-1) * 2.7), 
+                activation = new Variable(NdArray.zeros(Shape.of(1, 1))); // 传统激活函数
+                layer2 = new LinearLayer(name + "_layer2", (int)(inputShape.getDimension(-1) * 2.7), 
                     inputShape.getDimension(-1), false);
                 
                 layer1.init();
@@ -464,7 +464,7 @@ public class MixtureOfExperts extends LayerAble {
         public Variable layerForward(Variable... inputs) {
             Variable x = inputs[0];
             x = layer1.layerForward(x);
-            x = activation.layerForward(x);
+            x = new Variable(new GELU().forward(x.getValue())); // 使用GELU激活
             x = layer2.layerForward(x);
             return x;
         }

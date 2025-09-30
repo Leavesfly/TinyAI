@@ -5,7 +5,7 @@ import io.leavesfly.tinyai.func.math.Sqrt;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.LayerAble;
-import io.leavesfly.tinyai.nnet.layer.Linear;
+import io.leavesfly.tinyai.nnet.layer.dnn.LinearLayer;
 
 /**
  * 多头注意力机制

@@ -4,8 +4,8 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.LayerAble;
-import io.leavesfly.tinyai.nnet.layer.Linear;
-import io.leavesfly.tinyai.nnet.layer.activate.ReLu;
+import io.leavesfly.tinyai.nnet.layer.dnn.LinearLayer;
+import io.leavesfly.tinyai.func.math.ReLu;
 
 import java.util.*;
 
@@ -31,9 +31,9 @@ public class CodeGenerationModule extends LayerAble {
     private double syntaxThreshold;              // 语法验证阈值
     
     // ========== 网络组件 ==========
-    private Linear languageClassifier;           // 编程语言分类器
+    private LinearLayer languageClassifier;           // 编程语言分类器
     private LayerAble structureAnalyzer;         // 代码结构分析器
-    private Linear syntaxValidator;              // 语法验证器
+    private LinearLayer syntaxValidator;              // 语法验证器
     private LayerAble qualityAssessor;           // 质量评估器
     private LayerAble styleChecker;              // 代码风格检查器
     
@@ -465,7 +465,7 @@ public class CodeGenerationModule extends LayerAble {
      * 结构分析器
      */
     private static class StructureAnalyzer extends LayerAble {
-        private Linear layer1, layer2;
+        private LinearLayer layer1, layer2;
         
         public StructureAnalyzer(String name, int dModel) {
             this.name = name;
@@ -476,8 +476,8 @@ public class CodeGenerationModule extends LayerAble {
         @Override
         public void init() {
             if (!alreadyInit) {
-                layer1 = new Linear(name + "_l1", inputShape.getDimension(-1), inputShape.getDimension(-1) * 2, false);
-                layer2 = new Linear(name + "_l2", inputShape.getDimension(-1) * 2, outputShape.getDimension(-1), false);
+                layer1 = new LinearLayer(name + "_l1", inputShape.getDimension(-1), inputShape.getDimension(-1) * 2, false);
+                layer2 = new LinearLayer(name + "_l2", inputShape.getDimension(-1) * 2, outputShape.getDimension(-1), false);
                 layer1.init();
                 layer2.init();
                 alreadyInit = true;
@@ -488,7 +488,7 @@ public class CodeGenerationModule extends LayerAble {
         public Variable layerForward(Variable... inputs) {
             Variable x = inputs[0];
             x = layer1.layerForward(x);
-            x = new ReLu(name + "_relu").layerForward(x);
+            x = new Variable(new ReLu().forward(x.getValue())); // 使用ReLU激活
             x = layer2.layerForward(x);
             return x;
         }
@@ -504,7 +504,7 @@ public class CodeGenerationModule extends LayerAble {
      * 质量评估器
      */
     private static class QualityAssessor extends LayerAble {
-        private Linear layer1, layer2, layer3;
+        private LinearLayer layer1, layer2, layer3;
         
         public QualityAssessor(String name, int dModel) {
             this.name = name;
@@ -515,9 +515,9 @@ public class CodeGenerationModule extends LayerAble {
         @Override
         public void init() {
             if (!alreadyInit) {
-                layer1 = new Linear(name + "_l1", inputShape.getDimension(-1), 128, false);
-                layer2 = new Linear(name + "_l2", 128, 64, false);
-                layer3 = new Linear(name + "_l3", 64, outputShape.getDimension(-1), false);
+                layer1 = new LinearLayer(name + "_l1", inputShape.getDimension(-1), 128, false);
+                layer2 = new LinearLayer(name + "_l2", 128, 64, false);
+                layer3 = new LinearLayer(name + "_l3", 64, outputShape.getDimension(-1), false);
                 layer1.init();
                 layer2.init();
                 layer3.init();
@@ -548,7 +548,7 @@ public class CodeGenerationModule extends LayerAble {
      * 风格检查器
      */
     private static class StyleChecker extends LayerAble {
-        private Linear layer1, layer2;
+        private LinearLayer layer1, layer2;
         
         public StyleChecker(String name, int dModel) {
             this.name = name;
@@ -571,7 +571,7 @@ public class CodeGenerationModule extends LayerAble {
         public Variable layerForward(Variable... inputs) {
             Variable x = inputs[0];
             x = layer1.layerForward(x);
-            x = new ReLu(name + "_relu").layerForward(x);
+            x = new Variable(new ReLu().forward(x.getValue())); // 使用ReLU激活
             x = layer2.layerForward(x);
             return x;
         }

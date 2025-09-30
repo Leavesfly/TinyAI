@@ -1,7 +1,7 @@
 package io.leavesfly.tinyai.deepseek.r1;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.func.loss.MeanSquaredError;
+import io.leavesfly.tinyai.func.loss.MeanSE;
 import io.leavesfly.tinyai.ml.optimize.SGD;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
@@ -117,11 +117,11 @@ public class RLTrainer {
         }
         
         // 使用负均方误差作为准确性奖励
-        MeanSquaredError mse = new MeanSquaredError();
+        MeanSE mse = new MeanSE();
         Variable modelVar = new Variable(modelOutput);
         Variable targetVar = new Variable(targetOutput);
         
-        NdArray loss = mse.forward(modelVar, targetVar);
+        NdArray loss = mse.forward(modelOutput, targetOutput);
         double mseValue = getMeanValue(loss);
         
         // 转换为奖励（损失越小，奖励越大）

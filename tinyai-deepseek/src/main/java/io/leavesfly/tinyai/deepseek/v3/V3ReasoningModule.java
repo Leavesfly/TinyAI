@@ -5,9 +5,9 @@ import io.leavesfly.tinyai.func.math.Tanh;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.LayerAble;
-import io.leavesfly.tinyai.nnet.layer.Linear;
-import io.leavesfly.tinyai.nnet.layer.activate.ReLu;
-import io.leavesfly.tinyai.nnet.layer.activate.GELU;
+import io.leavesfly.tinyai.nnet.layer.dnn.LinearLayer;
+import io.leavesfly.tinyai.func.math.ReLu;
+import io.leavesfly.tinyai.func.math.GELU;
 
 import java.util.*;
 
@@ -33,10 +33,10 @@ public class V3ReasoningModule extends LayerAble {
     private double confidenceThreshold;          // 置信度阈值
     
     // ========== 网络组件 ==========
-    private Linear taskClassifier;               // 任务类型分类器
+    private LinearLayer taskClassifier;               // 任务类型分类器
     private Map<TaskType, LayerAble> reasoningEncoders; // 专门化推理器
     private LayerAble selfCorrection;            // 自我纠错模块
-    private Linear confidenceEstimator;          // 置信度评估器
+    private LinearLayer confidenceEstimator;          // 置信度评估器
     private LayerAble verifier;                  // 验证器
     
     // ========== 运行时状态 ==========
@@ -76,7 +76,7 @@ public class V3ReasoningModule extends LayerAble {
         if (!alreadyInit) {
             // 1. 初始化任务类型分类器
             int numTaskTypes = TaskType.values().length;
-            taskClassifier = new Linear(name + "_task_classifier", dModel, numTaskTypes, false);
+            taskClassifier = new LinearLayer(name + "_task_classifier", dModel, numTaskTypes, false);
             taskClassifier.init();
             
             // 2. 初始化专门化推理器
@@ -92,7 +92,7 @@ public class V3ReasoningModule extends LayerAble {
             selfCorrection.init();
             
             // 4. 初始化置信度评估器
-            confidenceEstimator = new Linear(name + "_confidence", dModel, 1, false);
+            confidenceEstimator = new LinearLayer(name + "_confidence", dModel, 1, false);
             confidenceEstimator.init();
             
             // 5. 初始化验证器
@@ -497,7 +497,7 @@ public class V3ReasoningModule extends LayerAble {
      * 自我纠错模块
      */
     private static class SelfCorrectionModule extends LayerAble {
-        private Linear layer1, layer2;
+        protected LinearLayer layer1, layer2;
         
         public SelfCorrectionModule(String name, int dModel) {
             this.name = name;
@@ -508,8 +508,8 @@ public class V3ReasoningModule extends LayerAble {
         @Override
         public void init() {
             if (!alreadyInit) {
-                layer1 = new Linear(name + "_l1", inputShape.getDimension(-1), inputShape.getDimension(-1) / 2, false);
-                layer2 = new Linear(name + "_l2", inputShape.getDimension(-1) / 2, outputShape.getDimension(-1), false);
+                layer1 = new LinearLayer(name + "_l1", inputShape.getDimension(-1), inputShape.getDimension(-1) / 2, false);
+                layer2 = new LinearLayer(name + "_l2", inputShape.getDimension(-1) / 2, outputShape.getDimension(-1), false);
                 layer1.init();
                 layer2.init();
                 alreadyInit = true;
@@ -520,7 +520,7 @@ public class V3ReasoningModule extends LayerAble {
         public Variable layerForward(Variable... inputs) {
             Variable x = inputs[0];
             x = layer1.layerForward(x);
-            x = new ReLu(name + "_relu").layerForward(x);
+            x = new Variable(new ReLu().forward(x.getValue())); // 使用ReLU激活
             x = layer2.layerForward(x);
             return x;
         }
@@ -536,7 +536,7 @@ public class V3ReasoningModule extends LayerAble {
      * 验证模块
      */
     private static class VerificationModule extends LayerAble {
-        private Linear layer1, layer2, layer3;
+        private LinearLayer layer1, layer2, layer3;
         
         public VerificationModule(String name, int dModel) {
             this.name = name;
@@ -547,9 +547,9 @@ public class V3ReasoningModule extends LayerAble {
         @Override
         public void init() {
             if (!alreadyInit) {
-                layer1 = new Linear(name + "_l1", inputShape.getDimension(-1), inputShape.getDimension(-1) / 2, false);
-                layer2 = new Linear(name + "_l2", inputShape.getDimension(-1) / 2, 64, false);
-                layer3 = new Linear(name + "_l3", 64, 1, false);
+                layer1 = new LinearLayer(name + "_l1", inputShape.getDimension(-1), inputShape.getDimension(-1) / 2, false);
+                layer2 = new LinearLayer(name + "_l2", inputShape.getDimension(-1) / 2, 64, false);
+                layer3 = new LinearLayer(name + "_l3", 64, 1, false);
                 layer1.init();
                 layer2.init();
                 layer3.init();
@@ -561,9 +561,9 @@ public class V3ReasoningModule extends LayerAble {
         public Variable layerForward(Variable... inputs) {
             Variable x = inputs[0];
             x = layer1.layerForward(x);
-            x = new ReLu(name + "_relu1").layerForward(x);
+            x = new Variable(new ReLu().forward(x.getValue())); // ReLU激活
             x = layer2.layerForward(x);
-            x = new ReLu(name + "_relu2").layerForward(x);
+            x = new Variable(new ReLu().forward(x.getValue())); // ReLU激活
             x = layer3.layerForward(x);
             return x;
         }
@@ -580,7 +580,7 @@ public class V3ReasoningModule extends LayerAble {
      * 通用任务推理器
      */
     private static class GeneralTaskReasoner extends LayerAble {
-        private Linear layer1, layer2;
+        protected LinearLayer layer1, layer2;
         
         public GeneralTaskReasoner(String name, int dModel) {
             this.name = name;
@@ -591,8 +591,8 @@ public class V3ReasoningModule extends LayerAble {
         @Override
         public void init() {
             if (!alreadyInit) {
-                layer1 = new Linear(name + "_l1", inputShape.getDimension(-1), inputShape.getDimension(-1) * 2, false);
-                layer2 = new Linear(name + "_l2", inputShape.getDimension(-1) * 2, outputShape.getDimension(-1), false);
+                layer1 = new LinearLayer(name + "_l1", inputShape.getDimension(-1), inputShape.getDimension(-1) * 2, false);
+                layer2 = new LinearLayer(name + "_l2", inputShape.getDimension(-1) * 2, outputShape.getDimension(-1), false);
                 layer1.init();
                 layer2.init();
                 alreadyInit = true;
@@ -603,7 +603,7 @@ public class V3ReasoningModule extends LayerAble {
         public Variable layerForward(Variable... inputs) {
             Variable x = inputs[0];
             x = layer1.layerForward(x);
-            x = new ReLu(name + "_relu").layerForward(x);
+            x = new Variable(new ReLu().forward(x.getValue())); // 使用ReLU激活
             x = layer2.layerForward(x);
             return x;
         }
@@ -627,8 +627,8 @@ public class V3ReasoningModule extends LayerAble {
         public void init() {
             if (!alreadyInit) {
                 // 推理任务使用更深的网络
-                layer1 = new Linear(name + "_l1", inputShape.getDimension(-1), inputShape.getDimension(-1) * 3, false);
-                layer2 = new Linear(name + "_l2", inputShape.getDimension(-1) * 3, outputShape.getDimension(-1), false);
+                layer1 = new LinearLayer(name + "_l1", inputShape.getDimension(-1), inputShape.getDimension(-1) * 3, false);
+                layer2 = new LinearLayer(name + "_l2", inputShape.getDimension(-1) * 3, outputShape.getDimension(-1), false);
                 layer1.init();
                 layer2.init();
                 alreadyInit = true;
@@ -648,7 +648,7 @@ public class V3ReasoningModule extends LayerAble {
         public Variable layerForward(Variable... inputs) {
             Variable x = inputs[0];
             x = layer1.layerForward(x);
-            x = new GELU(name + "_gelu").layerForward(x); // 代码任务使用GELU
+            x = new Variable(new GELU().forward(x.getValue())); // 代码任务使用GELU
             x = layer2.layerForward(x);
             return x;
         }
@@ -658,7 +658,7 @@ public class V3ReasoningModule extends LayerAble {
      * 数学任务推理器
      */
     private static class MathTaskReasoner extends GeneralTaskReasoner {
-        private Linear layer3;
+        private LinearLayer layer3;
         
         public MathTaskReasoner(String name, int dModel) {
             super(name, dModel);
@@ -668,9 +668,9 @@ public class V3ReasoningModule extends LayerAble {
         public void init() {
             if (!alreadyInit) {
                 // 数学任务需要更多容量
-                layer1 = new Linear(name + "_l1", inputShape.getDimension(-1), inputShape.getDimension(-1) * 3, false);
-                layer2 = new Linear(name + "_l2", inputShape.getDimension(-1) * 3, inputShape.getDimension(-1) * 2, false);
-                layer3 = new Linear(name + "_l3", inputShape.getDimension(-1) * 2, outputShape.getDimension(-1), false);
+                layer1 = new LinearLayer(name + "_l1", inputShape.getDimension(-1), inputShape.getDimension(-1) * 3, false);
+                layer2 = new LinearLayer(name + "_l2", inputShape.getDimension(-1) * 3, inputShape.getDimension(-1) * 2, false);
+                layer3 = new LinearLayer(name + "_l3", inputShape.getDimension(-1) * 2, outputShape.getDimension(-1), false);
                 layer1.init();
                 layer2.init();
                 layer3.init();
@@ -682,9 +682,9 @@ public class V3ReasoningModule extends LayerAble {
         public Variable layerForward(Variable... inputs) {
             Variable x = inputs[0];
             x = layer1.layerForward(x);
-            x = new ReLu(name + "_relu1").layerForward(x);
+            x = new Variable(new ReLu().forward(x.getValue())); // ReLU激活
             x = layer2.layerForward(x);
-            x = new ReLu(name + "_relu2").layerForward(x);
+            x = new Variable(new ReLu().forward(x.getValue())); // ReLU激活
             x = layer3.layerForward(x);
             return x;
         }

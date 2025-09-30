@@ -172,6 +172,16 @@ public interface NdArray {
         return NdArrayCpu.linSpace(min, max, num);
     }
 
+    /**
+     * 创建标准正态分布随机数组
+     *
+     * @param shape 数组形状
+     * @return 标准正态分布随机数组
+     */
+    static NdArray randn(Shape shape) {
+        return NdArrayCpu.likeRandomN(shape);
+    }
+
     // =============================================================================
     // 3,基础四则运算
     // =============================================================================
@@ -654,6 +664,13 @@ public interface NdArray {
      * @throws IllegalArgumentException 当数组不是四维时抛出
      */
     float[][][][] get4dArray();
+
+    /**
+     * 将数组转换为double数组返回
+     *
+     * @return double数组表示
+     */
+    double[] toDoubleArray();
 
     /**
      * 按维度下标设置某一个值

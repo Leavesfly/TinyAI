@@ -1943,6 +1943,20 @@ public class NdArrayCpu implements NdArray, Serializable {
     }
 
     /**
+     * 将数组转换为double数组返回
+     *
+     * @return double数组表示
+     */
+    @Override
+    public double[] toDoubleArray() {
+        double[] result = new double[buffer.length];
+        for (int i = 0; i < buffer.length; i++) {
+            result[i] = (double) buffer[i];
+        }
+        return result;
+    }
+
+    /**
      * 将数组转换为四维数组返回
      *
      * @return 四维数组表示

@@ -23,6 +23,7 @@
         <module>tinyai-case</module>
         <module>tinyai-agent</module>
         <module>tinyai-agent-multi</module>
+        <module>tinyai-agent-pattern</module>
     </modules>
 
     <properties>

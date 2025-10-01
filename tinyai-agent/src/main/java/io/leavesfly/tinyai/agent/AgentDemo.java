@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.agent;
 
+import io.leavesfly.tinyai.agent.multi.LLMSimulator;
 import java.util.*;
 
 /**
@@ -49,6 +50,9 @@ public class AgentDemo {
         
         // 演示RAG功能
         demonstrateRAG(agent);
+        
+        // 演示LLM模拟器功能
+        demonstrateLLMSimulator(agent);
         
         // 最终统计
         System.out.println("\n📊 最终统计信息:");
@@ -265,6 +269,77 @@ public class AgentDemo {
         }
         
         scanner.close();
+    }
+    
+    /**
+     * 演示LLM模拟器功能
+     */
+    private static void demonstrateLLMSimulator(AdvancedAgent agent) {
+        System.out.println("\n🤖 演示LLM模拟器功能:");
+        System.out.println(repeat("-", 40));
+        
+        LLMSimulator llmSimulator = agent.getLLMSimulator();
+        
+        // 测试不同类型Agent的回复
+        String[] agentTypes = {"analyst", "researcher", "coordinator", "executor", "critic"};
+        String[] testQueries = {
+            "请分析一下市场数据趋势",
+            "请研究一下人工智能技术",
+            "请协调一下团队任务分配",
+            "请执行数据处理任务",
+            "请评估产品质量"
+        };
+        
+        for (int i = 0; i < agentTypes.length; i++) {
+            String agentType = agentTypes[i];
+            String query = testQueries[i];
+            
+            System.out.println(String.format("\n📝 测试%s类型Agent:", agentType));
+            System.out.println("👤 用户: " + query);
+            
+            // 构建消息列表
+            List<Map<String, String>> messages = new ArrayList<>();
+            Map<String, String> systemMsg = new HashMap<>();
+            systemMsg.put("role", "system");
+            systemMsg.put("content", llmSimulator.generateSystemPrompt(agentType, 
+                agentType + "助手", agentType + "专家"));
+            messages.add(systemMsg);
+            
+            Map<String, String> userMsg = new HashMap<>();
+            userMsg.put("role", "user");
+            userMsg.put("content", query);
+            messages.add(userMsg);
+            
+            // 获取响应
+            String response = llmSimulator.chatCompletion(messages, agentType);
+            System.out.println("🤖 " + agentType + "助手: " + response);
+        }
+        
+        // 演示异步调用
+        System.out.println("\n🚀 演示异步LLM调用:");
+        
+        List<Map<String, String>> asyncMessages = new ArrayList<>();
+        Map<String, String> asyncUserMsg = new HashMap<>();
+        asyncUserMsg.put("role", "user");
+        asyncUserMsg.put("content", "请同时分析多个数据源");
+        asyncMessages.add(asyncUserMsg);
+        
+        try {
+            // 异步调用
+            llmSimulator.chatCompletionAsync(asyncMessages, "analyst")
+                .thenAccept(response -> {
+                    System.out.println("📊 异步回复: " + response);
+                })
+                .get(); // 等待完成以便显示
+        } catch (Exception e) {
+            System.out.println("❌ 异步调用失败: " + e.getMessage());
+        }
+        
+        // 显示LLM模拟器信息
+        System.out.println("\n📊 LLM模拟器信息:");
+        System.out.println("  模型名称: " + llmSimulator.getModelName());
+        System.out.println("  温度参数: " + llmSimulator.getTemperature());
+        System.out.println("  最大token数: " + llmSimulator.getMaxTokens());
     }
     
     /**

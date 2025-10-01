@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.agent;
 
+import io.leavesfly.tinyai.agent.multi.LLMSimulator;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -21,6 +22,7 @@ public class AdvancedAgent {
     private final RAGSystem ragSystem;             // RAG系统
     private final ToolRegistry toolRegistry;       // 工具注册表
     private final ContextEngine contextEngine;     // 上下文引擎
+    private final LLMSimulator llmSimulator;       // LLM模拟器
     
     // 对话状态
     private final List<Message> conversationHistory;  // 对话历史
@@ -44,6 +46,7 @@ public class AdvancedAgent {
         this.ragSystem = new RAGSystem();
         this.toolRegistry = new ToolRegistry();
         this.contextEngine = new ContextEngine(maxContextLength);
+        this.llmSimulator = new LLMSimulator();
         
         // 初始化对话历史
         this.conversationHistory = new ArrayList<>();
@@ -90,8 +93,8 @@ public class AdvancedAgent {
             toolsInfo
         );
         
-        // 7. 生成响应（简单模拟）
-        String response = "我理解了你的问题：" + userInput + "。基于当前上下文，我将为你提供帮助。";
+        // 7. 生成响应（使用LLM模拟器）
+        String response = generateLLMResponse(userInput, fullContext);
         
         // 8. 记录助手响应
         Message assistantMessage = new Message("assistant", response);
@@ -263,5 +266,47 @@ public class AdvancedAgent {
     
     public ContextEngine getContextEngine() {
         return contextEngine;
+    }
+    
+    public LLMSimulator getLLMSimulator() {
+        return llmSimulator;
+    }
+    
+    /**
+     * 生成LLM响应
+     */
+    private String generateLLMResponse(String userInput, String fullContext) {
+        try {
+            // 构建消息列表
+            List<Map<String, String>> messages = new ArrayList<>();
+            
+            // 添加系统消息
+            if (systemPrompt != null && !systemPrompt.trim().isEmpty()) {
+                Map<String, String> systemMessage = new HashMap<>();
+                systemMessage.put("role", "system");
+                systemMessage.put("content", systemPrompt);
+                messages.add(systemMessage);
+            }
+            
+            // 添加上下文信息（如果有的话）
+            if (fullContext != null && !fullContext.trim().isEmpty()) {
+                Map<String, String> contextMessage = new HashMap<>();
+                contextMessage.put("role", "system");
+                contextMessage.put("content", "上下文信息：\n" + fullContext);
+                messages.add(contextMessage);
+            }
+            
+            // 添加用户消息
+            Map<String, String> userMessage = new HashMap<>();
+            userMessage.put("role", "user");
+            userMessage.put("content", userInput);
+            messages.add(userMessage);
+            
+            // 调用LLM模拟器生成回复
+            return llmSimulator.chatCompletion(messages, "general");
+            
+        } catch (Exception e) {
+            return "抱歉，我在处理您的请求时遇到了技术问题：" + e.getMessage();
+        }
     }
 }

@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.agent;
 
+import io.leavesfly.tinyai.agent.multi.LLMSimulator;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -176,5 +177,49 @@ public class AdvancedAgentTest {
         
         agent.clearConversation();
         assertTrue("对话历史应为空", agent.getConversationHistory().isEmpty());
+    }
+    
+    @Test
+    public void testLLMSimulator() {
+        AdvancedAgent agent = new AdvancedAgent("测试助手");
+        LLMSimulator llmSimulator = agent.getLLMSimulator();
+        
+        assertNotNull("LLM模拟器不应为 null", llmSimulator);
+        assertEquals("模型名称应为 gpt-3.5-turbo", "gpt-3.5-turbo", llmSimulator.getModelName());
+        assertEquals("温度参数应为 0.7", 0.7, llmSimulator.getTemperature(), 0.01);
+        assertEquals("最大token数应为 2048", 2048, llmSimulator.getMaxTokens());
+    }
+    
+    @Test
+    public void testLLMResponseGeneration() {
+        AdvancedAgent agent = new AdvancedAgent("测试助手", "你是一个测试助手");
+        
+        // 测试生成的响应不是简单的字符串拼接
+        String response = agent.processMessage("你好，请分析一下数据");
+        
+        assertNotNull("响应不应为 null", response);
+        assertFalse("响应不应为空", response.trim().isEmpty());
+        // 验证不是简单的模板字符串拼接
+        assertFalse("应使用 LLM 模拟器而不是简单拼接", 
+            response.startsWith("我理解了你的问题："));
+    }
+    
+    @Test
+    public void testSystemPromptGeneration() {
+        AdvancedAgent agent = new AdvancedAgent("测试助手");
+        LLMSimulator llmSimulator = agent.getLLMSimulator();
+        
+        // 测试不同类型Agent的系统提示
+        String[] agentTypes = {"analyst", "researcher", "coordinator", "executor", "critic"};
+        
+        for (String agentType : agentTypes) {
+            String systemPrompt = llmSimulator.generateSystemPrompt(agentType, 
+                agentType + "助手", agentType + "专家");
+            
+            assertNotNull(agentType + "的系统提示不应为null", systemPrompt);
+            assertFalse(agentType + "的系统提示不应为空", systemPrompt.trim().isEmpty());
+            assertTrue(agentType + "的系统提示应包含名称", 
+                systemPrompt.contains(agentType + "助手"));
+        }
     }
 }

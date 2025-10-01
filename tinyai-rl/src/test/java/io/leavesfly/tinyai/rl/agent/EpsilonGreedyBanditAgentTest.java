@@ -176,26 +176,27 @@ public class EpsilonGreedyBanditAgentTest {
      */
     @Test
     public void testGreedyBehavior() {
-        // 设置epsilon为0，确保纯贪婪行为
-        agent.setCurrentEpsilon(0.0f);
-        agent.setEpsilonDecay(1.0f); // 不衰减
+        // 创建一个新的代理实例确保干净的测试环境
+        EpsilonGreedyBanditAgent testAgent = new EpsilonGreedyBanditAgent("TestGreedyAgent", NUM_ARMS, 0.0f);
+        testAgent.setEpsilonDecay(1.0f); // 不衰减
+        testAgent.setSeed(12345L); // 设置固定种子确保可重现性
         
         // 训练使臂1成为最优，且显著优于其他臂
         for (int i = 0; i < 20; i++) {
-            agent.learn(createExperience(0, 0.1f)); // 臂0低奖励
-            agent.learn(createExperience(1, 2.0f)); // 臂1非常高奖励
-            agent.learn(createExperience(2, 0.2f)); // 臂2低奖励
+            testAgent.learn(createExperience(0, 0.1f)); // 臂0低奖励
+            testAgent.learn(createExperience(1, 2.0f)); // 臂1非常高奖励
+            testAgent.learn(createExperience(2, 0.2f)); // 臂2低奖励
         }
         
         // 验证臂1确实成为最优
-        assertEquals("Best arm should be 1", 1, agent.getBestArmIndex());
-        assertTrue("Arm 1 should have highest reward", agent.getEstimatedReward(1) > 1.5f);
+        assertEquals("Best arm should be 1", 1, testAgent.getBestArmIndex());
+        assertTrue("Arm 1 should have highest reward", testAgent.getEstimatedReward(1) > 1.5f);
         
         Variable state = new Variable(NdArray.of(new float[]{0.0f}, Shape.of(1)));
         
         // 多次选择，应该总是选择臂1
         for (int i = 0; i < 20; i++) {
-            Variable action = agent.selectAction(state);
+            Variable action = testAgent.selectAction(state);
             int selectedArm = (int) action.getValue().get(0);
             assertEquals("Should always select best arm (1)", 1, selectedArm);
         }

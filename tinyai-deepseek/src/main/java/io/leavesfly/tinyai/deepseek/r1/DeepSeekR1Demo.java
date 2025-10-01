@@ -195,8 +195,8 @@ public class DeepSeekR1Demo {
         System.out.println("=== 6. 模型统计信息演示 ===");
         
         // 创建不同规模的模型进行比较
-        DeepSeekR1Model smallModel = new DeepSeekR1Model("Small-Model", 500, 128, 2, 4);
-        DeepSeekR1Model largeModel = new DeepSeekR1Model("Large-Model", 2000, 512, 8, 16);
+        DeepSeekR1Model smallModel = new DeepSeekR1Model("Small-Model", 500, 128);
+        DeepSeekR1Model largeModel = new DeepSeekR1Model("Large-Model", 2000, 512);
         
         // 显示小模型统计
         System.out.println("小模型统计:");
@@ -306,7 +306,7 @@ public class DeepSeekR1Demo {
     public static void runBenchmark() {
         System.out.println("=== DeepSeek R1 性能基准测试 ===");
         
-        DeepSeekR1Model model = new DeepSeekR1Model("Benchmark-Model", 1000, 256, 4, 8);
+        DeepSeekR1Model model = new DeepSeekR1Model("Benchmark-Model", 1000, 256);
         NdArray input = createSampleInput(64);
         
         // 预热

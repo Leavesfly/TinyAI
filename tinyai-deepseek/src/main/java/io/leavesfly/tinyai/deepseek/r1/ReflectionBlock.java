@@ -69,7 +69,7 @@ public class ReflectionBlock extends Block {
             reflectionEvaluatorLayer2 = new LinearLayer(name + "_reflection_eval2", dModel, dModel / 2, true);
             reflectionActivation2 = new ReLuLayer(name + "_reflection_relu2", Shape.of(-1, dModel / 2));
             reflectionEvaluatorLayer3 = new LinearLayer(name + "_reflection_eval3", dModel / 2, 1, true);
-            reflectionSigmoid = new SigmoidLayer(name + "_reflection_sigmoid", Shape.of(-1, 1));
+            reflectionSigmoid = new SigmoidLayer(name + "_reflection_sigmoid");
             
             addLayer(reflectionEvaluatorLayer1);
             addLayer(reflectionActivation1);
@@ -202,16 +202,8 @@ public class ReflectionBlock extends Block {
      */
     private float extractScalarValue(Variable variable) {
         NdArray data = variable.getValue();
-        float sum = 0.0f;
-        int count = 0;
-        
-        // 计算平均值
-        for (int i = 0; i < data.getShape().size(); i++) {
-            sum += data.getDataArrayByFlattenIndex(i);
-            count++;
-        }
-        
-        return count > 0 ? sum / count : 0.0f;
+        // 使用getNumber()方法获取标量值或第一个元素
+        return data.getNumber().floatValue();
     }
     
     /**

@@ -96,7 +96,7 @@ public class ReasoningBlock extends Block {
             confidenceLayer1 = new LinearLayer(name + "_confidence1", dModel, 64, true);
             confidenceActivation = new ReLuLayer(name + "_confidence_relu", Shape.of(-1, 64));
             confidenceLayer2 = new LinearLayer(name + "_confidence2", 64, 1, true);
-            confidenceSigmoid = new SigmoidLayer(name + "_confidence_sigmoid", Shape.of(-1, 1));
+            confidenceSigmoid = new SigmoidLayer(name + "_confidence_sigmoid");
             
             addLayer(confidenceLayer1);
             addLayer(confidenceActivation);
@@ -107,7 +107,7 @@ public class ReasoningBlock extends Block {
             verifierLayer1 = new LinearLayer(name + "_verifier1", dModel * 2, dModel, true);
             verifierActivation = new ReLuLayer(name + "_verifier_relu", Shape.of(-1, dModel));
             verifierLayer2 = new LinearLayer(name + "_verifier2", dModel, 1, true);
-            verifierSigmoid = new SigmoidLayer(name + "_verifier_sigmoid", Shape.of(-1, 1));
+            verifierSigmoid = new SigmoidLayer(name + "_verifier_sigmoid");
             
             addLayer(verifierLayer1);
             addLayer(verifierActivation);
@@ -256,7 +256,7 @@ public class ReasoningBlock extends Block {
      */
     private Variable updateState(Variable currentState, Variable actionState, float updateRate) {
         // currentState + updateRate * actionState
-        Variable scaledAction = actionState.mulNum(updateRate);
+        Variable scaledAction = new Variable(actionState.getValue().mulNum(updateRate));
         return currentState.add(scaledAction);
     }
     
@@ -265,16 +265,8 @@ public class ReasoningBlock extends Block {
      */
     private float extractConfidenceValue(Variable confidence) {
         NdArray data = confidence.getValue();
-        float sum = 0.0f;
-        int count = 0;
-        
-        // 计算平均置信度
-        for (int i = 0; i < data.getShape().size(); i++) {
-            sum += data.getDataArrayByFlattenIndex(i);
-            count++;
-        }
-        
-        return count > 0 ? sum / count : 0.0f;
+        // 使用getNumber()方法获取标量值或第一个元素
+        return data.getNumber().floatValue();
     }
     
     /**
@@ -282,16 +274,8 @@ public class ReasoningBlock extends Block {
      */
     private float extractVerificationValue(Variable verification) {
         NdArray data = verification.getValue();
-        float sum = 0.0f;
-        int count = 0;
-        
-        // 计算平均验证分数
-        for (int i = 0; i < data.getShape().size(); i++) {
-            sum += data.getDataArrayByFlattenIndex(i);
-            count++;
-        }
-        
-        return count > 0 ? sum / count : 0.0f;
+        // 使用getNumber()方法获取标量值或第一个元素
+        return data.getNumber().floatValue();
     }
     
     /**

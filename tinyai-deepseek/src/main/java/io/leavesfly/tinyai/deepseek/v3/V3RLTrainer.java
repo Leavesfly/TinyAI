@@ -31,6 +31,14 @@ import java.util.Map;
  */
 public class V3RLTrainer extends Trainer {
     
+    // 继承的字段（由于父类字段为private，需要在子类中重新定义）
+    private DataSet dataSet;
+    private io.leavesfly.tinyai.ml.Model model;
+    private Loss loss;
+    private Optimizer optimizer;
+    private Monitor monitor;
+    private int maxEpoch;
+    
     /**
      * DeepSeek V3模型
      */
@@ -81,6 +89,8 @@ public class V3RLTrainer extends Trainer {
      */
     public V3RLTrainer(int maxEpoch, Monitor monitor, Evaluator evaluator) {
         this(maxEpoch, monitor, evaluator, V3TrainingConfig.getDefaultConfig());
+        this.maxEpoch = maxEpoch;
+        this.monitor = monitor;
     }
     
     /**
@@ -98,6 +108,13 @@ public class V3RLTrainer extends Trainer {
         }
         
         super.init(dataSet, model, loss, optimizer);
+        
+        // 初始化本地字段
+        this.dataSet = dataSet;
+        this.model = model;
+        this.loss = loss;
+        this.optimizer = optimizer;
+        
         this.deepSeekV3Model = (DeepSeekV3Model) model;
         
         System.out.println("V3RLTrainer initialized with " + model.getName());
@@ -333,14 +350,14 @@ public class V3RLTrainer extends Trainer {
      */
     private NdArray selectTargetLogProbs(NdArray logProbs, NdArray target) {
         // 简化实现：返回平均log概率
-        return NdArray.of(Shape.of(1)).fill(logProbs.mean());
+        return NdArray.of(io.leavesfly.tinyai.ndarr.Shape.of(1)).like(logProbs.mean(0).getNumber());
     }
     
     /**
      * 给Variable添加标量值
      */
     private Variable addScalarToVariable(Variable var, float scalar) {
-        NdArray result = var.getValue().addNum(scalar);
+        NdArray result = var.getValue().like(var.getValue().getNumber().floatValue() + scalar);
         return new Variable(result);
     }
     

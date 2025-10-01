@@ -1,11 +1,12 @@
 package io.leavesfly.tinyai.deepseek.v3;
 
 import io.leavesfly.tinyai.ml.evaluator.Evaluator;
-import io.leavesfly.tinyai.ml.loss.MeanSquaredError;
+import io.leavesfly.tinyai.ml.loss.MeanSquaredLoss;
 import io.leavesfly.tinyai.ml.optimize.SGD;
 import io.leavesfly.tinyai.ml.Monitor;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
+import java.util.List;
 
 /**
  * DeepSeek V3模型演示类
@@ -22,6 +23,17 @@ import io.leavesfly.tinyai.ndarr.Shape;
  * @version 1.0
  */
 public class DeepSeekV3Demo {
+    
+    /**
+     * 重复字符生成辅助方法（Java 8兼容）
+     */
+    private static String repeatChar(char c, int count) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < count; i++) {
+            sb.append(c);
+        }
+        return sb.toString();
+    }
     
     public static void main(String[] args) {
         System.out.println("=== DeepSeek V3 模型演示 ===\n");
@@ -64,7 +76,7 @@ public class DeepSeekV3Demo {
      */
     private static void demonstrateModelInitialization() {
         System.out.println("1. 模型初始化演示");
-        System.out.println("-".repeat(50));
+        System.out.println(repeatChar('-', 50));
         
         // 创建不同规模的模型配置
         DeepSeekV3Model.V3ModelConfig smallConfig = DeepSeekV3Model.V3ModelConfig.getSmallConfig();
@@ -94,7 +106,7 @@ public class DeepSeekV3Demo {
      */
     private static void demonstrateBasicInference() {
         System.out.println("2. 基础推理演示");
-        System.out.println("-".repeat(50));
+        System.out.println(repeatChar('-', 50));
         
         // 创建模型
         DeepSeekV3Model model = new DeepSeekV3Model("DeepSeek-V3-Basic");
@@ -121,7 +133,7 @@ public class DeepSeekV3Demo {
      */
     private static void demonstrateTaskTypeAwareInference() {
         System.out.println("3. 任务类型感知推理演示");
-        System.out.println("-".repeat(50));
+        System.out.println(repeatChar('-', 50));
         
         DeepSeekV3Model model = new DeepSeekV3Model("DeepSeek-V3-TaskAware");
         NdArray inputIds = createSampleInput(1, 8);
@@ -151,7 +163,7 @@ public class DeepSeekV3Demo {
      */
     private static void demonstrateCodeGeneration() {
         System.out.println("4. 代码生成演示");
-        System.out.println("-".repeat(50));
+        System.out.println(repeatChar('-', 50));
         
         DeepSeekV3Model model = new DeepSeekV3Model("DeepSeek-V3-CodeGen");
         NdArray inputIds = createSampleInput(1, 12);
@@ -182,7 +194,7 @@ public class DeepSeekV3Demo {
      */
     private static void demonstrateReasoningAnalysis() {
         System.out.println("5. 推理过程分析演示");
-        System.out.println("-".repeat(50));
+        System.out.println(repeatChar('-', 50));
         
         DeepSeekV3Model model = new DeepSeekV3Model("DeepSeek-V3-Reasoning");
         NdArray inputIds = createSampleInput(1, 15);
@@ -213,7 +225,7 @@ public class DeepSeekV3Demo {
      */
     private static void demonstrateExpertUsage() {
         System.out.println("6. MoE专家使用演示");
-        System.out.println("-".repeat(50));
+        System.out.println(repeatChar('-', 50));
         
         DeepSeekV3Model model = new DeepSeekV3Model("DeepSeek-V3-MoE");
         
@@ -241,7 +253,7 @@ public class DeepSeekV3Demo {
      */
     private static void demonstrateModelStatistics() {
         System.out.println("7. 模型统计信息演示");
-        System.out.println("-".repeat(50));
+        System.out.println(repeatChar('-', 50));
         
         DeepSeekV3Model model = new DeepSeekV3Model("DeepSeek-V3-Stats");
         
@@ -285,14 +297,20 @@ public class DeepSeekV3Demo {
      */
     private static void demonstrateRLTraining() {
         System.out.println("8. 强化学习训练演示（简化版）");
-        System.out.println("-".repeat(50));
+        System.out.println(repeatChar('-', 50));
         
         // 创建模型和训练器
         DeepSeekV3Model model = new DeepSeekV3Model("DeepSeek-V3-RL", 
                                                    DeepSeekV3Model.V3ModelConfig.getSmallConfig());
         
         Monitor monitor = new Monitor();
-        Evaluator evaluator = new Evaluator(model, null, null, null); // 简化的评估器
+        // 创建一个简化的评估器实现
+        Evaluator evaluator = new Evaluator() {
+            @Override
+            public void evaluate() {
+                System.out.println("简化评估器: 评估完成");
+            }
+        };
         
         V3RLTrainer trainer = new V3RLTrainer(2, monitor, evaluator, // 只训练2个epoch用于演示
                                              V3RLTrainer.V3TrainingConfig.getDefaultConfig());
@@ -308,9 +326,10 @@ public class DeepSeekV3Demo {
     }
     
     /**
-     * 创建示例输入数据
+     * 创建示例输入数据（token IDs）
      */
     private static NdArray createSampleInput(int batchSize, int seqLen) {
+        // 创建 token IDs 输入 [batch_size, seq_len]
         NdArray input = NdArray.of(Shape.of(batchSize, seqLen));
         
         // 填充随机token IDs（在实际词汇表范围内）

@@ -208,6 +208,29 @@ public class V3TransformerBlock extends Block {
     }
     
     /**
+     * 从线性索引计算多维索引
+     */
+    private int[] getIndicesFromLinearIndex(int linearIndex, Shape shape) {
+        if (shape.isMatrix()) {
+            int row = linearIndex / shape.getColumn();
+            int col = linearIndex % shape.getColumn();
+            return new int[]{row, col};
+        } else if (shape.getDimNum() == 3) {
+            int dim1 = shape.getDimension(1);
+            int dim2 = shape.getDimension(2);
+            int area = dim1 * dim2;
+            int d0 = linearIndex / area;
+            int remainder = linearIndex % area;
+            int d1 = remainder / dim2;
+            int d2 = remainder % dim2;
+            return new int[]{d0, d1, d2};
+        } else {
+            // 默认一维索引
+            return new int[]{linearIndex};
+        }
+    }
+    
+    /**
      * 应用Sigmoid激活函数
      */
     private NdArray applySigmoid(NdArray input) {
@@ -215,9 +238,11 @@ public class V3TransformerBlock extends Block {
         NdArray result = NdArray.of(shape);
         
         for (int i = 0; i < shape.size(); i++) {
-            float value = input.getByIndex(i);
+            // 计算多维索引
+            int[] indices = getIndicesFromLinearIndex(i, shape);
+            float value = input.get(indices);
             float sigmoid = 1.0f / (1.0f + (float)Math.exp(-value));
-            result.setByIndex(sigmoid, i);
+            result.set(sigmoid, indices);
         }
         
         return result;

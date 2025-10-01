@@ -4,6 +4,7 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.Model;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
+import io.leavesfly.tinyai.nnet.Parameter;
 
 import java.util.List;
 import java.util.Map;
@@ -225,7 +226,7 @@ public class DeepSeekV3Model extends Model {
         System.out.println("Dropout概率: " + config.dropout);
         
         long totalParams = 0;
-        for (var param : getAllParams().values()) {
+        for (Parameter param : getAllParams().values()) {
             totalParams += param.getValue().getShape().size();
         }
         System.out.println("总参数量: " + formatParameterCount(totalParams));

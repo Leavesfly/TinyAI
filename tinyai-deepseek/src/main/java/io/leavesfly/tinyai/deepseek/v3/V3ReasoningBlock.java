@@ -281,7 +281,7 @@ public class V3ReasoningBlock extends Block {
     private Variable computeMeanState(Variable inputEmbedding) {
         NdArray inputData = inputEmbedding.getValue();
         
-        if (inputData.getShape().getDimensions() == 3) {
+        if (inputData.getShape().getDimNum() == 3) {
             // 如果是三维输入 [batch, seq, dim]，计算序列维度的平均
             int batchSize = inputData.getShape().getDimension(0);
             int seqLen = inputData.getShape().getDimension(1);

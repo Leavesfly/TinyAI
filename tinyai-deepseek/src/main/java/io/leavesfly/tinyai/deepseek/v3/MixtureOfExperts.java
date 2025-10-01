@@ -278,8 +278,11 @@ public class MixtureOfExperts extends Block {
                 if (expertIdx >= 0 && expertIdx < numExperts) {
                     float weight = topK.weights.get(i, j);
                     
-                    // 获取当前样本的输入
-                    NdArray sampleInput = input.getRow(i).reshape(Shape.of(1, dModel));
+                    // 获取当前样本的输入（手动提取行数据）
+                    NdArray sampleInput = NdArray.of(Shape.of(1, dModel));
+                    for (int d = 0; d < dModel; d++) {
+                        sampleInput.set(input.get(i, d), 0, d);
+                    }
                     Variable sampleVar = new Variable(sampleInput);
                     
                     // 通过专家网络前向传播

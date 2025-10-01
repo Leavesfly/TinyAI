@@ -321,7 +321,7 @@ public class DeepSeekV3Test {
         assertEquals("应该有4个专家", 4, specializations.size());
         
         // 测试MoE前向传播
-        Variable input = new Variable(NdArray.of(Shape.of(1, 5, dModel)).fill(0.1f));
+        Variable input = new Variable(NdArray.of(Shape.of(1, 5, dModel)).like(0.1f));
         MixtureOfExperts.MoEResult result = moe.forwardWithTaskType(input, TaskType.CODING);
         
         assertNotNull("MoE结果不应为null", result);
@@ -340,7 +340,7 @@ public class DeepSeekV3Test {
         assertEquals("推理步骤数应匹配", 3, reasoningBlock.getNumReasoningSteps());
         
         // 测试推理前向传播
-        Variable input = new Variable(NdArray.of(Shape.of(1, 4, dModel)).fill(0.2f));
+        Variable input = new Variable(NdArray.of(Shape.of(1, 4, dModel)).like(0.2f));
         V3ReasoningBlock.ReasoningResult result = reasoningBlock.performV3Reasoning(input);
         
         assertNotNull("推理结果不应为null", result);
@@ -366,7 +366,7 @@ public class DeepSeekV3Test {
         assertTrue("应该有语言映射", languageMapping.size() > 0);
         
         // 测试代码生成分析
-        Variable input = new Variable(NdArray.of(Shape.of(1, dModel)).fill(0.3f));
+        Variable input = new Variable(NdArray.of(Shape.of(1, dModel)).like(0.3f));
         CodeGenerationBlock.CodeGenerationResult result = codeBlock.performCodeGenerationAnalysis(input);
         
         assertNotNull("代码生成结果不应为null", result);

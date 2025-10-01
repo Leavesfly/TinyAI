@@ -36,6 +36,7 @@
         <!-- 外部依赖版本统一管理 -->
         <jfreechart.version>1.0.7</jfreechart.version>
         <junit.version>4.13.2</junit.version>
+        <junit-jupiter.version>5.8.2</junit-jupiter.version>
     </properties>
 
     <!-- 依赖管理，供子模块继承使用 -->
@@ -106,6 +107,12 @@
                 <groupId>junit</groupId>
                 <artifactId>junit</artifactId>
                 <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>${junit-jupiter.version}</version>
                 <scope>test</scope>
             </dependency>
         </dependencies>

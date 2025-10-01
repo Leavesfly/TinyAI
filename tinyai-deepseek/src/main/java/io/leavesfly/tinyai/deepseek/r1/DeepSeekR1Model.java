@@ -77,6 +77,13 @@ public class DeepSeekR1Model extends Model {
     }
     
     /**
+     * 五参数构造函数，用于测试
+     */
+    public DeepSeekR1Model(String name, int vocabSize, int dModel, int numLayers, int numHeads) {
+        this(name, vocabSize, dModel, numLayers, numHeads, dModel * 4, 512, 0.1);
+    }
+    
+    /**
      * 更新模型信息
      */
     private void updateModelInfo() {

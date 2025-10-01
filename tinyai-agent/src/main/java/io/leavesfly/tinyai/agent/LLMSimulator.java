@@ -1,10 +1,6 @@
-package io.leavesfly.tinyai.agent.multi;
+package io.leavesfly.tinyai.agent;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 /**

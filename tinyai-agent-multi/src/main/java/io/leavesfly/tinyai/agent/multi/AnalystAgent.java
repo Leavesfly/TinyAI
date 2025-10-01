@@ -1,5 +1,7 @@
 package io.leavesfly.tinyai.agent.multi;
 
+import io.leavesfly.tinyai.agent.LLMSimulator;
+
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;

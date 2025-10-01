@@ -22,6 +22,7 @@
         <module>tinyai-cv</module>
         <module>tinyai-case</module>
         <module>tinyai-agent</module>
+        <module>tinyai-agent-multi</module>
     </modules>
 
     <properties>

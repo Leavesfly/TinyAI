@@ -665,12 +665,6 @@ public interface NdArray {
      */
     float[][][][] get4dArray();
 
-    /**
-     * 将数组转换为double数组返回
-     *
-     * @return double数组表示
-     */
-    double[] toDoubleArray();
 
     /**
      * 按维度下标设置某一个值

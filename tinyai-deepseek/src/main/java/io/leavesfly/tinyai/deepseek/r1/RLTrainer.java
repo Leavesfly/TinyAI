@@ -1,11 +1,12 @@
 package io.leavesfly.tinyai.deepseek.r1;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.func.loss.Loss;
+
 import io.leavesfly.tinyai.ml.Trainer;
 import io.leavesfly.tinyai.ml.dataset.DataSet;
 import io.leavesfly.tinyai.ml.evaluator.Evaluator;
 import io.leavesfly.tinyai.ml.Monitor;
+import io.leavesfly.tinyai.ml.loss.Loss;
 import io.leavesfly.tinyai.ml.optimize.Optimizer;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;

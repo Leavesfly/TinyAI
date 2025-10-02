@@ -28,7 +28,7 @@
         <module>tinyai-model-moe</module>
 
         <!--        智能体-->
-        <module>tinyai-agent</module>
+        <module>tinyai-agent-base</module>
         <module>tinyai-agent-multi</module>
         <module>tinyai-agent-pattern</module>
         <module>tinyai-agent-evol</module>
@@ -99,7 +99,7 @@
             </dependency>
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-agent</artifactId>
+                <artifactId>tinyai-agent-base</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

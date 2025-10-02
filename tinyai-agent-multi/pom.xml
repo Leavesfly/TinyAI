@@ -20,7 +20,7 @@
 
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
-            <artifactId>tinyai-agent</artifactId>
+            <artifactId>tinyai-agent-base</artifactId>
         </dependency>
 
         <!-- SQLite JDBC驱动 -->

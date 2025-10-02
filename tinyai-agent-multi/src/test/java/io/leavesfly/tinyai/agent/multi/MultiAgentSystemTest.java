@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.agent.multi;
 
+import io.leavesfly.tinyai.agent.LLMSimulator;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.After;

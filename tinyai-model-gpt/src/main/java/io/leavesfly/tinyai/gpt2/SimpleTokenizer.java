@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.gpt;
+package io.leavesfly.tinyai.gpt2;
 
 import java.util.*;
 import java.util.regex.Pattern;

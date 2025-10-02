@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.gpt;
+package io.leavesfly.tinyai.gpt2;
 
 import io.leavesfly.tinyai.ml.dataset.Batch;
 import io.leavesfly.tinyai.ml.dataset.DataSet;

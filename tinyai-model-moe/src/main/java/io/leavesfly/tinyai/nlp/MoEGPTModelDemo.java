@@ -1,7 +1,7 @@
 package io.leavesfly.tinyai.nlp;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.gpt.GPT2Model;
+import io.leavesfly.tinyai.gpt2.GPT2Model;
 
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;

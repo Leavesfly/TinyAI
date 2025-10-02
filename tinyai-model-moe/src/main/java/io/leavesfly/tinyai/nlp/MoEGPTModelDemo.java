@@ -2,6 +2,7 @@ package io.leavesfly.tinyai.nlp;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.gpt2.GPT2Model;
+import io.leavesfly.tinyai.gpt2.GPT2Config;
 
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
@@ -144,21 +145,24 @@ public class MoEGPTModelDemo {
         System.out.println("7. 参数统计对比:");
         
         // 创建对应的传统GPT-2模型进行对比
-        GPT2Model traditionalGPT = new GPT2Model(
-            "traditional_gpt2", 
-            smallMoEModel.getVocabSize(), 
-            smallMoEModel.getDModel(), 
-            smallMoEModel.getNumLayers(), 
-            smallMoEModel.getNumHeads(),
-            smallMoEModel.getDModel() * 4,  // 传统FFN隐藏维度
-            smallMoEModel.getMaxSeqLength(), 
-            smallMoEModel.getDropoutRate()
+        GPT2Config traditionalGPTConfig = new GPT2Config(
+            smallMoEModel.getVocabSize(),                // vocabSize
+            smallMoEModel.getMaxSeqLength(),             // nPositions
+            smallMoEModel.getDModel(),                   // nEmbd
+            smallMoEModel.getNumLayers(),                // nLayer
+            smallMoEModel.getNumHeads(),                 // nHead
+            smallMoEModel.getDModel() * 4,               // nInner (传统FFN隐藏维度)
+            "gelu",                                      // activationFunction
+            smallMoEModel.getDropoutRate(),              // residPdrop
+            smallMoEModel.getDropoutRate(),              // embdPdrop
+            smallMoEModel.getDropoutRate(),              // attnPdrop
+            1e-5,                                        // layerNormEpsilon
+            0.02                                         // initializerRange
         );
+        GPT2Model traditionalGPT = new GPT2Model("traditional_gpt2", traditionalGPTConfig);
         
         long moeParams = smallMoEModel.getTotalParameterCount();
-        long traditionalParams = traditionalGPT.getAllParams().values().stream()
-            .mapToLong(param -> param.getValue().getShape().size())
-            .sum();
+        long traditionalParams = traditionalGPT.getGPT2Block().getParameterCount();
         
         System.out.printf("MoE-GPT参数数量: %,d%n", moeParams);
         System.out.printf("传统GPT-2参数数量: %,d%n", traditionalParams);

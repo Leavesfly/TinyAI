@@ -23,11 +23,6 @@
             <artifactId>tinyai-agent-base</artifactId>
         </dependency>
 
-        <!-- 图表依赖 -->
-        <dependency>
-            <groupId>jfree</groupId>
-            <artifactId>jfreechart</artifactId>
-        </dependency>
 
         <!-- 测试依赖 -->
         <dependency>

@@ -11,12 +11,17 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>tinyai-dl-ndarr</artifactId>
+    <artifactId>tinyai-deeplearning-rl</artifactId>
     <packaging>jar</packaging>
-    <name>tinyai-ndarr</name>
-    <description>TinyAI项目的N维数组处理模块</description>
+    <name>tinyai-rl</name>
+    <description>tinyai-rl</description>
 
     <dependencies>
+        <!-- 依赖tinyai-ml 模块 -->
+        <dependency>
+            <groupId>io.leavesfly.tinyai</groupId>
+            <artifactId>tinyai-deeplearning-ml</artifactId>
+        </dependency>
 
         <!-- 测试依赖 -->
         <dependency>
@@ -31,6 +36,12 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+
+            <!-- Exec plugin for running main class -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>

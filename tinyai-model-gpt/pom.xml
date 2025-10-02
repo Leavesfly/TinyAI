@@ -20,12 +20,7 @@
         <!-- 依赖tinyai-ml 模块 -->
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
-            <artifactId>tinyai-dl-ml</artifactId>
-        </dependency>
-        <!-- 图表依赖 -->
-        <dependency>
-            <groupId>jfree</groupId>
-            <artifactId>jfreechart</artifactId>
+            <artifactId>tinyai-deeplearning-ml</artifactId>
         </dependency>
 
         <!-- 测试依赖 -->

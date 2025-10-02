@@ -11,7 +11,7 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>tinyai-dl-ml</artifactId>
+    <artifactId>tinyai-deeplearning-ml</artifactId>
     <packaging>jar</packaging>
     <name>tinyai-ml</name>
     <description>tinyai-ml</description>
@@ -20,19 +20,19 @@
         <!-- 依赖tinyai-func模块 -->
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
-            <artifactId>tinyai-dl-func</artifactId>
+            <artifactId>tinyai-deeplearning-func</artifactId>
         </dependency>
 
         <!-- 依赖tinyai-ndarr模块 -->
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
-            <artifactId>tinyai-dl-ndarr</artifactId>
+            <artifactId>tinyai-deeplearning-ndarr</artifactId>
         </dependency>
 
         <!-- 依赖tinyai-nnet模块 -->
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
-            <artifactId>tinyai-dl-nnet</artifactId>
+            <artifactId>tinyai-deeplearning-nnet</artifactId>
         </dependency>
 
         <!-- 图表依赖 -->

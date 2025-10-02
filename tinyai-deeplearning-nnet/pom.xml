@@ -11,33 +11,23 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>tinyai-dl-case</artifactId>
+    <artifactId>tinyai-deeplearning-nnet</artifactId>
     <packaging>jar</packaging>
-    <name>tinyai-case</name>
-    <description>tinyai-example for case</description>
+    <name>tinyai-nnet</name>
+    <description>tinyai-nnet</description>
 
     <dependencies>
-        <!-- 依赖tinyai-rl模块 -->
+        <!-- 依赖tinyai-ndarr模块 -->
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
-            <artifactId>tinyai-dl-rl</artifactId>
+            <artifactId>tinyai-deeplearning-ndarr</artifactId>
         </dependency>
 
-
-
-        <!-- 依赖tinyai-ml -->
+        <!-- 依赖tinyai-func模块 -->
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
-            <artifactId>tinyai-dl-ml</artifactId>
+            <artifactId>tinyai-deeplearning-func</artifactId>
         </dependency>
-
-
-        <!-- 图表依赖 -->
-        <dependency>
-            <groupId>jfree</groupId>
-            <artifactId>jfreechart</artifactId>
-        </dependency>
-
 
         <!-- 测试依赖 -->
         <dependency>
@@ -45,7 +35,6 @@
             <artifactId>junit</artifactId>
             <scope>test</scope>
         </dependency>
-
     </dependencies>
 
     <build>

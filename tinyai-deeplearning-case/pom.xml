@@ -11,24 +11,26 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>tinyai-dl-func</artifactId>
+    <artifactId>tinyai-deeplearning-case</artifactId>
     <packaging>jar</packaging>
-    <name>tinyai-dl-func</name>
-    <description>TinyAI项目的函数计算模块</description>
+    <name>tinyai-case</name>
+    <description>tinyai-example for case</description>
 
     <dependencies>
-        <!-- 依赖tinyai-ndarr模块 -->
+
+        <!-- 依赖tinyai-rl模块 -->
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
-            <artifactId>tinyai-dl-ndarr</artifactId>
+            <artifactId>tinyai-deeplearning-rl</artifactId>
         </dependency>
 
 
-        <!-- 图表依赖 -->
+        <!-- 依赖tinyai-ml -->
         <dependency>
-            <groupId>jfree</groupId>
-            <artifactId>jfreechart</artifactId>
+            <groupId>io.leavesfly.tinyai</groupId>
+            <artifactId>tinyai-deeplearning-ml</artifactId>
         </dependency>
+
 
         <!-- 测试依赖 -->
         <dependency>
@@ -36,6 +38,7 @@
             <artifactId>junit</artifactId>
             <scope>test</scope>
         </dependency>
+
     </dependencies>
 
     <build>
@@ -44,14 +47,11 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
             </plugin>
-            
+
             <!-- Exec plugin for running main class -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
-                <configuration>
-                    <mainClass>io.leavesfly.tinyai.func.TinyAIDemo</mainClass>
-                </configuration>
             </plugin>
         </plugins>
     </build>

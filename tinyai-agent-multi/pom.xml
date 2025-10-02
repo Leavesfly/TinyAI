@@ -30,11 +30,6 @@
             <version>3.41.2.2</version>
         </dependency>
 
-        <!-- 图表依赖 -->
-        <dependency>
-            <groupId>jfree</groupId>
-            <artifactId>jfreechart</artifactId>
-        </dependency>
 
         <!-- 测试依赖 -->
         <dependency>

@@ -12,12 +12,12 @@
     <!-- 子模块配置 -->
     <modules>
         <!--        深度学习-->
-        <module>tinyai-dl-ndarr</module>
-        <module>tinyai-dl-func</module>
-        <module>tinyai-dl-nnet</module>
-        <module>tinyai-dl-ml</module>
-        <module>tinyai-dl-rl</module>
-        <module>tinyai-dl-case</module>
+        <module>tinyai-deeplearning-ndarr</module>
+        <module>tinyai-deeplearning-func</module>
+        <module>tinyai-deeplearning-nnet</module>
+        <module>tinyai-deeplearning-ml</module>
+        <module>tinyai-deeplearning-rl</module>
+        <module>tinyai-deeplearning-case</module>
 
         <!--        模型层-->
         <module>tinyai-model-deepseek</module>
@@ -56,28 +56,28 @@
 
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-dl-ndarr</artifactId>
+                <artifactId>tinyai-deeplearning-ndarr</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-dl-func</artifactId>
+                <artifactId>tinyai-deeplearning-func</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-dl-nnet</artifactId>
+                <artifactId>tinyai-deeplearning-nnet</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-dl-ml</artifactId>
+                <artifactId>tinyai-deeplearning-ml</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-dl-rl</artifactId>
+                <artifactId>tinyai-deeplearning-rl</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

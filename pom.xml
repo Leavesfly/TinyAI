@@ -11,16 +11,22 @@
 
     <!-- 子模块配置 -->
     <modules>
-        <module>tinyai-ndarr</module>
-        <module>tinyai-func</module>
-        <module>tinyai-util</module>
-        <module>tinyai-nnet</module>
-        <module>tinyai-ml</module>
-        <module>tinyai-rl</module>
-        <module>tinyai-nlp</module>
-        <module>tinyai-deepseek</module>
-        <module>tinyai-cv</module>
-        <module>tinyai-case</module>
+        <!--        深度学习-->
+        <module>tinyai-dl-ndarr</module>
+        <module>tinyai-dl-func</module>
+        <module>tinyai-dl-nnet</module>
+        <module>tinyai-dl-ml</module>
+        <module>tinyai-dl-rl</module>
+
+        <module>tinyai-dl-cv</module>
+        <module>tinyai-dl-case</module>
+
+        <!--        模型层-->
+        <module>tinyai-model-deepseek</module>
+        <module>tinyai-model-lora</module>
+        <module>tinyai-model-gpt</module>
+
+        <!--        智能体-->
         <module>tinyai-agent</module>
         <module>tinyai-agent-multi</module>
         <module>tinyai-agent-pattern</module>
@@ -45,52 +51,48 @@
     <dependencyManagement>
         <dependencies>
             <!-- 项目内部模块依赖管理 -->
+
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-util</artifactId>
+                <artifactId>tinyai-dl-ndarr</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-ndarr</artifactId>
+                <artifactId>tinyai-dl-func</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-func</artifactId>
+                <artifactId>tinyai-dl-nnet</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-nnet</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-ml</artifactId>
+                <artifactId>tinyai-dl-ml</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-rl</artifactId>
+                <artifactId>tinyai-dl-rl</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-cv</artifactId>
+                <artifactId>tinyai-dl-cv</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-nlp</artifactId>
+                <artifactId>tinyai-model-gpt</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-deepseek</artifactId>
+                <artifactId>tinyai-model-deepseek</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

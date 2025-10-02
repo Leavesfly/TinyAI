@@ -28,6 +28,7 @@
 
         <!--        智能体-->
         <module>tinyai-agent-base</module>
+        <module>tinyai-agent-rag</module>
         <module>tinyai-agent-multi</module>
         <module>tinyai-agent-pattern</module>
         <module>tinyai-agent-evol</module>

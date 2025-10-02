@@ -93,7 +93,8 @@ public class GPT2TokenEmbedding extends Layer {
         
         init();
     }
-    
+
+
     @Override
     public void init() {
         if (!alreadyInit) {

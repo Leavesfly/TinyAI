@@ -88,7 +88,7 @@ public class DeepSeekR1Block extends Block {
     public void init() {
         if (!alreadyInit) {
             // 1. 初始化嵌入层
-            tokenEmbedding = new GPT2TokenEmbedding(name + "_token_embed", vocabSize, dModel, maxSeqLen);
+            tokenEmbedding = new GPT2TokenEmbedding(name + "_token_embed", vocabSize, dModel, maxSeqLen, true, dropout);
             positionalEncoding = new PositionalEncoding(name + "_pos_encode", dModel, maxSeqLen, dropout);
             
             addLayer(tokenEmbedding);

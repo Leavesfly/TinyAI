@@ -23,6 +23,7 @@
         <module>tinyai-model-deepseek</module>
         <module>tinyai-model-lora</module>
         <module>tinyai-model-gpt</module>
+        <module>tinyai-model-qwen</module>
         <module>tinyai-model-moe</module>
 
         <!--        智能体-->

@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.gpt;
+package io.leavesfly.tinyai.gpt2;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;

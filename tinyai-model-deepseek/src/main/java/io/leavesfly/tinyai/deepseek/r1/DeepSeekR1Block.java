@@ -1,7 +1,7 @@
 package io.leavesfly.tinyai.deepseek.r1;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.gpt.GPT2TokenEmbedding;
+import io.leavesfly.tinyai.gpt2.GPT2TokenEmbedding;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Block;

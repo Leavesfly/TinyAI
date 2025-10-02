@@ -1,8 +1,8 @@
 package io.leavesfly.tinyai.nlp;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.gpt.GPT2OutputHead;
-import io.leavesfly.tinyai.gpt.GPT2TokenEmbedding;
+import io.leavesfly.tinyai.gpt2.GPT2OutputHead;
+import io.leavesfly.tinyai.gpt2.GPT2TokenEmbedding;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nlp.moe.MoELayer;
 import io.leavesfly.tinyai.nlp.moe.MoETransformerBlock;

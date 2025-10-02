@@ -332,14 +332,14 @@ public class MultiAgentSystemTest {
      * 创建HashMap的工具方法（兼容Java 8）
      */
     private static Map<String, String> Map_of(String k1, String v1, String k2, String v2) {
-        java.util.Map<String, String> map = new java.util.HashMap<>();
+        Map<String, String> map = new java.util.HashMap<>();
         map.put(k1, v1);
         map.put(k2, v2);
         return map;
     }
     
     private static Map<String, String> Map_of(String k1, String v1) {
-        java.util.Map<String, String> map = new java.util.HashMap<>();
+        Map<String, String> map = new java.util.HashMap<>();
         map.put(k1, v1);
         return map;
     }

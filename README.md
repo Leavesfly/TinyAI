@@ -562,6 +562,3 @@ TinyAI的发展离不开以下开源项目的启发：
 <div align="center">
   <h3>🎯 让AI开发更简单，让学习更高效</h3>
   <p>如果这个项目对您有帮助，请给我们一个⭐️</p>
-  
-  [![Star History Chart](https://api.star-history.com/svg?repos=leavesfly/TinyAI&type=Date)](https://star-history.com/#leavesfly/TinyAI&Date)
-</div>

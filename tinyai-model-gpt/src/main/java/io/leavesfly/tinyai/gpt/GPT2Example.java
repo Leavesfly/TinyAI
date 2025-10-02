@@ -1,13 +1,10 @@
-package io.leavesfly.tinyai.nlp;
+package io.leavesfly.tinyai.gpt;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.Model;
 import io.leavesfly.tinyai.ml.dataset.Batch;
 import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
 import io.leavesfly.tinyai.ml.optimize.Adam;
-import io.leavesfly.tinyai.nlp.GPT2Model;
-import io.leavesfly.tinyai.nlp.GPT2TextDataset;
-import io.leavesfly.tinyai.nlp.SimpleTokenizer;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 

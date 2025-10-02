@@ -1,10 +1,9 @@
-package io.leavesfly.tinyai.nnet.block.transformer;
+package io.leavesfly.tinyai.nlp.moe;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Layer;
-import io.leavesfly.tinyai.nnet.layer.moe.MoELayer;
 import io.leavesfly.tinyai.nnet.layer.transformer.LayerNorm;
 import io.leavesfly.tinyai.nnet.layer.transformer.MultiHeadAttention;
 
@@ -63,9 +62,9 @@ public class MoETransformerBlock extends Layer {
      * @param useNoise 是否使用门控噪声
      * @param noiseEpsilon 噪声强度
      */
-    public MoETransformerBlock(String name, int dModel, int numHeads, int numExperts, 
-                              int dExpert, int topK, double dropoutRate, 
-                              boolean useNoise, double noiseEpsilon) {
+    public MoETransformerBlock(String name, int dModel, int numHeads, int numExperts,
+                               int dExpert, int topK, double dropoutRate,
+                               boolean useNoise, double noiseEpsilon) {
         super(name, Shape.of(-1, -1, dModel), Shape.of(-1, -1, dModel));
         
         if (dModel <= 0 || numHeads <= 0 || numExperts <= 0) {

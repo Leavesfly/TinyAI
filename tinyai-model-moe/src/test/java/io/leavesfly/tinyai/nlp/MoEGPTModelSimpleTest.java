@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.nlp;
 
+import io.leavesfly.tinyai.gpt.MoEGPTModel;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -17,7 +18,7 @@ public class MoEGPTModelSimpleTest {
     public void testModelConstructionBasic() {
         // 测试最基本的模型构造
         try {
-            MoEGPTModel model = new MoEGPTModel(
+            io.leavesfly.tinyai.gpt.MoEGPTModel model = new io.leavesfly.tinyai.gpt.MoEGPTModel(
                 "test_simple", 
                 100,  // vocabSize (小一点)
                 32,   // dModel (小一点)
@@ -49,7 +50,7 @@ public class MoEGPTModelSimpleTest {
     @Test 
     public void testComponentInitialization() {
         try {
-            MoEGPTModel model = new MoEGPTModel(
+            io.leavesfly.tinyai.gpt.MoEGPTModel model = new io.leavesfly.tinyai.gpt.MoEGPTModel(
                 "test_components", 
                 50,   // vocabSize 
                 16,   // dModel 

@@ -1,10 +1,13 @@
 package io.leavesfly.tinyai.nlp;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.gpt.GPT2Model;
+
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.layer.moe.MoELayer;
-import io.leavesfly.tinyai.nnet.block.transformer.MoETransformerBlock;
+import io.leavesfly.tinyai.nlp.moe.MoELayer;
+import io.leavesfly.tinyai.nlp.moe.MoETransformerBlock;
+
 
 import java.util.List;
 import java.util.Random;

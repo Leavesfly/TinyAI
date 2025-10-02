@@ -2,8 +2,7 @@ package io.leavesfly.tinyai.nlp;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.Model;
-import io.leavesfly.tinyai.nlp.MoEGPTModel;
-import io.leavesfly.tinyai.nlp.SimpleTokenizer;
+import io.leavesfly.tinyai.gpt.SimpleTokenizer;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 

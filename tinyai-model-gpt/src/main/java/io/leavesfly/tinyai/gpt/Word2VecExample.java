@@ -1,11 +1,10 @@
-package io.leavesfly.tinyai.nlp;
+package io.leavesfly.tinyai.gpt;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.Model;
 import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
 import io.leavesfly.tinyai.ml.optimize.Optimizer;
 import io.leavesfly.tinyai.ml.optimize.SGD;
-import io.leavesfly.tinyai.nlp.Word2Vec;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
 import java.util.ArrayList;

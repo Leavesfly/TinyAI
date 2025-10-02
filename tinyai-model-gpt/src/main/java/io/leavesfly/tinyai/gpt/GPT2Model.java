@@ -1,12 +1,10 @@
-package io.leavesfly.tinyai.nlp;
+package io.leavesfly.tinyai.gpt;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Block;
-import io.leavesfly.tinyai.nnet.block.transformer.GPT2Block;
-import io.leavesfly.tinyai.nnet.layer.transformer.GPT2OutputHead;
-import io.leavesfly.tinyai.nnet.layer.transformer.GPT2TokenEmbedding;
+
 import io.leavesfly.tinyai.nnet.layer.transformer.LayerNorm;
 
 import java.util.ArrayList;

@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.nnet.layer.moe;
+package io.leavesfly.tinyai.nlp.moe;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;

@@ -1,6 +1,7 @@
 package io.leavesfly.tinyai.nlp;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.gpt.MoEGPTModel;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.layer.moe.MoELayer;
@@ -30,14 +31,14 @@ import static org.junit.Assert.*;
  */
 public class MoEGPTModelTest {
     
-    private MoEGPTModel smallModel;
-    private MoEGPTModel mediumModel;
-    private MoEGPTModel defaultModel;
+    private io.leavesfly.tinyai.gpt.MoEGPTModel smallModel;
+    private io.leavesfly.tinyai.gpt.MoEGPTModel mediumModel;
+    private io.leavesfly.tinyai.gpt.MoEGPTModel defaultModel;
     
     @Before
     public void setUp() {
         // 创建小型测试模型
-        smallModel = new MoEGPTModel(
+        smallModel = new io.leavesfly.tinyai.gpt.MoEGPTModel(
             "test_moe_gpt_small", 
             1000,  // vocabSize
             64,    // dModel  
@@ -49,7 +50,7 @@ public class MoEGPTModelTest {
         );
         
         // 创建中等测试模型
-        mediumModel = new MoEGPTModel(
+        mediumModel = new io.leavesfly.tinyai.gpt.MoEGPTModel(
             "test_moe_gpt_medium", 
             2000,  // vocabSize
             128,   // dModel
@@ -65,7 +66,7 @@ public class MoEGPTModelTest {
         );
         
         // 创建默认配置模型
-        defaultModel = new MoEGPTModel("test_default", Shape.of(-1, 100));
+        defaultModel = new io.leavesfly.tinyai.gpt.MoEGPTModel("test_default", Shape.of(-1, 100));
     }
     
     @Test
@@ -312,7 +313,7 @@ public class MoEGPTModelTest {
     @Test(expected = IllegalArgumentException.class)
     public void testInvalidTopK() {
         // 测试无效的topK参数
-        new MoEGPTModel(
+        new io.leavesfly.tinyai.gpt.MoEGPTModel(
             "invalid_model", 
             1000, 128, 3, 4, 4, 
             5,  // topK > numExperts
@@ -323,7 +324,7 @@ public class MoEGPTModelTest {
     @Test(expected = IllegalArgumentException.class)
     public void testInvalidDModelHeadsRatio() {
         // 测试dModel不能被numHeads整除的情况
-        new MoEGPTModel(
+        new io.leavesfly.tinyai.gpt.MoEGPTModel(
             "invalid_model", 
             1000, 
             65,  // 不能被numHeads(4)整除
@@ -334,14 +335,14 @@ public class MoEGPTModelTest {
     @Test
     public void testDefaultConstructors() {
         // 测试默认构造函数
-        MoEGPTModel defaultModel1 = new MoEGPTModel("default1", 1000, 64, 6, 8, 4, 2, 128);
+        io.leavesfly.tinyai.gpt.MoEGPTModel defaultModel1 = new io.leavesfly.tinyai.gpt.MoEGPTModel("default1", 1000, 64, 6, 8, 4, 2, 128);
         assertEquals(1000, defaultModel1.getVocabSize());
         assertEquals(64, defaultModel1.getDModel());
         assertEquals(6, defaultModel1.getNumLayers());
         assertEquals(8, defaultModel1.getNumHeads());
         assertEquals(4, defaultModel1.getNumExperts());
         
-        MoEGPTModel defaultModel2 = new MoEGPTModel("default2", 2000, 256);
+        io.leavesfly.tinyai.gpt.MoEGPTModel defaultModel2 = new MoEGPTModel("default2", 2000, 256);
         assertEquals(2000, defaultModel2.getVocabSize());
         assertEquals(768, defaultModel2.getDModel()); // 默认模型维度
         assertEquals(12, defaultModel2.getNumLayers()); // 默认层数

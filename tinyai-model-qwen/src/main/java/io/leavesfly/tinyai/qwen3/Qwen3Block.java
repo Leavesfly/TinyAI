@@ -134,15 +134,50 @@ public class Qwen3Block extends Block {
         }
         
         // 检查token ID范围
-        float[] flatData = inputData.flatten();
-        for (float value : flatData) {
-            int tokenId = (int) value;
-            if (tokenId < 0 || tokenId >= vocabSize) {
-                throw new IllegalArgumentException(
-                    "Token ID超出范围: " + tokenId + "，期望范围[0, " + (vocabSize - 1) + "]"
-                );
+        NdArray flattenedData = inputData.flatten();
+        if (flattenedData instanceof io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) {
+            float[] flatData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) flattenedData).buffer;
+            for (float value : flatData) {
+                int tokenId = (int) value;
+                if (tokenId < 0 || tokenId >= vocabSize) {
+                    throw new IllegalArgumentException(
+                        "Token ID超出范围: " + tokenId + "，期朝范围[0, " + (vocabSize - 1) + "]"
+                    );
+                }
+            }
+        } else {
+            // 对于非 NdArrayCpu 实现，使用 get 方法检查
+            Shape shape = inputData.getShape();
+            for (int i = 0; i < shape.size(); i++) {
+                int[] indices = convertLinearToMultiIndex(i, shape);
+                float value = inputData.get(indices);
+                int tokenId = (int) value;
+                if (tokenId < 0 || tokenId >= vocabSize) {
+                    throw new IllegalArgumentException(
+                        "Token ID超出范围: " + tokenId + "，期朝范围[0, " + (vocabSize - 1) + "]"
+                    );
+                }
             }
         }
+    }
+    
+    /**
+     * 将线性索引转换为多维索引
+     * 
+     * @param linearIndex 线性索引
+     * @param shape 数组形状
+     * @return 多维索引数组
+     */
+    private int[] convertLinearToMultiIndex(int linearIndex, Shape shape) {
+        int[] indices = new int[shape.getDimNum()];
+        int remaining = linearIndex;
+        
+        for (int i = shape.getDimNum() - 1; i >= 0; i--) {
+            indices[i] = remaining % shape.getDimension(i);
+            remaining /= shape.getDimension(i);
+        }
+        
+        return indices;
     }
     
     /**

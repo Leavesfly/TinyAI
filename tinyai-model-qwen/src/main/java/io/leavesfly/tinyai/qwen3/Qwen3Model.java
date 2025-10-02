@@ -189,7 +189,21 @@ public class Qwen3Model extends Model {
      * @return 最大值的索引
      */
     private int argmax(NdArray array) {
-        float[] data = array.flatten();
+        NdArray flattenedArray = array.flatten();
+        
+        // 获取底层数据
+        float[] data;
+        if (flattenedArray instanceof io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) {
+            data = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) flattenedArray).buffer;
+        } else {
+            // 对于非 NdArrayCpu 实现，使用 get 方法
+            Shape shape = flattenedArray.getShape();
+            data = new float[shape.size()];
+            for (int i = 0; i < shape.size(); i++) {
+                data[i] = flattenedArray.get(i);
+            }
+        }
+        
         int maxIndex = 0;
         float maxValue = data[0];
         
@@ -211,7 +225,8 @@ public class Qwen3Model extends Model {
      * @return 完整的生成序列
      */
     public NdArray generate(NdArray inputIds, int maxLength) {
-        NdArray currentSequence = inputIds.copy();
+        // 创建输入副本，因为 NdArray 接口没有 copy() 方法
+        NdArray currentSequence = createCopy(inputIds);
         Shape currentShape = currentSequence.getShape();
         
         // 确保输入是2D格式 (batch_size, seq_len)
@@ -277,6 +292,44 @@ public class Qwen3Model extends Model {
         }
         
         return newSequence;
+    }
+    
+    /**
+     * 创建 NdArray 的副本
+     * 
+     * @param original 原始数组
+     * @return 副本数组
+     */
+    private NdArray createCopy(NdArray original) {
+        Shape shape = original.getShape();
+        NdArray copy = NdArray.of(shape);
+        
+        // 复制数据
+        for (int i = 0; i < shape.size(); i++) {
+            int[] indices = convertLinearToMultiIndex(i, shape);
+            copy.set(original.get(indices), indices);
+        }
+        
+        return copy;
+    }
+    
+    /**
+     * 将线性索引转换为多维索引
+     * 
+     * @param linearIndex 线性索引
+     * @param shape 数组形状
+     * @return 多维索引数组
+     */
+    private int[] convertLinearToMultiIndex(int linearIndex, Shape shape) {
+        int[] indices = new int[shape.getDimNum()];
+        int remaining = linearIndex;
+        
+        for (int i = shape.getDimNum() - 1; i >= 0; i--) {
+            indices[i] = remaining % shape.getDimension(i);
+            remaining /= shape.getDimension(i);
+        }
+        
+        return indices;
     }
     
     /**

@@ -135,7 +135,20 @@ public class SiLULayer extends Layer {
      */
     private void applySiLUFlattened(NdArray input, NdArray output) {
         int totalSize = input.getShape().size();
-        float[] inputFlat = input.flatten();
+        
+        // 获取输入数据
+        float[] inputFlat;
+        NdArray flattenedInput = input.flatten();
+        if (flattenedInput instanceof io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) {
+            inputFlat = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) flattenedInput).buffer;
+        } else {
+            // 对于非 NdArrayCpu 实现，手动复制数据
+            inputFlat = new float[totalSize];
+            for (int i = 0; i < totalSize; i++) {
+                inputFlat[i] = flattenedInput.get(i);
+            }
+        }
+        
         float[] outputFlat = new float[totalSize];
         
         for (int i = 0; i < totalSize; i++) {
@@ -148,7 +161,19 @@ public class SiLULayer extends Layer {
         flatOutput = flatOutput.reshape(input.getShape());
         
         // 复制到输出数组
-        System.arraycopy(flatOutput.flatten(), 0, output.flatten(), 0, totalSize);
+        NdArray flattenedOutput = output.flatten();
+        if (flattenedOutput instanceof io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) {
+            System.arraycopy(((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) flatOutput.flatten()).buffer, 
+                           0, 
+                           ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) flattenedOutput).buffer, 
+                           0, 
+                           totalSize);
+        } else {
+            // 对于非 NdArrayCpu 实现，使用 set 方法
+            for (int i = 0; i < totalSize; i++) {
+                flattenedOutput.set(flatOutput.get(i), i);
+            }
+        }
     }
     
     /**

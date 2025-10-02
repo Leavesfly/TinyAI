@@ -3,7 +3,6 @@ package io.leavesfly.tinyai.gpt;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.block.transformer.GPT2Block;
 import org.junit.Before;
 import org.junit.Test;
 

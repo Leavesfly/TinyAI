@@ -25,11 +25,13 @@
         <module>tinyai-model-deepseek</module>
         <module>tinyai-model-lora</module>
         <module>tinyai-model-gpt</module>
+        <module>tinyai-model-moe</module>
 
         <!--        智能体-->
         <module>tinyai-agent</module>
         <module>tinyai-agent-multi</module>
         <module>tinyai-agent-pattern</module>
+        <module>tinyai-agent-evol</module>
     </modules>
 
     <properties>

@@ -222,7 +222,21 @@ public class Qwen3Test {
         // 验证SiLU函数性质（正数输入应该产生正数输出）
         NdArray positiveInput = NdArray.ones(Shape.of(2, 2));
         Variable positiveOutput = siluLayer.layerForward(new Variable(positiveInput));
-        float[] outputData = positiveOutput.getValue().flatten();
+        NdArray flattenedArray = positiveOutput.getValue().flatten();
+        
+        // 获取底层数据
+        float[] outputData;
+        if (flattenedArray instanceof io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) {
+            outputData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) flattenedArray).buffer;
+        } else {
+            // 对于非 NdArrayCpu 实现，使用 get 方法
+            io.leavesfly.tinyai.ndarr.Shape shape = flattenedArray.getShape();
+            outputData = new float[shape.size()];
+            for (int i = 0; i < shape.size(); i++) {
+                outputData[i] = flattenedArray.get(i);
+            }
+        }
+        
         for (float val : outputData) {
             assert val > 0 : "SiLU对正数输入产生了非正数输出";
         }

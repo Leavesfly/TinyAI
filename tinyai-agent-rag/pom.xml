@@ -17,7 +17,6 @@
     <description>tinyai-agent-rag</description>
 
     <dependencies>
-
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
             <artifactId>tinyai-agent-base</artifactId>

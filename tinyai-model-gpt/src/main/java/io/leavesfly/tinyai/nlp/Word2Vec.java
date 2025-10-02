@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.gpt2;
+package io.leavesfly.tinyai.nlp;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.func.math.Sigmoid;

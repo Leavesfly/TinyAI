@@ -17,7 +17,6 @@
         <module>tinyai-dl-nnet</module>
         <module>tinyai-dl-ml</module>
         <module>tinyai-dl-rl</module>
-
         <module>tinyai-dl-cv</module>
         <module>tinyai-dl-case</module>
 

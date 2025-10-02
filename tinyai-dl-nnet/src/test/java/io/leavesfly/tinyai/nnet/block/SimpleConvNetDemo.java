@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.cv;
+package io.leavesfly.tinyai.nnet.block;
 
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;

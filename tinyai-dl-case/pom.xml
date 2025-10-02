@@ -23,10 +23,6 @@
             <artifactId>tinyai-dl-rl</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>io.leavesfly.tinyai</groupId>
-            <artifactId>tinyai-dl-cv</artifactId>
-        </dependency>
 
 
         <!-- 依赖tinyai-ml -->

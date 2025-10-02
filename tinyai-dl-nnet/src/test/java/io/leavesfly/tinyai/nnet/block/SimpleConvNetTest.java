@@ -1,9 +1,10 @@
-package io.leavesfly.tinyai.cv;
+package io.leavesfly.tinyai.nnet.block;
 
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.nnet.LayerAble;
+import io.leavesfly.tinyai.nnet.block.SimpleConvNet;
 import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.*;

@@ -17,7 +17,6 @@
         <module>tinyai-dl-nnet</module>
         <module>tinyai-dl-ml</module>
         <module>tinyai-dl-rl</module>
-        <module>tinyai-dl-cv</module>
         <module>tinyai-dl-case</module>
 
         <!--        模型层-->
@@ -81,11 +80,6 @@
                 <version>${project.version}</version>
             </dependency>
 
-            <dependency>
-                <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-dl-cv</artifactId>
-                <version>${project.version}</version>
-            </dependency>
 
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>

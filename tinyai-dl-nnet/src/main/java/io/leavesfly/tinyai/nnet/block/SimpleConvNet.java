@@ -1,9 +1,7 @@
-package io.leavesfly.tinyai.cv;
+package io.leavesfly.tinyai.nnet.block;
 
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.Layer;
 import io.leavesfly.tinyai.nnet.LayerAble;
-import io.leavesfly.tinyai.nnet.block.SequentialBlock;
 import io.leavesfly.tinyai.nnet.layer.activate.ReLuLayer;
 import io.leavesfly.tinyai.nnet.layer.cnn.ConvLayer;
 import io.leavesfly.tinyai.nnet.layer.cnn.PoolingLayer;

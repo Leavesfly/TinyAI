@@ -1,7 +1,7 @@
 package io.leavesfly.tinyai.example.cv;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.cv.SimpleConvNet;
+import io.leavesfly.tinyai.nnet.block.SimpleConvNet;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 

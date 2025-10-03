@@ -1,5 +1,6 @@
-package io.leavesfly.tinyai.func;
+package io.leavesfly.tinyai.util;
 
+import io.leavesfly.tinyai.func.Function;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
 /**
@@ -10,7 +11,7 @@ import io.leavesfly.tinyai.ndarr.NdArray;
  * <p>
  * Util类提供了各种通用的工具方法，包括数值微分、数组转换、格式化等功能。
  */
-public class Util {
+public class Utils {
 
     /**
      * 数字微分函数的通用求导

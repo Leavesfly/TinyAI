@@ -1,6 +1,6 @@
 package io.leavesfly.tinyai.ml.dataset.simple;
 
-import io.leavesfly.tinyai.func.Util;
+import io.leavesfly.tinyai.util.Utils;
 import io.leavesfly.tinyai.ml.dataset.ArrayDataset;
 import io.leavesfly.tinyai.ml.dataset.DataSet;
 import io.leavesfly.tinyai.func.Variable;
@@ -72,7 +72,7 @@ public class SpiralDateSet extends ArrayDataset {
 
         for (int i = 0; i < size; i++) {
             xs[i] = NdArray.of(x_mat[i]);
-            ys[i] = NdArray.of(Util.argMax(y_mat[i]));
+            ys[i] = NdArray.of(Utils.argMax(y_mat[i]));
         }
         return new SpiralDateSet(100, xs, ys);
     }

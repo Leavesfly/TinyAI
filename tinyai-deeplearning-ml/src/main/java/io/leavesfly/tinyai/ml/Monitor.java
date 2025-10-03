@@ -2,7 +2,7 @@ package io.leavesfly.tinyai.ml;
 
 
 
-import io.leavesfly.tinyai.func.Util;
+import io.leavesfly.tinyai.util.Utils;
 
 import java.io.FileWriter;
 import java.io.IOException;
@@ -189,22 +189,22 @@ public class Monitor {
         int size = lossList.size();
         if (size > 0) {
             Float[] loss = lossList.toArray(new Float[0]);
-            plot.line(Util.toFloat(Util.getSeq(size)), Util.toFloat(loss), "train_loss");
+            plot.line(Utils.toFloat(Utils.getSeq(size)), Utils.toFloat(loss), "train_loss");
         }
         
         if (valLossList.size() > 0) {
             Float[] valLoss = valLossList.toArray(new Float[0]);
-            plot.line(Util.toFloat(Util.getSeq(valLoss.length)), Util.toFloat(valLoss), "val_loss");
+            plot.line(Utils.toFloat(Utils.getSeq(valLoss.length)), Utils.toFloat(valLoss), "val_loss");
         }
         
         if (accuracyList.size() > 0) {
             Float[] acc = accuracyList.toArray(new Float[0]);
-            plot.line(Util.toFloat(Util.getSeq(accuracyList.size())), Util.toFloat(acc), "train_acc");
+            plot.line(Utils.toFloat(Utils.getSeq(accuracyList.size())), Utils.toFloat(acc), "train_acc");
         }
         
         if (valAccuracyList.size() > 0) {
             Float[] valAcc = valAccuracyList.toArray(new Float[0]);
-            plot.line(Util.toFloat(Util.getSeq(valAccuracyList.size())), Util.toFloat(valAcc), "val_acc");
+            plot.line(Utils.toFloat(Utils.getSeq(valAccuracyList.size())), Utils.toFloat(valAcc), "val_acc");
         }
         
         plot.show();

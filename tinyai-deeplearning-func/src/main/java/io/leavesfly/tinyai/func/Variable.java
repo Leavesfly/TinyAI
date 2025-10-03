@@ -118,6 +118,7 @@ public class Variable implements Serializable {
      * 然后递归地调用生成该变量的函数的backward方法计算输入变量的梯度。
      */
     public void backward() {
+
         if (!requireGrad) {
             this.grad = null;
             return;
@@ -155,6 +156,7 @@ public class Variable implements Serializable {
      * 特别适用于深层网络或RNN等场景。
      */
     public void backwardIterative() {
+
         if (!requireGrad) {
             this.grad = null;
             return;

@@ -143,8 +143,8 @@ public class SpiralMlpExam {
         SpiralDateSet spiralDateSet = SpiralDateSet.toSpiralDateSet(variableX, y);
 
         Plot plot = new Plot();
-//        plot.line(Util.toFloat(Util.getSeq(maxEpoch)), lossArray, "loss");
-//        plot.line(Util.toFloat(Util.getSeq(maxEpoch)), accArray, "accuracy");
+//        plot.line(Utils.toFloat(Utils.getSeq(maxEpoch)), lossArray, "loss");
+//        plot.line(Utils.toFloat(Utils.getSeq(maxEpoch)), accArray, "accuracy");
         int[] type = new int[]{0, 1, 2};
         plot.scatter(dataSet, type);
         plot.scatter(spiralDateSet, type);

@@ -1,6 +1,6 @@
 package io.leavesfly.tinyai.ml.dataset;
 
-import io.leavesfly.tinyai.func.Util;
+import io.leavesfly.tinyai.util.Utils;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
 import java.util.*;
@@ -87,7 +87,7 @@ public abstract class ArrayDataset extends DataSet {
     @Override
     public void shuffle() {
         int size = xs.length;
-        Integer[] shuffleIndex = Util.getSeqIndex(size);
+        Integer[] shuffleIndex = Utils.getSeqIndex(size);
         Collections.shuffle(Arrays.asList(shuffleIndex));
 
         NdArray[] _xs = new NdArray[size];

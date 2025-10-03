@@ -32,6 +32,7 @@
         <module>tinyai-agent-multi</module>
         <module>tinyai-agent-pattern</module>
         <module>tinyai-agent-evol</module>
+        <module>tinyai-agent-manus</module>
     </modules>
 
     <properties>
@@ -95,6 +96,18 @@
             <dependency>
                 <groupId>io.leavesfly.tinyai</groupId>
                 <artifactId>tinyai-agent-base</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.leavesfly.tinyai</groupId>
+                <artifactId>tinyai-agent-multi</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.leavesfly.tinyai</groupId>
+                <artifactId>tinyai-agent-pattern</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

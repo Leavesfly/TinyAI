@@ -1,28 +1,34 @@
-# Qwen3模型 - TinyAI实现
+# TinyAI-Model-Qwen
 
-[![Java](https://img.shields.io/badge/Java-8+-blue.svg)](https://www.oracle.com/java/)
+[![Java](https://img.shields.io/badge/Java-17+-blue.svg)](https://www.oracle.com/java/)
 [![TinyAI](https://img.shields.io/badge/TinyAI-1.0.0-green.svg)](https://github.com/leavesfly/TinyAI)
 [![License](https://img.shields.io/badge/License-Apache%202.0-yellow.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Maven](https://img.shields.io/badge/Maven-3.6+-red.svg)](https://maven.apache.org/)
 
-基于TinyAI深度学习框架实现的Qwen3大语言模型，支持现代Transformer架构的所有特性，包括分组查询注意力(GQA)、旋转位置编码(RoPE)、SwiGLU激活函数等。
+## 📖 项目概述
 
-## ✨ 特性
+`tinyai-model-qwen` 是 TinyAI 框架中基于 **Qwen3 大语言模型** 架构的完整实现模块。该模块提供了现代 Transformer 架构的所有核心特性，包括分组查询注意力(GQA)、旋转位置编码(RoPE)、SwiGLU激活函数、RMSNorm归一化等先进技术，为大语言模型的研究和应用提供了强大的基础设施。
 
-### 🎯 核心特性
-- **现代架构**: 基于Transformer的decoder-only架构
-- **分组查询注意力(GQA)**: 减少KV缓存内存占用
-- **旋转位置编码(RoPE)**: 支持任意长度序列的相对位置编码
-- **SwiGLU激活**: 门控线性单元，提升模型表现
-- **RMSNorm归一化**: 简化高效的归一化方法
-- **Pre-LayerNorm**: 训练稳定的架构设计
+## 🚀 核心特性
+
+### ✨ 主要优势
+
+- **🎯 现代架构**: 基于 Transformer 的 decoder-only 架构，遵循 Qwen3 官方设计
+- **⚡ 分组查询注意力(GQA)**: 显著减少 KV 缓存内存占用，提升推理效率
+- **🔄 旋转位置编码(RoPE)**: 支持任意长度序列的相对位置编码，具备外推能力
+- **🎆 SwiGLU 激活**: 门控线性单元，提升模型表达能力和性能
+- **📊 RMSNorm 归一化**: 简化高效的归一化方法，减少计算开销
+- **🏢 Pre-LayerNorm**: 训练稳定的架构设计，避免梯度消失问题
 
 ### 🏗️ 架构遵循
-- **Qwen3Block**: 继承TinyAI的`Block`类，实现核心神经网络
-- **Qwen3Model**: 继承TinyAI的`Model`类，提供完整模型封装
-- **组件复用**: 优先使用tinyai-nnet已有实现（LinearLayer、Embedding等）
-- **中文文档**: 完整的中文注释和文档支持
+
+- **🧩 Qwen3Block**: 继承 TinyAI 的 `Block` 类，实现核心神经网络计算图
+- **🌍 Qwen3Model**: 继承 TinyAI 的 `Model` 类，提供完整模型封装和管理
+- **🔧 组件复用**: 优先使用 tinyai-nnet 已有实现（LinearLayer、Embedding 等）
+- **📝 中文文档**: 完整的中文注释和文档支持，符合用户偏好
 
 ### 🚀 功能支持
+
 - ✅ 单序列和批次处理
 - ✅ 自回归文本生成
 - ✅ 灵活的配置系统
@@ -30,153 +36,189 @@
 - ✅ 完整的测试覆盖
 - ✅ 详细的性能统计
 
+## 📦 模块结构
+
+```
+tinyai-model-qwen/
+├── src/main/java/io/leavesfly/tinyai/qwen3/
+│   ├── Qwen3Model.java               # 🌍 主模型类，继承 Model
+│   ├── Qwen3Block.java               # 🧩 核心网络块，继承 Block
+│   ├── Qwen3Config.java              # ⚙️ 模型配置类
+│   ├── Qwen3DecoderLayer.java        # 🔄 Transformer 解码器层
+│   ├── Qwen3Attention.java           # 👁️ 多头注意力机制（支持 GQA）
+│   ├── Qwen3MLP.java                 # 🧠 SwiGLU 前馈网络
+│   ├── RMSNorm.java                  # 📊 RMS 归一化层
+│   ├── SiLULayer.java                # ⚡ SiLU 激活函数
+│   ├── RotaryPositionalEmbedding.java # 🔄 旋转位置编码
+│   └── Qwen3Demo.java                # 🎨 完整演示程序
+├── src/test/java/                     # 🧪 单元测试
+│   └── io/leavesfly/tinyai/qwen3/
+│       └── Qwen3Test.java            # ✅ 全面测试用例
+├── doc/                               # 📚 技术文档
+│   ├── Architecture.md               # 架构设计文档
+│   ├── API_Reference.md              # API 参考文档
+│   ├── User_Guide.md                 # 用户使用指南
+│   ├── Development_Guide.md          # 开发指南
+│   └── Deployment_Guide.md           # 部署指南
+└── pom.xml                            # 🛠️ Maven 配置
+
+## 📍 依赖关系
+
+```xml
+<dependencies>
+    <!-- TinyAI 深度学习核心模块 -->
+    <dependency>
+        <groupId>io.leavesfly.tinyai</groupId>
+        <artifactId>tinyai-deeplearning-ml</artifactId>
+    </dependency>
+    
+    <!-- 强化学习模块 -->
+    <dependency>
+        <groupId>io.leavesfly.tinyai</groupId>
+        <artifactId>tinyai-deeplearning-rl</artifactId>
+    </dependency>
+    
+    <!-- GPT 模型依赖 -->
+    <dependency>
+        <groupId>io.leavesfly.tinyai</groupId>
+        <artifactId>tinyai-model-gpt</artifactId>
+    </dependency>
+</dependencies>
+```
+
 ## 🚀 快速开始
 
 ### 环境要求
-- Java 8 或更高版本
-- Maven 3.6+
-- TinyAI框架依赖
 
-### 安装依赖
+- **Java**: 17 或更高版本
+- **Maven**: 3.6+
+- **TinyAI**: 框架依赖
+- **内存**: 推荐 8GB+ （大型模型）
 
-在你的`pom.xml`中添加：
-
-```xml
-<dependency>
-    <groupId>io.leavesfly.tinyai</groupId>
-    <artifactId>tinyai-model-qwen</artifactId>
-    <version>1.0.0</version>
-</dependency>
-```
-
-### 基本使用
+### 💻 基础使用示例
 
 ```java
 import io.leavesfly.tinyai.qwen3.*;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.func.Variable;
 
-public class Qwen3Example {
+public class Qwen3QuickStart {
     public static void main(String[] args) {
-        // 创建小型模型用于测试
-        Qwen3Model model = Qwen3Model.createTinyModel("my_qwen3");
+        // 1. 创建小型 Qwen3 模型（适合测试和学习）
+        Qwen3Model model = Qwen3Model.createTinyModel("demo_qwen3");
         
-        // 准备输入序列
+        // 2. 准备输入数据（token ID 序列）
         NdArray inputIds = NdArray.of(new float[]{1, 15, 25, 35, 45});
         
-        // 执行前向传播
+        // 3. 执行前向传播，获得 logits
         Variable logits = model.forwardWithLogits(new Variable(inputIds));
         System.out.println("输出形状: " + logits.getValue().getShape());
         
-        // 预测下一个token
+        // 4. 预测下一个 token
         int nextToken = model.predictNextToken(inputIds);
-        System.out.println("预测的下一个token: " + nextToken);
+        System.out.println("预测的下一个 token: " + nextToken);
         
-        // 文本生成
+        // 5. 文本生成（自回归生成 20 个 token）
         NdArray generated = model.generate(inputIds, 20);
         System.out.println("生成序列长度: " + generated.getShape().getDimension(1));
         
-        // 查看模型信息
+        // 6. 查看模型信息
         model.printModelInfo();
     }
 }
 ```
 
-### 自定义配置
+### 🔧 预设模型配置
 
 ```java
-// 创建自定义配置
-Qwen3Config customConfig = new Qwen3Config();
-customConfig.setVocabSize(50000);
-customConfig.setHiddenSize(768);
-customConfig.setNumHiddenLayers(12);
-customConfig.setNumAttentionHeads(12);
+// 🐜 超小型模型（适合测试和学习）
+Qwen3Model tinyModel = Qwen3Model.createTinyModel("tiny_qwen3");
+// 配置: 1K 词汇表，256 维度，4 层，8 头
 
-// 使用自定义配置创建模型
-Qwen3Model customModel = new Qwen3Model("custom_qwen3", customConfig);
+// 📈 中型模型（适合实验和原型验证）
+Qwen3Config mediumConfig = new Qwen3Config();
+mediumConfig.setVocabSize(32000);
+mediumConfig.setHiddenSize(768);
+mediumConfig.setNumHiddenLayers(12);
+mediumConfig.setNumAttentionHeads(12);
+Qwen3Model mediumModel = new Qwen3Model("medium_qwen3", mediumConfig);
+
+// 🚀 大型模型（接近生产环境配置）
+Qwen3Config largeConfig = new Qwen3Config();
+largeConfig.setVocabSize(151936);  // Qwen3 官方词汇表大小
+largeConfig.setHiddenSize(4096);
+largeConfig.setNumHiddenLayers(32);
+largeConfig.setNumAttentionHeads(32);
+largeConfig.setNumKeyValueHeads(32); // GQA 支持
+Qwen3Model largeModel = new Qwen3Model("large_qwen3", largeConfig);
 ```
 
-## 📊 架构概览
+## 🔍 技术架构
 
-### 模型架构图
+### 核心组件详解
 
-```mermaid
-graph TD
-    A["输入Token IDs"] --> B["词嵌入层"]
-    B --> C["Transformer Layer 1"]
-    C --> D["Transformer Layer 2"]
-    D --> E["..."]
-    E --> F["Transformer Layer N"]
-    F --> G["RMSNorm"]
-    G --> H["LM Head"]
-    H --> I["输出Logits"]
-    
-    J["Transformer Layer"] --> K["RMSNorm"]
-    K --> L["Multi-Head Attention"]
-    L --> M["残差连接"]
-    M --> N["RMSNorm"]
-    N --> O["SwiGLU MLP"]
-    O --> P["残差连接"]
-```
-
-### 关键组件
-
-| 组件 | 描述 | 特点 |
-|------|------|------|
-| **Qwen3Config** | 模型配置管理 | 完整超参数，支持小型测试配置 |
-| **Qwen3Block** | 核心网络块 | 继承Block，完整Transformer实现 |
-| **Qwen3Model** | 模型封装类 | 继承Model，语言模型头，文本生成 |
-| **Qwen3Attention** | 多头注意力 | GQA、RoPE、因果掩码 |
-| **Qwen3MLP** | 前馈网络 | SwiGLU激活，门控机制 |
-| **RMSNorm** | 归一化层 | 高效的RMS归一化 |
-| **SiLULayer** | 激活函数 | 平滑可微的SiLU激活 |
-| **RotaryPositionalEmbedding** | 位置编码 | 相对位置的RoPE编码 |
-
-## 🎯 技术特性详解
-
-### 分组查询注意力 (GQA)
-
-传统多头注意力为每个查询头配备独立的键值头，而GQA允许多个查询头共享同一组键值头：
-
+#### 1. 🌍 模型封装层 (Qwen3Model)
 ```java
-// 配置GQA
-config.setNumAttentionHeads(32);  // 查询头数
-config.setNumKeyValueHeads(8);    // KV头数，减少内存占用
-
-// 内存节省计算
-float memorySaving = 1.0f - (float)config.getNumKeyValueHeads() / config.getNumAttentionHeads();
-System.out.println("内存节省: " + (memorySaving * 100) + "%");
+// 设计原则：继承 TinyAI 的 Model 类，提供统一的模型管理接口
+public class Qwen3Model extends Model {
+    private Qwen3Config config;
+    private Qwen3Block qwen3Block;
+    private LinearLayer lmHead;  // 语言模型头
+}
 ```
 
-### 旋转位置编码 (RoPE)
-
-RoPE通过旋转变换将位置信息直接编码到注意力计算中：
-
+#### 2. 🧩 核心网络层 (Qwen3Block)
 ```java
-// RoPE参数配置
-config.setRopeTheta(1000000.0f);  // 基础频率
-config.setMaxPositionEmbeddings(32768);  // 支持的最大序列长度
-
-// RoPE的优势：
-// 1. 相对位置编码，自然建模相对距离
-// 2. 外推能力，支持训练长度外的序列
-// 3. 计算效率，直接融入注意力计算
+// 数据流：
+Input(token_ids) 
+    ↓
+EmbedTokens(vocab_size → hidden_size)
+    ↓
+Layer0(hidden_size → hidden_size)
+    ↓
+Layer1(hidden_size → hidden_size)
+    ↓
+...
+    ↓
+LayerN(hidden_size → hidden_size)
+    ↓
+FinalNorm(hidden_size → hidden_size)
+    ↓
+Output(hidden_states)
 ```
 
-### SwiGLU激活函数
+#### 3. 🔄 解码器层 (Qwen3DecoderLayer)
+```
+输入 → LayerNorm → SelfAttention → 残差连接 → LayerNorm → MLP → 残差连接 → 输出
+```
 
-结合了Swish激活和门控机制：
+#### 4. 👁️ 注意力机制 (Qwen3Attention)
 
+**分组查询注意力 (GQA)**:
 ```java
-// SwiGLU计算公式
-// gate = SiLU(gate_proj(x))
-// up = up_proj(x)
-// output = down_proj(gate ⊙ up)
+Q: [batch, num_heads, seq_len, head_dim]
+K: [batch, num_kv_heads, seq_len, head_dim] 
+V: [batch, num_kv_heads, seq_len, head_dim]
 
-// 相比传统FFN的优势：
-// 1. 更强的表达能力
-// 2. 门控机制提供选择性
-// 3. 大模型中表现优异
+// K,V 重复扩展以匹配 Q 的头数
+K_expanded: [batch, num_heads, seq_len, head_dim]
+V_expanded: [batch, num_heads, seq_len, head_dim]
+```
+
+**旋转位置编码 (RoPE)**:
+```java
+// 公式：
+q_m = q * cos(mθ) + rotate(q) * sin(mθ)
+k_n = k * cos(nθ) + rotate(k) * sin(nθ)
+```
+
+#### 5. 🧠 前馈网络 (Qwen3MLP)
+
+**SwiGLU 激活机制**:
+```java
+gate = SiLU(gate_proj(x))
+up = up_proj(x)
+output = down_proj(gate ⊙ up)
 ```
 
 ## 📖 文档
@@ -319,41 +361,3 @@ public void benchmarkModel() {
     System.out.println("平均推理时间: " + avgTime + "ms");
 }
 ```
-
-## 🤝 贡献
-
-欢迎贡献代码和建议！请遵循以下步骤：
-
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
-
-### 开发规范
-
-- **代码规范**: 遵循Java编码规范，使用中文注释
-- **测试覆盖**: 新功能必须包含完整测试
-- **文档更新**: 同步更新相关文档
-- **性能验证**: 确保不引入性能回归
-
-## 📄 许可证
-
-本项目基于 Apache License 2.0 许可证开源 - 查看 [LICENSE](LICENSE) 文件了解详情。
-
-## 🙏 致谢
-
-- **TinyAI框架**: 提供了强大的深度学习基础设施
-- **Qwen团队**: 原始Qwen3模型的设计和实现
-- **开源社区**: 各种优秀的开源项目和工具
-
-## 📞 联系方式
-
-- **作者**: 山泽
-- **项目主页**: [TinyAI Qwen3 Implementation](https://github.com/leavesfly/TinyAI)
-- **问题反馈**: [Issues](https://github.com/leavesfly/TinyAI/issues)
-- **技术讨论**: [Discussions](https://github.com/leavesfly/TinyAI/discussions)
-
----
-
-⭐ 如果这个项目对你有帮助，请给我们一个星标！

@@ -13,8 +13,8 @@
 
     <artifactId>tinyai-model-deepseek</artifactId>
     <packaging>jar</packaging>
-    <name>tinyai-deepseek</name>
-    <description>tinyai-deepseek</description>
+    <name>tinyai-model-deepseek</name>
+    <description>tinyai-model-deepseek</description>
 
     <dependencies>
 

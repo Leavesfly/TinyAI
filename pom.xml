@@ -33,6 +33,7 @@
         <module>tinyai-agent-pattern</module>
         <module>tinyai-agent-evol</module>
         <module>tinyai-agent-manus</module>
+        <module>tinyai-agent-cursor</module>
     </modules>
 
     <properties>

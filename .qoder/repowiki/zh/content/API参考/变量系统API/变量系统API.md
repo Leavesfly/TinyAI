@@ -1,13 +1,10 @@
-# 变量系统API文档
+# 变量系统API
 
 <cite>
 **本文档中引用的文件**
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java)
-- [Function.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Function.java)
-- [Add.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/base/Add.java)
-- [Neg.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/base/Neg.java)
-- [VariableTest.java](file://tinyai-dl-func/src/test/java/io/leavesfly/tinyai/func/VariableTest.java)
-- [BaseOperationsTest.java](file://tinyai-dl-func/src/test/java/io/leavesfly/tinyai/func/base/BaseOperationsTest.java)
+- [Variable.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Variable.java)
+- [Function.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Function.java)
+- [VariableTest.java](file://tinyai-deeplearning-func/src/test/java/io/leavesfly/tinyai/func/VariableTest.java)
 </cite>
 
 ## 目录
@@ -99,11 +96,11 @@ Function --> Variable : "generates"
 ```
 
 **图表来源**
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L1-L654)
-- [Function.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Function.java#L1-L152)
+- [Variable.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L1-L654)
+- [Function.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Function.java#L1-L152)
 
 **章节来源**
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L1-L50)
+- [Variable.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L1-L50)
 
 ## 构造函数详解
 
@@ -178,12 +175,9 @@ SetDefaults --> SetName["设置名称如果有"]
 SetName --> Ready([Variable就绪])
 ```
 
-**图表来源**
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L58-L95)
-
 **章节来源**
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L58-L95)
-- [VariableTest.java](file://tinyai-dl-func/src/test/java/io/leavesfly/tinyai/func/VariableTest.java#L30-L88)
+- [Variable.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L58-L95)
+- [VariableTest.java](file://tinyai-deeplearning-func/src/test/java/io/leavesfly/tinyai/func/VariableTest.java#L30-L88)
 
 ## 核心属性和方法
 
@@ -270,13 +264,13 @@ public Variable setRequireGrad(boolean _requireGrad)
 
 #### isRequireGrad()
 
-查询变量的梯度需求状态。
+获取变量是否需要计算梯度。
 
 ```java
 public boolean isRequireGrad()
 ```
 
-**注意：** Variable类本身没有这个方法，但可以通过构造函数参数推断。
+**返回值：** 返回requireGrad标志位的值，用于判断是否需要计算梯度。
 
 ```mermaid
 sequenceDiagram
@@ -298,12 +292,9 @@ Func->>NdArray : 计算输入梯度
 Var->>Var : 累加梯度到输入变量
 ```
 
-**图表来源**
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L200-L250)
-
 **章节来源**
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L200-L280)
-- [VariableTest.java](file://tinyai-dl-func/src/test/java/io/leavesfly/tinyai/func/VariableTest.java#L86-L132)
+- [Variable.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L200-L280)
+- [VariableTest.java](file://tinyai-deeplearning-func/src/test/java/io/leavesfly/tinyai/func/VariableTest.java#L86-L132)
 
 ## 自动微分机制
 
@@ -372,12 +363,9 @@ ThrowException --> End
 ReturnNull --> End
 ```
 
-**图表来源**
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L111-L148)
-
 **章节来源**
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L111-L180)
-- [VariableTest.java](file://tinyai-dl-func/src/test/java/io/leavesfly/tinyai/func/VariableTest.java#L313-L364)
+- [Variable.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L111-L148)
+- [VariableTest.java](file://tinyai-deeplearning-func/src/test/java/io/leavesfly/tinyai/func/VariableTest.java#L313-L364)
 
 ## 数学运算符重载
 
@@ -642,11 +630,8 @@ Variable --> Function : "creates"
 Function --> Variable : "produces"
 ```
 
-**图表来源**
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L300-L600)
-
 **章节来源**
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L300-L654)
+- [Variable.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L300-L600)
 
 ## 计算图构建
 
@@ -690,13 +675,9 @@ X->>X : 递归调用backward()
 Y->>Y : 递归调用backward()
 ```
 
-**图表来源**
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L111-L148)
-- [Function.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Function.java#L40-L80)
-
 **章节来源**
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L30-L50)
-- [Function.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Function.java#L1-L152)
+- [Variable.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L111-L148)
+- [Function.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Function.java#L40-L80)
 
 ## 使用示例
 
@@ -787,8 +768,8 @@ loss.backward();
 ```
 
 **章节来源**
-- [VariableTest.java](file://tinyai-dl-func/src/test/java/io/leavesfly/tinyai/func/VariableTest.java#L313-L419)
-- [BaseOperationsTest.java](file://tinyai-dl-func/src/test/java/io/leavesfly/tinyai/func/base/BaseOperationsTest.java#L241-L278)
+- [VariableTest.java](file://tinyai-deeplearning-func/src/test/java/io/leavesfly/tinyai/func/VariableTest.java#L313-L419)
+- [BaseOperationsTest.java](file://tinyai-deeplearning-func/src/test/java/io/leavesfly/tinyai/func/base/BaseOperationsTest.java#L241-L278)
 
 ## 性能优化
 
@@ -918,5 +899,5 @@ public boolean checkGradients(Variable var) {
 ```
 
 **章节来源**
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L250-L280)
-- [VariableTest.java](file://tinyai-dl-func/src/test/java/io/leavesfly/tinyai/func/VariableTest.java#L100-L132)
+- [Variable.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L250-L280)
+- [VariableTest.java](file://tinyai-deeplearning-func/src/test/java/io/leavesfly/tinyai/func/VariableTest.java#L100-L132)

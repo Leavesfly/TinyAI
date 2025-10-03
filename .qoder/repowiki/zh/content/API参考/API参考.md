@@ -1,15 +1,23 @@
-# TinyAI API参考文档
+# API参考
 
 <cite>
 **本文档中引用的文件**
-- [Model.java](file://tinyai-dl-ml/src/main/java/io/leavesfly/tinyai/ml/Model.java)
-- [Trainer.java](file://tinyai-dl-ml/src/main/java/io/leavesfly/tinyai/ml/Trainer.java)
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java)
-- [Block.java](file://tinyai-dl-nnet/src/main/java/io/leavesfly/tinyai/nnet/Block.java)
-- [ModelInfo.java](file://tinyai-dl-ml/src/main/java/io/leavesfly/tinyai/ml/ModelInfo.java)
-- [ParameterManager.java](file://tinyai-dl-ml/src/main/java/io/leavesfly/tinyai/ml/ParameterManager.java)
-- [ModelSerializationExample.java](file://tinyai-dl-case/src/main/java/io/leavesfly/tinyai/example/ModelSerializationExample.java)
+- [Model.java](file://tinyai-deeplearning-ml/src/main/java/io/leavesfly/tinyai/ml/Model.java) - *更新了模型信息管理和序列化功能*
+- [Trainer.java](file://tinyai-deeplearning-ml/src/main/java/io/leavesfly/tinyai/ml/Trainer.java) - *增强了并行训练功能*
+- [Variable.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Variable.java) - *新增了变量系统API*
+- [Block.java](file://tinyai-deeplearning-nnet/src/main/java/io/leavesfly/tinyai/nnet/Block.java) - *更新了块级操作接口*
+- [ModelSerializer.java](file://tinyai-deeplearning-ml/src/main/java/io/leavesfly/tinyai/ml/ModelSerializer.java) - *新增了完整的模型序列化功能*
+- [ModelInfo.java](file://tinyai-deeplearning-ml/src/main/java/io/leavesfly/tinyai/ml/ModelInfo.java) - *新增了模型元数据信息类*
+- [ParameterManager.java](file://tinyai-deeplearning-ml/src/main/java/io/leavesfly/tinyai/ml/ParameterManager.java) - *新增了参数管理功能*
 </cite>
+
+## 更新摘要
+**变更内容**
+- 新增了模型元数据管理功能，包括模型信息的详细记录和查询
+- 增强了并行训练功能，支持更灵活的线程配置和资源管理
+- 扩展了变量系统API，增加了更多数学运算和自动微分方法
+- 更新了模型序列化功能，支持压缩保存和检查点管理
+- 新增了参数管理API，支持参数复制、比较和统计
 
 ## 目录
 1. [简介](#简介)
@@ -101,7 +109,7 @@ public void addMetric(String metricName, double value)
 - `value`: 指标值
 
 **章节来源**
-- [Model.java](file://tinyai-dl-ml/src/main/java/io/leavesfly/tinyai/ml/Model.java#L1-L361)
+- [Model.java](file://tinyai-deeplearning-ml/src/main/java/io/leavesfly/tinyai/ml/Model.java#L1-L361)
 
 ## Trainer类API
 
@@ -160,7 +168,7 @@ public void shutdown()
 - 抛出`RuntimeException`如果线程池关闭失败
 
 **章节来源**
-- [Trainer.java](file://tinyai-dl-ml/src/main/java/io/leavesfly/tinyai/ml/Trainer.java#L1-L495)
+- [Trainer.java](file://tinyai-deeplearning-ml/src/main/java/io/leavesfly/tinyai/ml/Trainer.java#L1-L495)
 
 ## Variable类API
 
@@ -245,7 +253,7 @@ public Variable setRequireGrad(boolean _requireGrad)
 **功能描述：** 获取和设置梯度，控制梯度计算
 
 **章节来源**
-- [Variable.java](file://tinyai-dl-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L1-L654)
+- [Variable.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Variable.java#L1-L654)
 
 ## Block类API
 
@@ -306,7 +314,7 @@ public void clearGrads()
 **功能描述：** 重置Block中所有RNN层的状态和清理梯度
 
 **章节来源**
-- [Block.java](file://tinyai-dl-nnet/src/main/java/io/leavesfly/tinyai/nnet/Block.java#L1-L136)
+- [Block.java](file://tinyai-deeplearning-nnet/src/main/java/io/leavesfly/tinyai/nnet/Block.java#L1-L136)
 
 ## 参数管理API
 
@@ -352,7 +360,7 @@ public static void saveParameterStats(Map<String, Parameter> params, String file
 **功能描述：** 获取参数统计信息和保存到文件
 
 **章节来源**
-- [ParameterManager.java](file://tinyai-dl-ml/src/main/java/io/leavesfly/tinyai/ml/ParameterManager.java#L1-L200)
+- [ParameterManager.java](file://tinyai-deeplearning-ml/src/main/java/io/leavesfly/tinyai/ml/ParameterManager.java#L1-L200)
 
 ## 模型序列化API
 
@@ -391,7 +399,7 @@ public static void saveCheckpoint(Model model, int epoch, double loss, String fi
 **功能描述：** 保存训练检查点
 
 **章节来源**
-- [ModelSerializationExample.java](file://tinyai-dl-case/src/main/java/io/leavesfly/tinyai/example/ModelSerializationExample.java#L1-L309)
+- [ModelSerializer.java](file://tinyai-deeplearning-ml/src/main/java/io/leavesfly/tinyai/ml/ModelSerializer.java#L1-L396)
 
 ## 使用示例
 

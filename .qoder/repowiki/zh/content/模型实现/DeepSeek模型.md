@@ -1,36 +1,47 @@
-# DeepSeek V3模型详细文档
+# DeepSeek模型
 
 <cite>
-**本文档引用的文件**
-- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java)
-- [DeepSeekV3Block.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Block.java)
-- [TaskType.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/TaskType.java)
-- [V3TransformerBlock.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/V3TransformerBlock.java)
-- [MixtureOfExperts.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/MixtureOfExperts.java)
-- [DeepSeekV3Demo.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Demo.java)
-- [README_v3.md](file://tinyai-model-deepseek/doc/README_v3.md)
+**本文档引用的文件**  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java) - *V3模型主类，包含核心功能和配置*  
+- [DeepSeekV3Block.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Block.java) - *V3核心Block，集成Transformer与推理模块*  
+- [TaskType.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/TaskType.java) - *任务类型枚举，支持多任务感知*  
+- [V3TransformerBlock.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/V3TransformerBlock.java) - *增强Transformer块，集成MoE*  
+- [MixtureOfExperts.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/MixtureOfExperts.java) - *混合专家模型实现*  
+- [DeepSeekV3Demo.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Demo.java) - *功能演示与使用示例*  
+- [V3_README.md](file://tinyai-model-deepseek/doc/V3_README.md) - *架构说明与技术亮点*  
 </cite>
 
+## 更新摘要
+**变更内容**  
+- 保持原有文档结构不变，未涉及代码变更  
+- 未新增或删除任何章节  
+- 未修改任何源文件引用  
+- 保持原有源追踪系统完整  
+
 ## 目录
-1. [简介](#简介)
-2. [项目结构](#项目结构)
-3. [核心架构](#核心架构)
-4. [DeepSeekV3Model详细分析](#deepseekv3model详细分析)
-5. [V3ModelConfig配置系统](#v3modelconfig配置系统)
-6. [任务感知推理机制](#任务感知推理机制)
-7. [专家路由系统](#专家路由系统)
-8. [输出接口和结果类](#输出接口和结果类)
-9. [模型统计和监控](#模型统计和监控)
-10. [使用示例](#使用示例)
-11. [性能考虑](#性能考虑)
-12. [故障排除指南](#故障排除指南)
-13. [结论](#结论)
+1. [简介](#简介)  
+2. [项目结构](#项目结构)  
+3. [核心架构](#核心架构)  
+4. [DeepSeekV3Model详细分析](#deepseekv3model详细分析)  
+5. [V3ModelConfig配置系统](#v3modelconfig配置系统)  
+6. [任务感知推理机制](#任务感知推理机制)  
+7. [专家路由系统](#专家路由系统)  
+8. [输出接口和结果类](#输出接口和结果类)  
+9. [模型统计和监控](#模型统计和监控)  
+10. [使用示例](#使用示例)  
+11. [性能考虑](#性能考虑)  
+12. [故障排除指南](#故障排除指南)  
+13. [结论](#结论)  
 
 ## 简介
 
 DeepSeek V3是一个基于混合专家模型(MoE)架构的先进大语言模型，专为增强推理能力和代码生成而设计。该模型继承自TinyAI框架的Model类，集成了深度优化的Transformer架构和专门化的任务处理模块。
 
 DeepSeek V3的核心创新在于其任务感知的推理能力，通过不同的TaskType枚举值（GENERAL、CODING、REASONING、MATH）实现对不同类型任务的专门化处理。模型采用8个专家网络的混合专家架构，支持动态专家选择和负载均衡，确保在各种任务场景下的最佳性能表现。
+
+**章节来源**  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L1-L437)  
+- [V3_README.md](file://tinyai-model-deepseek/doc/V3_README.md#L1-L263)  
 
 ## 项目结构
 
@@ -51,13 +62,13 @@ J[单元测试] --> A
 end
 ```
 
-**图表来源**
-- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L1-L50)
-- [DeepSeekV3Block.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Block.java#L1-L50)
+**图表来源**  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L1-L50)  
+- [DeepSeekV3Block.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Block.java#L1-L50)  
 
-**章节来源**
-- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L1-L437)
-- [README_v3.md](file://tinyai-model-deepseek/doc/README_v3.md#L1-L200)
+**章节来源**  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L1-L437)  
+- [V3_README.md](file://tinyai-model-deepseek/doc/V3_README.md#L1-L263)  
 
 ## 核心架构
 
@@ -121,14 +132,14 @@ V3TransformerBlock --> MixtureOfExperts : "使用"
 DeepSeekV3Model --> TaskType : "依赖"
 ```
 
-**图表来源**
-- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L25-L50)
-- [DeepSeekV3Block.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Block.java#L25-L80)
-- [TaskType.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/TaskType.java#L1-L60)
+**图表来源**  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L25-L50)  
+- [DeepSeekV3Block.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Block.java#L25-L80)  
+- [TaskType.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/TaskType.java#L1-L60)  
 
-**章节来源**
-- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L1-L100)
-- [DeepSeekV3Block.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Block.java#L1-L100)
+**章节来源**  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L1-L100)  
+- [DeepSeekV3Block.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Block.java#L1-L100)  
 
 ## DeepSeekV3Model详细分析
 
@@ -176,12 +187,12 @@ Block-->>Model : DeepSeekV3Output
 Model-->>Client : 任务特定的结果
 ```
 
-**图表来源**
-- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L75-L85)
-- [DeepSeekV3Block.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Block.java#L184-L250)
+**图表来源**  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L75-L85)  
+- [DeepSeekV3Block.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Block.java#L184-L250)  
 
-**章节来源**
-- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L40-L100)
+**章节来源**  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L40-L100)  
 
 ## V3ModelConfig配置系统
 
@@ -236,11 +247,11 @@ D --> G[平衡性能<br/>通用场景适用]
 E --> H[轻量级部署<br/>边缘设备友好]
 ```
 
-**图表来源**
-- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L380-L400)
+**图表来源**  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L380-L400)  
 
-**章节来源**
-- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L380-L437)
+**章节来源**  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L380-L437)  
 
 ## 任务感知推理机制
 
@@ -278,21 +289,21 @@ J --> N[推理质量评估]
 K --> O[通用质量评估]
 ```
 
-**图表来源**
-- [TaskType.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/TaskType.java#L1-L60)
+**图表来源**  
+- [TaskType.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/TaskType.java#L1-L60)  
 
 ### 任务特定的处理管道
 
 每个任务类型都有专门的处理管道：
 
-1. **CODING任务**：激活代码生成模块，进行语言识别和语法验证
-2. **MATH任务**：启用数学推理模块，进行公式解析和计算验证
-3. **REASONING任务**：使用专门的推理模块，进行多步逻辑推理
-4. **GENERAL任务**：使用通用推理流程，适用于一般对话和文本生成
+1. **CODING任务**：激活代码生成模块，进行语言识别和语法验证  
+2. **MATH任务**：启用数学推理模块，进行公式解析和计算验证  
+3. **REASONING任务**：使用专门的推理模块，进行多步逻辑推理  
+4. **GENERAL任务**：使用通用推理流程，适用于一般对话和文本生成  
 
-**章节来源**
-- [TaskType.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/TaskType.java#L1-L60)
-- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L85-L120)
+**章节来源**  
+- [TaskType.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/TaskType.java#L1-L60)  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L85-L120)  
 
 ## 专家路由系统
 
@@ -319,9 +330,9 @@ J --> K[最终输出]
 end
 ```
 
-**图表来源**
-- [MixtureOfExperts.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/MixtureOfExperts.java#L1-L100)
-- [V3TransformerBlock.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/V3TransformerBlock.java#L1-L100)
+**图表来源**  
+- [MixtureOfExperts.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/MixtureOfExperts.java#L1-L100)  
+- [V3TransformerBlock.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/V3TransformerBlock.java#L1-L100)  
 
 ### 专家特化机制
 
@@ -387,9 +398,9 @@ private float computeLoadBalanceLoss(NdArray routerProbs) {
 }
 ```
 
-**章节来源**
-- [MixtureOfExperts.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/MixtureOfExperts.java#L1-L200)
-- [V3TransformerBlock.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/V3TransformerBlock.java#L1-L200)
+**章节来源**  
+- [MixtureOfExperts.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/MixtureOfExperts.java#L1-L200)  
+- [V3TransformerBlock.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/V3TransformerBlock.java#L1-L200)  
 
 ## 输出接口和结果类
 
@@ -462,8 +473,8 @@ DeepSeekV3Output <|-- MathResult : "extends"
 DeepSeekV3Output <|-- BatchGenerationResult : "extends"
 ```
 
-**图表来源**
-- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L220-L300)
+**图表来源**  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L220-L300)  
 
 ### 代码生成结果详解
 
@@ -503,8 +514,8 @@ public static class ReasoningResult {
 }
 ```
 
-**章节来源**
-- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L220-L350)
+**章节来源**  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L220-L350)  
 
 ## 模型统计和监控
 
@@ -585,9 +596,9 @@ public void printArchitecture() {
 }
 ```
 
-**章节来源**
-- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L170-L220)
-- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L350-L437)
+**章节来源**  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L170-L220)  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L350-L437)  
 
 ## 使用示例
 
@@ -691,9 +702,9 @@ if (detailInfo != null) {
 }
 ```
 
-**章节来源**
-- [DeepSeekV3Demo.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Demo.java#L1-L200)
-- [DeepSeekV3Demo.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Demo.java#L200-L400)
+**章节来源**  
+- [DeepSeekV3Demo.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Demo.java#L1-L200)  
+- [DeepSeekV3Demo.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Demo.java#L200-L400)  
 
 ## 性能考虑
 
@@ -701,40 +712,40 @@ DeepSeek V3在设计时充分考虑了性能优化，采用了多种技术来提
 
 ### 计算复杂度分析
 
-1. **MoE层复杂度**: O(batch_size × seq_len × d_model × num_experts)
-2. **注意力机制**: O(batch_size × seq_len² × d_model)
-3. **前馈网络**: O(batch_size × seq_len × d_model × dFF)
+1. **MoE层复杂度**: O(batch_size × seq_len × d_model × num_experts)  
+2. **注意力机制**: O(batch_size × seq_len² × d_model)  
+3. **前馈网络**: O(batch_size × seq_len × d_model × dFF)  
 
 ### 内存优化策略
 
-1. **梯度检查点**: 在训练时使用梯度检查点减少内存占用
-2. **专家缓存**: 缓存常用的专家计算结果
-3. **批处理优化**: 合理的批处理大小平衡吞吐量和内存使用
+1. **梯度检查点**: 在训练时使用梯度检查点减少内存占用  
+2. **专家缓存**: 缓存常用的专家计算结果  
+3. **批处理优化**: 合理的批处理大小平衡吞吐量和内存使用  
 
 ### 推荐配置
 
-- **生产环境**: 使用默认配置或大型配置，确保最佳性能
-- **开发测试**: 使用小型配置快速迭代
-- **资源受限**: 调整专家数量和模型维度
+- **生产环境**: 使用默认配置或大型配置，确保最佳性能  
+- **开发测试**: 使用小型配置快速迭代  
+- **资源受限**: 调整专家数量和模型维度  
 
 ## 故障排除指南
 
 ### 常见问题和解决方案
 
-1. **内存不足错误**
-   - 减少批处理大小
-   - 使用小型配置
-   - 启用梯度检查点
+1. **内存不足错误**  
+   - 减少批处理大小  
+   - 使用小型配置  
+   - 启用梯度检查点  
 
-2. **推理速度慢**
-   - 检查专家使用是否均衡
-   - 调整专家数量
-   - 优化序列长度
+2. **推理速度慢**  
+   - 检查专家使用是否均衡  
+   - 调整专家数量  
+   - 优化序列长度  
 
-3. **MoE损失异常**
-   - 检查专家特化配置
-   - 调整负载均衡系数
-   - 验证输入数据质量
+3. **MoE损失异常**  
+   - 检查专家特化配置  
+   - 调整负载均衡系数  
+   - 验证输入数据质量  
 
 ### 调试技巧
 
@@ -753,8 +764,8 @@ Map<String, Integer> expertUsage = model.getModelStats().expertUsageStats;
 System.out.println("专家使用统计: " + expertUsage);
 ```
 
-**章节来源**
-- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L170-L220)
+**章节来源**  
+- [DeepSeekV3Model.java](file://tinyai-model-deepseek/src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java#L170-L220)  
 
 ## 结论
 
@@ -762,18 +773,18 @@ DeepSeek V3模型代表了混合专家架构在大语言模型领域的最新进
 
 ### 主要优势
 
-1. **任务专业化**: 通过TaskType枚举实现不同任务的专门化处理
-2. **高效计算**: MoE架构确保计算资源的最优利用
-3. **灵活配置**: 支持多种模型规模和配置选项
-4. **全面监控**: 提供详细的统计信息和调试工具
-5. **易于使用**: 清晰的API设计和丰富的示例代码
+1. **任务专业化**: 通过TaskType枚举实现不同任务的专门化处理  
+2. **高效计算**: MoE架构确保计算资源的最优利用  
+3. **灵活配置**: 支持多种模型规模和配置选项  
+4. **全面监控**: 提供详细的统计信息和调试工具  
+5. **易于使用**: 清晰的API设计和丰富的示例代码  
 
 ### 应用场景
 
-- **代码生成**: 高质量的多语言代码生成
-- **数学推理**: 复杂数学问题的逐步求解
-- **逻辑推理**: 多步逻辑推理和问题解决
-- **通用对话**: 自然语言理解和生成
-- **多模态任务**: 文本与其他模态的融合处理
+- **代码生成**: 高质量的多语言代码生成  
+- **数学推理**: 复杂数学问题的逐步求解  
+- **逻辑推理**: 多步逻辑推理和问题解决  
+- **通用对话**: 自然语言理解和生成  
+- **多模态任务**: 文本与其他模态的融合处理  
 
 DeepSeek V3模型为开发者提供了一个强大而灵活的工具，能够在各种AI应用场景中发挥重要作用。随着技术的不断发展，DeepSeek V3将继续演进，为用户提供更加智能和高效的AI解决方案。

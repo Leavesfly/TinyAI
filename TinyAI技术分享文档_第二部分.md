@@ -117,18 +117,18 @@ layer.enableLora();
 ```mermaid
 graph LR
     subgraph "原始权重矩阵"
-        A[W ∈ R^(d×k)<br/>原始权重<br/>🔒 冻结]
+        A["W (d×k)<br/>原始权重<br/>冻结"]
     end
     
     subgraph "LoRA分解"
-        B[A ∈ R^(d×r)<br/>下投影矩阵]
-        C[B ∈ R^(r×k)<br/>上投影矩阵]
+        B["A (d×r)<br/>下投影矩阵"]
+        C["B (r×k)<br/>上投影矩阵"]
     end
     
-    D[输入 x] --> A
+    D["输入 x"] --> A
     D --> B
     B --> C
-    A --> E[输出 = Wx + BAx]
+    A --> E["输出 = Wx + BAx"]
     C --> E
     
     style A fill:#ffcdd2

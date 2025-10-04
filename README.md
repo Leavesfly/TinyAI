@@ -43,35 +43,68 @@ TinyAI 是一个完全基于 Java 开发的轻量级深度学习与智能体框�
 ## 🏗️ 模块架构
 
 TinyAI 采用分层模块化架构设计，总共包含16个核心模块：
-
 ```mermaid
 graph TB
-    subgraph "应用层 - 智能体与模型"
-        AgentBase[tinyai-agent-base<br/>基础智能体框架]
-        AgentEvol[tinyai-agent-evol<br/>自进化智能体]
-        AgentMulti[tinyai-agent-multi<br/>多智能体系统]
-        AgentPattern[tinyai-agent-pattern<br/>认知模式库]
-        AgentRAG[tinyai-agent-rag<br/>检索增强生成]
-        
-        ModelGPT[tinyai-model-gpt<br/>GPT模型系列]
-        ModelDeepSeek[tinyai-model-deepseek<br/>DeepSeek模型]
-        ModelQwen[tinyai-model-qwen<br/>Qwen3模型]
-        ModelLoRA[tinyai-model-lora<br/>LoRA微调]
-        ModelMoE[tinyai-model-moe<br/>混合专家模型]
+    subgraph "🎯 应用展示层"
+        App1[智能客服系统]
+        App2[代码生成助手] 
+        App3[文档智能处理]
+        App4[股票预测分析]
     end
     
-    subgraph "框架层 - 深度学习核心"
-        DLCase[tinyai-deeplearning-case<br/>应用示例模块]
-        DLML[tinyai-deeplearning-ml<br/>机器学习核心]
-        DLRL[tinyai-deeplearning-rl<br/>强化学习模块]
-        DLNNet[tinyai-deeplearning-nnet<br/>神经网络层]
+    subgraph "🤖 智能体系统层"
+        Agent1[tinyai-agent-base<br/>基础智能体框架]
+        Agent2[tinyai-agent-rag<br/>检索增强生成]
+        Agent3[tinyai-agent-multi<br/>多智能体协作]
+        Agent4[tinyai-agent-evol<br/>自进化智能体]
+        Agent5[tinyai-agent-pattern<br/>认知模式库]
+        Agent6[tinyai-agent-cursor<br/>AI编码光标]
+        Agent7[tinyai-agent-research<br/>深度研究智能体]
     end
     
-    subgraph "基础层 - 计算引擎"
-        DLFunc[tinyai-deeplearning-func<br/>自动微分引擎]
-        DLNdArr[tinyai-deeplearning-ndarr<br/>多维数组库]
+    subgraph "🧠 大语言模型层"
+        Model1[tinyai-model-gpt<br/>GPT系列模型]
+        Model2[tinyai-model-deepseek<br/>DeepSeek模型]
+        Model3[tinyai-model-qwen<br/>Qwen3模型]
+        Model4[tinyai-model-lora<br/>LoRA微调]
+        Model5[tinyai-model-moe<br/>混合专家模型]
     end
+    
+    subgraph "🚀 深度学习框架层"
+        DL1[tinyai-deeplearning-ml<br/>机器学习核心]
+        DL2[tinyai-deeplearning-nnet<br/>神经网络层]
+        DL3[tinyai-deeplearning-rl<br/>强化学习模块]
+        DL4[tinyai-deeplearning-case<br/>应用示例集]
+    end
+    
+    subgraph "⚡ 计算引擎层"
+        Engine1[tinyai-deeplearning-func<br/>自动微分引擎]
+    end
+    
+    subgraph "🧮 数值基础层"
+        Base1[tinyai-deeplearning-ndarr<br/>多维数组库]
+    end
+    
+    App1 --> Agent1
+    App2 --> Agent6
+    App3 --> Agent2
+    App4 --> Model1
+    
+    Agent1 --> Model1
+    Agent2 --> DL1
+    Agent3 --> DL1
+    
+    Model1 --> DL1
+    Model2 --> DL1
+    Model3 --> DL1
+    
+    DL1 --> DL2
+    DL2 --> Engine1
+    DL3 --> Engine1
+    
+    Engine1 --> Base1
 ```
+
 
 ### 核心模块分布
 

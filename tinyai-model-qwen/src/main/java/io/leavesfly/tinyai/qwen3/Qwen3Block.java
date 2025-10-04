@@ -4,342 +4,294 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Block;
+import io.leavesfly.tinyai.nnet.layer.dnn.LinearLayer;
 import io.leavesfly.tinyai.nnet.layer.embedd.Embedding;
+import io.leavesfly.tinyai.qwen3.layer.Qwen3DecoderLayer;
+import io.leavesfly.tinyai.qwen3.layer.RMSNormLayer;
 
 /**
- * Qwen3核心块
+ * Qwen3Block - Qwen3模型的核心网络块
  * 
- * 实现了完整的Qwen3 Transformer模型的核心部分，包含：
- * 1. 词嵌入层（Token Embedding）
- * 2. 多层Transformer解码器
- * 3. 最终层归一化
+ * 继承自TinyAI的Block类，实现完整的Qwen3 Transformer架构：
+ * 1. 词嵌入层 (Token Embedding)
+ * 2. 多层解码器层 (Decoder Layers)  
+ * 3. 最终层归一化 (Final RMSNorm)
+ * 4. 语言模型头 (LM Head) - 可选
  * 
- * 根据TinyAI架构规范，该类继承自Block类，
- * 提供了模型的主要前向传播逻辑。
+ * 该Block可以单独使用作为特征提取器，也可以配合语言模型头进行文本生成。
  * 
  * @author 山泽
  * @version 1.0
  */
 public class Qwen3Block extends Block {
     
-    /**
-     * 配置信息
-     */
+    /** 配置对象 */
     private Qwen3Config config;
     
-    /**
-     * 词汇表大小
-     */
-    private int vocabSize;
-    
-    /**
-     * 隐藏层维度
-     */
-    private int hiddenSize;
-    
-    /**
-     * Transformer层数
-     */
-    private int numHiddenLayers;
-    
-    /**
-     * 词嵌入层
-     */
+    /** 词嵌入层 */
     private Embedding embedTokens;
     
-    /**
-     * Transformer解码器层数组
-     */
+    /** 解码器层列表 */
     private Qwen3DecoderLayer[] decoderLayers;
     
+    /** 最终归一化层 */
+    private RMSNormLayer finalNorm;
+    
+    /** 是否包含语言模型头 */
+    private boolean withLMHead;
+    
+    /** 语言模型头（词汇表投影层） */
+    private LinearLayer lmHead;
+    
     /**
-     * 最终层归一化
-     */
-    private RMSNorm norm;
-
-    /**
-     * 构造Qwen3核心块
+     * 构造Qwen3Block（不含语言模型头）
      * 
-     * @param name 块名称
-     * @param config 配置信息
+     * @param name Block名称
+     * @param config Qwen3配置
      */
     public Qwen3Block(String name, Qwen3Config config) {
-        super(name, Shape.of(-1, -1), Shape.of(-1, -1, config.getHiddenSize()));
+        this(name, config, false);
+    }
+    
+    /**
+     * 构造Qwen3Block
+     * 
+     * @param name Block名称  
+     * @param config Qwen3配置
+     * @param withLMHead 是否包含语言模型头
+     */
+    public Qwen3Block(String name, Qwen3Config config, boolean withLMHead) {
+        super(name, Shape.of(-1, -1), withLMHead ? 
+              Shape.of(-1, -1, config.getVocabSize()) : 
+              Shape.of(-1, -1, config.getHiddenSize()));
         
         this.config = config;
-        this.vocabSize = config.getVocabSize();
-        this.hiddenSize = config.getHiddenSize();
-        this.numHiddenLayers = config.getNumHiddenLayers();
+        this.withLMHead = withLMHead;
+        
+        // 验证配置
+        config.validate();
         
         init();
     }
-
+    
     @Override
     public void init() {
         if (!alreadyInit) {
-            // 初始化词嵌入层
-            embedTokens = new Embedding(name + "_embed_tokens", vocabSize, hiddenSize);
-            addLayer(embedTokens);
-            
-            // 初始化Transformer解码器层
-            decoderLayers = new Qwen3DecoderLayer[numHiddenLayers];
-            for (int i = 0; i < numHiddenLayers; i++) {
-                decoderLayers[i] = new Qwen3DecoderLayer(name + "_layer_" + i, config, i);
-                addLayer(decoderLayers[i]);
-            }
-            
-            // 初始化最终层归一化
-            norm = new RMSNorm(name + "_norm", hiddenSize, config.getRmsNormEps());
-            addLayer(norm);
-            
+            initializeComponents();
+            addLayersToBlock();
             alreadyInit = true;
         }
     }
-
+    
+    /**
+     * 初始化模型组件
+     */
+    private void initializeComponents() {
+        // 1. 初始化词嵌入层
+        embedTokens = new Embedding(
+            name + "_embed_tokens", 
+            config.getVocabSize(), 
+            config.getHiddenSize()
+        );
+        
+        // 2. 初始化解码器层
+        decoderLayers = new Qwen3DecoderLayer[config.getNumHiddenLayers()];
+        for (int i = 0; i < config.getNumHiddenLayers(); i++) {
+            decoderLayers[i] = new Qwen3DecoderLayer(
+                name + "_layer_" + i, config);
+        }
+        
+        // 3. 初始化最终归一化层
+        finalNorm = new RMSNormLayer(
+            name + "_norm", 
+            config.getHiddenSize(), 
+            config.getRmsNormEps()
+        );
+        
+        // 4. 如果需要，初始化语言模型头
+        if (withLMHead) {
+            lmHead = new LinearLayer(
+                name + "_lm_head", 
+                config.getHiddenSize(), 
+                config.getVocabSize(), 
+                false  // 不使用偏置
+            );
+            
+            // 如果配置要求，共享嵌入权重
+            if (config.isTieWordEmbeddings()) {
+                // 注意：这里需要共享权重的逻辑，暂时跳过
+                // 实际实现中需要将embedTokens的权重与lmHead的权重绑定
+            }
+        }
+    }
+    
+    /**
+     * 将组件添加到Block中
+     */
+    private void addLayersToBlock() {
+        // 添加词嵌入层
+        addLayer(embedTokens);
+        
+        // 添加所有解码器层
+        for (Qwen3DecoderLayer decoderLayer : decoderLayers) {
+            addLayer(decoderLayer);
+        }
+        
+        // 添加最终归一化层
+        addLayer(finalNorm);
+        
+        // 如果有语言模型头，添加它
+        if (withLMHead && lmHead != null) {
+            addLayer(lmHead);
+        }
+    }
+    
     @Override
     public Variable layerForward(Variable... inputs) {
+        if (inputs.length == 0) {
+            throw new IllegalArgumentException("Qwen3Block需要至少一个输入（input_ids）");
+        }
+        
         Variable inputIds = inputs[0];
         
-        // 验证输入
-        NdArray inputData = inputIds.getValue();
-        validateInput(inputData);
+        // 可选的注意力掩码
+        Variable attentionMask = null;
+        if (inputs.length > 1 && inputs[1] != null) {
+            attentionMask = inputs[1];
+        }
         
+        return forwardQwen3(inputIds, attentionMask);
+    }
+    
+    /**
+     * Qwen3前向传播
+     * 
+     * @param inputIds 输入token ID [batch_size, seq_len]
+     * @param attentionMask 注意力掩码 [batch_size, seq_len]  
+     * @return 模型输出
+     */
+    private Variable forwardQwen3(Variable inputIds, Variable attentionMask) {
         // 1. 词嵌入
         Variable hiddenStates = embedTokens.layerForward(inputIds);
         
-        // 2. 通过所有Transformer解码器层
-        for (int i = 0; i < numHiddenLayers; i++) {
-            hiddenStates = decoderLayers[i].layerForward(hiddenStates);
+        // 2. 通过所有解码器层
+        for (Qwen3DecoderLayer decoderLayer : decoderLayers) {
+            if (attentionMask != null) {
+                hiddenStates = decoderLayer.layerForward(hiddenStates, attentionMask);
+            } else {
+                hiddenStates = decoderLayer.layerForward(hiddenStates);
+            }
         }
         
-        // 3. 最终层归一化
-        hiddenStates = norm.layerForward(hiddenStates);
+        // 3. 最终归一化
+        hiddenStates = finalNorm.layerForward(hiddenStates);
+        
+        // 4. 如果有语言模型头，进行最终投影
+        if (withLMHead && lmHead != null) {
+            // 将3D输入重塑为2D进行线性变换
+            NdArray hiddenData = hiddenStates.getValue();
+            Shape hiddenShape = hiddenData.getShape();
+            int batchSize = hiddenShape.getDimension(0);
+            int seqLen = hiddenShape.getDimension(1);
+            int hiddenSize = hiddenShape.getDimension(2);
+            
+            NdArray hidden2D = reshape3DTo2D(hiddenData, batchSize, seqLen, hiddenSize);
+            Variable logits = lmHead.layerForward(new Variable(hidden2D));
+            
+            // 重塑回3D：[batch_size, seq_len, vocab_size]
+            NdArray logits3D = reshape2DTo3D(logits.getValue(), batchSize, seqLen, config.getVocabSize());
+            hiddenStates = new Variable(logits3D);
+        }
         
         return hiddenStates;
     }
     
     /**
-     * 验证输入格式
-     * 
-     * @param inputData 输入数据
+     * 将3D张量重塑为2D
      */
-    private void validateInput(NdArray inputData) {
-        Shape inputShape = inputData.getShape();
+    private NdArray reshape3DTo2D(NdArray input, int batchSize, int seqLen, int hiddenSize) {
+        NdArray result = NdArray.of(Shape.of(batchSize * seqLen, hiddenSize));
         
-        // 输入应该是2D: (batch_size, seq_len) 或 1D: (seq_len)
-        if (inputShape.getDimNum() != 1 && inputShape.getDimNum() != 2) {
-            throw new IllegalArgumentException(
-                "输入维度错误: 期望1D或2D，实际" + inputShape.getDimNum() + "D"
-            );
-        }
-        
-        // 检查token ID范围
-        NdArray flattenedData = inputData.flatten();
-        if (flattenedData instanceof io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) {
-            float[] flatData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) flattenedData).buffer;
-            for (float value : flatData) {
-                int tokenId = (int) value;
-                if (tokenId < 0 || tokenId >= vocabSize) {
-                    throw new IllegalArgumentException(
-                        "Token ID超出范围: " + tokenId + "，期朝范围[0, " + (vocabSize - 1) + "]"
-                    );
-                }
-            }
-        } else {
-            // 对于非 NdArrayCpu 实现，使用 get 方法检查
-            Shape shape = inputData.getShape();
-            for (int i = 0; i < shape.size(); i++) {
-                int[] indices = convertLinearToMultiIndex(i, shape);
-                float value = inputData.get(indices);
-                int tokenId = (int) value;
-                if (tokenId < 0 || tokenId >= vocabSize) {
-                    throw new IllegalArgumentException(
-                        "Token ID超出范围: " + tokenId + "，期朝范围[0, " + (vocabSize - 1) + "]"
-                    );
+        for (int b = 0; b < batchSize; b++) {
+            for (int s = 0; s < seqLen; s++) {
+                for (int h = 0; h < hiddenSize; h++) {
+                    result.set(input.get(b, s, h), b * seqLen + s, h);
                 }
             }
         }
+        
+        return result;
     }
     
     /**
-     * 将线性索引转换为多维索引
-     * 
-     * @param linearIndex 线性索引
-     * @param shape 数组形状
-     * @return 多维索引数组
+     * 将2D张量重塑为3D
      */
-    private int[] convertLinearToMultiIndex(int linearIndex, Shape shape) {
-        int[] indices = new int[shape.getDimNum()];
-        int remaining = linearIndex;
+    private NdArray reshape2DTo3D(NdArray input, int batchSize, int seqLen, int lastDim) {
+        NdArray result = NdArray.of(Shape.of(batchSize, seqLen, lastDim));
         
-        for (int i = shape.getDimNum() - 1; i >= 0; i--) {
-            indices[i] = remaining % shape.getDimension(i);
-            remaining /= shape.getDimension(i);
+        for (int b = 0; b < batchSize; b++) {
+            for (int s = 0; s < seqLen; s++) {
+                for (int d = 0; d < lastDim; d++) {
+                    result.set(input.get(b * seqLen + s, d), b, s, d);
+                }
+            }
         }
         
-        return indices;
+        return result;
     }
     
     /**
-     * 获取模型统计信息
+     * 计算模型参数数量
      * 
-     * @return 模型统计信息字符串
+     * @return 参数总数
      */
-    public String getModelStats() {
-        StringBuilder stats = new StringBuilder();
-        stats.append("=== Qwen3Block 模型统计 ===\n");
-        stats.append("配置信息:\n");
-        stats.append("  - 词汇表大小: ").append(vocabSize).append("\n");
-        stats.append("  - 隐藏层维度: ").append(hiddenSize).append("\n");
-        stats.append("  - Transformer层数: ").append(numHiddenLayers).append("\n");
-        stats.append("  - 注意力头数: ").append(config.getNumAttentionHeads()).append("\n");
-        stats.append("  - KV头数: ").append(config.getNumKeyValueHeads()).append("\n");
-        stats.append("  - 中间层维度: ").append(config.getIntermediateSize()).append("\n");
-        stats.append("  - 最大位置编码: ").append(config.getMaxPositionEmbeddings()).append("\n");
-        
-        // 计算参数量
-        long totalParams = getTotalParameters();
-        stats.append("参数统计:\n");
-        stats.append("  - 总参数量: ").append(formatNumber(totalParams)).append("\n");
-        stats.append("  - 嵌入参数: ").append(formatNumber((long) vocabSize * hiddenSize)).append("\n");
-        
-        return stats.toString();
-    }
-    
-    /**
-     * 计算总参数量
-     * 
-     * @return 总参数量
-     */
-    private long getTotalParameters() {
-        long total = 0;
+    public long countParameters() {
+        long totalParams = 0;
         
         // 词嵌入参数
-        total += (long) vocabSize * hiddenSize;
+        totalParams += (long) config.getVocabSize() * config.getHiddenSize();
         
-        // 每层的参数量
-        long layerParams = calculateLayerParameters();
-        total += layerParams * numHiddenLayers;
-        
-        // 最终层归一化参数
-        total += hiddenSize;
-        
-        return total;
-    }
-    
-    /**
-     * 计算单层参数量
-     * 
-     * @return 单层参数量
-     */
-    private long calculateLayerParameters() {
+        // 每个解码器层的参数
         long layerParams = 0;
         
         // 注意力层参数
-        layerParams += (long) hiddenSize * hiddenSize; // Q投影
-        layerParams += (long) hiddenSize * config.getNumKeyValueHeads() * config.getKvHeadDim(); // K投影  
-        layerParams += (long) hiddenSize * config.getNumKeyValueHeads() * config.getKvHeadDim(); // V投影
-        layerParams += (long) hiddenSize * hiddenSize; // O投影
+        int hiddenSize = config.getHiddenSize();
+        int numHeads = config.getNumAttentionHeads();
+        int numKVHeads = config.getNumKeyValueHeads();
+        int headDim = config.getHeadDim();
+        
+        layerParams += (long) hiddenSize * numHeads * headDim;     // query projection
+        layerParams += (long) hiddenSize * numKVHeads * headDim;   // key projection  
+        layerParams += (long) hiddenSize * numKVHeads * headDim;   // value projection
+        layerParams += (long) numHeads * headDim * hiddenSize;     // output projection
         
         // MLP层参数
-        layerParams += (long) hiddenSize * config.getIntermediateSize(); // gate_proj
-        layerParams += (long) hiddenSize * config.getIntermediateSize(); // up_proj
-        layerParams += (long) config.getIntermediateSize() * hiddenSize; // down_proj
+        int intermediateSize = config.getIntermediateSize();
+        layerParams += (long) hiddenSize * intermediateSize;       // gate projection
+        layerParams += (long) hiddenSize * intermediateSize;       // up projection
+        layerParams += (long) intermediateSize * hiddenSize;       // down projection
         
-        // 层归一化参数 (2个RMSNorm)
-        layerParams += hiddenSize * 2;
+        // RMSNorm参数
+        layerParams += hiddenSize * 2;                             // input + post_attention norm
         
-        return layerParams;
-    }
-    
-    /**
-     * 格式化数字显示
-     * 
-     * @param number 数字
-     * @return 格式化后的字符串
-     */
-    private String formatNumber(long number) {
-        if (number >= 1_000_000_000) {
-            return String.format("%.2fB", number / 1_000_000_000.0);
-        } else if (number >= 1_000_000) {
-            return String.format("%.2fM", number / 1_000_000.0);
-        } else if (number >= 1_000) {
-            return String.format("%.2fK", number / 1_000.0);
-        } else {
-            return String.valueOf(number);
-        }
-    }
-    
-    /**
-     * 打印模型架构信息
-     */
-    public void printArchitecture() {
-        System.out.println(getModelStats());
+        totalParams += layerParams * config.getNumHiddenLayers();
         
-        System.out.println("架构结构:");
-        System.out.println("  Input (token_ids)");
-        System.out.println("  └─ EmbedTokens: " + vocabSize + " -> " + hiddenSize);
+        // 最终归一化参数
+        totalParams += hiddenSize;
         
-        for (int i = 0; i < numHiddenLayers; i++) {
-            System.out.println("  └─ Layer" + i + ":");
-            System.out.println("     ├─ RMSNorm");
-            System.out.println("     ├─ SelfAttention (" + config.getNumAttentionHeads() + " heads)");
-            System.out.println("     ├─ RMSNorm"); 
-            System.out.println("     └─ MLP (" + hiddenSize + " -> " + config.getIntermediateSize() + " -> " + hiddenSize + ")");
+        // 语言模型头参数
+        if (withLMHead && !config.isTieWordEmbeddings()) {
+            totalParams += (long) hiddenSize * config.getVocabSize();
         }
         
-        System.out.println("  └─ FinalNorm");
-        System.out.println("  Output: (" + hiddenSize + ",)");
+        return totalParams;
     }
     
-    // Getters
-    
-    /**
-     * 获取配置信息
-     * 
-     * @return 配置信息
-     */
-    public Qwen3Config getConfig() {
-        return config;
-    }
-    
-    /**
-     * 获取词嵌入层
-     * 
-     * @return 词嵌入层
-     */
-    public Embedding getEmbedTokens() {
-        return embedTokens;
-    }
-    
-    /**
-     * 获取解码器层数组
-     * 
-     * @return 解码器层数组
-     */
-    public Qwen3DecoderLayer[] getDecoderLayers() {
-        return decoderLayers;
-    }
-    
-    /**
-     * 获取最终层归一化
-     * 
-     * @return 最终层归一化
-     */
-    public RMSNorm getNorm() {
-        return norm;
-    }
-    
-    /**
-     * 获取指定索引的解码器层
-     * 
-     * @param index 层索引
-     * @return 解码器层
-     */
-    public Qwen3DecoderLayer getLayer(int index) {
-        if (index < 0 || index >= numHiddenLayers) {
-            throw new IndexOutOfBoundsException("层索引超出范围: " + index);
-        }
-        return decoderLayers[index];
-    }
+    // Getter方法
+    public Qwen3Config getConfig() { return config; }
+    public Embedding getEmbedTokens() { return embedTokens; }
+    public Qwen3DecoderLayer[] getDecoderLayers() { return decoderLayers; }
+    public RMSNormLayer getFinalNorm() { return finalNorm; }
+    public boolean isWithLMHead() { return withLMHead; }
+    public LinearLayer getLmHead() { return lmHead; }
 }

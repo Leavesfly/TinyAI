@@ -3,279 +3,241 @@ package io.leavesfly.tinyai.qwen3;
 /**
  * Qwen3模型配置类
  * 
- * 该类定义了Qwen3大语言模型的所有关键配置参数，
- * 包括词汇表大小、模型维度、层数、注意力头数等。
- * 
  * @author 山泽
  * @version 1.0
  */
 public class Qwen3Config {
     
-    /**
-     * 词汇表大小
-     */
-    private int vocabSize = 151936;
+    /** 词汇表大小 */
+    private int vocabSize = 32000;
     
-    /**
-     * 隐藏层维度
-     */
-    private int hiddenSize = 4096;
+    /** 隐藏层维度 */
+    private int hiddenSize = 2048;
     
-    /**
-     * Transformer层数
-     */
-    private int numHiddenLayers = 32;
+    /** 前馈网络中间层维度 */
+    private int intermediateSize = 5632;
     
-    /**
-     * 注意力头数
-     */
-    private int numAttentionHeads = 32;
+    /** 隐藏层数量 */
+    private int numHiddenLayers = 24;
     
-    /**
-     * KV头数（用于分组查询注意力GQA）
-     */
-    private int numKeyValueHeads = 32;
+    /** 注意力头数量 */
+    private int numAttentionHeads = 16;
     
-    /**
-     * 前馈网络中间层维度
-     */
-    private int intermediateSize = 11008;
+    /** 键值头数量（用于分组查询注意力） */
+    private int numKeyValueHeads = 16;
     
-    /**
-     * 最大位置编码长度
-     */
-    private int maxPositionEmbeddings = 32768;
+    /** 最大位置编码长度 */
+    private int maxPositionEmbeddings = 8192;
     
-    /**
-     * RMSNorm的epsilon值
-     */
-    private float rmsNormEps = 1e-6f;
+    /** RoPE基础频率 */
+    private double ropeTheta = 10000.0;
     
-    /**
-     * RoPE的theta参数
-     */
-    private float ropeTheta = 1000000.0f;
+    /** RMSNorm的epsilon */
+    private double rmsNormEps = 1e-6;
     
-    /**
-     * 注意力dropout概率
-     */
-    private float attentionDropout = 0.0f;
+    /** 填充标记ID */
+    private int padTokenId = 0;
     
-    /**
-     * 隐藏层dropout概率
-     */
-    private float hiddenDropout = 0.0f;
+    /** 开始标记ID */
+    private int bosTokenId = 1;
     
-    /**
-     * 是否使用KV缓存
-     */
-    private boolean useCache = true;
+    /** 结束标记ID */
+    private int eosTokenId = 2;
     
-    /**
-     * padding token id
-     */
-    private int padTokenId = 151643;
+    /** 是否共享输入输出嵌入权重 */
+    private boolean tieWordEmbeddings = false;
     
-    /**
-     * 开始token id
-     */
-    private int bosTokenId = 151643;
-    
-    /**
-     * 结束token id
-     */
-    private int eosTokenId = 151645;
-
-    /**
-     * 默认构造函数
-     */
+    /** 默认构造函数 */
     public Qwen3Config() {
     }
-
+    
     /**
-     * 创建小型配置用于演示和测试
-     * 
-     * @return 小型Qwen3配置
+     * 创建小型配置用于测试
      */
-    public static Qwen3Config createTinyConfig() {
+    public static Qwen3Config createSmallConfig() {
         Qwen3Config config = new Qwen3Config();
         config.vocabSize = 1000;
-        config.hiddenSize = 256;
+        config.hiddenSize = 512;
+        config.intermediateSize = 1024;
         config.numHiddenLayers = 4;
         config.numAttentionHeads = 8;
         config.numKeyValueHeads = 8;
-        config.intermediateSize = 512;
-        config.maxPositionEmbeddings = 512;
+        config.maxPositionEmbeddings = 1024;
         return config;
     }
-
-    // Getters and Setters
     
+    /**
+     * 创建演示配置
+     */
+    public static Qwen3Config createDemoConfig() {
+        Qwen3Config config = new Qwen3Config();
+        config.vocabSize = 32000;
+        config.hiddenSize = 512;
+        config.intermediateSize = 1024;
+        config.numHiddenLayers = 6;
+        config.numAttentionHeads = 8;
+        config.numKeyValueHeads = 8;
+        config.maxPositionEmbeddings = 2048;
+        return config;
+    }
+    
+    // Getter和Setter方法
     public int getVocabSize() {
         return vocabSize;
     }
-
+    
     public void setVocabSize(int vocabSize) {
         this.vocabSize = vocabSize;
     }
-
+    
     public int getHiddenSize() {
         return hiddenSize;
     }
-
+    
     public void setHiddenSize(int hiddenSize) {
         this.hiddenSize = hiddenSize;
     }
-
-    public int getNumHiddenLayers() {
-        return numHiddenLayers;
-    }
-
-    public void setNumHiddenLayers(int numHiddenLayers) {
-        this.numHiddenLayers = numHiddenLayers;
-    }
-
-    public int getNumAttentionHeads() {
-        return numAttentionHeads;
-    }
-
-    public void setNumAttentionHeads(int numAttentionHeads) {
-        this.numAttentionHeads = numAttentionHeads;
-    }
-
-    public int getNumKeyValueHeads() {
-        return numKeyValueHeads;
-    }
-
-    public void setNumKeyValueHeads(int numKeyValueHeads) {
-        this.numKeyValueHeads = numKeyValueHeads;
-    }
-
+    
     public int getIntermediateSize() {
         return intermediateSize;
     }
-
+    
     public void setIntermediateSize(int intermediateSize) {
         this.intermediateSize = intermediateSize;
     }
-
+    
+    public int getNumHiddenLayers() {
+        return numHiddenLayers;
+    }
+    
+    public void setNumHiddenLayers(int numHiddenLayers) {
+        this.numHiddenLayers = numHiddenLayers;
+    }
+    
+    public int getNumAttentionHeads() {
+        return numAttentionHeads;
+    }
+    
+    public void setNumAttentionHeads(int numAttentionHeads) {
+        this.numAttentionHeads = numAttentionHeads;
+    }
+    
+    public int getNumKeyValueHeads() {
+        return numKeyValueHeads;
+    }
+    
+    public void setNumKeyValueHeads(int numKeyValueHeads) {
+        this.numKeyValueHeads = numKeyValueHeads;
+    }
+    
     public int getMaxPositionEmbeddings() {
         return maxPositionEmbeddings;
     }
-
+    
     public void setMaxPositionEmbeddings(int maxPositionEmbeddings) {
         this.maxPositionEmbeddings = maxPositionEmbeddings;
     }
-
-    public float getRmsNormEps() {
-        return rmsNormEps;
-    }
-
-    public void setRmsNormEps(float rmsNormEps) {
-        this.rmsNormEps = rmsNormEps;
-    }
-
-    public float getRopeTheta() {
+    
+    public double getRopeTheta() {
         return ropeTheta;
     }
-
-    public void setRopeTheta(float ropeTheta) {
+    
+    public void setRopeTheta(double ropeTheta) {
         this.ropeTheta = ropeTheta;
     }
-
-    public float getAttentionDropout() {
-        return attentionDropout;
+    
+    public double getRmsNormEps() {
+        return rmsNormEps;
     }
-
-    public void setAttentionDropout(float attentionDropout) {
-        this.attentionDropout = attentionDropout;
+    
+    public void setRmsNormEps(double rmsNormEps) {
+        this.rmsNormEps = rmsNormEps;
     }
-
-    public float getHiddenDropout() {
-        return hiddenDropout;
-    }
-
-    public void setHiddenDropout(float hiddenDropout) {
-        this.hiddenDropout = hiddenDropout;
-    }
-
-    public boolean isUseCache() {
-        return useCache;
-    }
-
-    public void setUseCache(boolean useCache) {
-        this.useCache = useCache;
-    }
-
+    
     public int getPadTokenId() {
         return padTokenId;
     }
-
+    
     public void setPadTokenId(int padTokenId) {
         this.padTokenId = padTokenId;
     }
-
+    
     public int getBosTokenId() {
         return bosTokenId;
     }
-
+    
     public void setBosTokenId(int bosTokenId) {
         this.bosTokenId = bosTokenId;
     }
-
+    
     public int getEosTokenId() {
         return eosTokenId;
     }
-
+    
     public void setEosTokenId(int eosTokenId) {
         this.eosTokenId = eosTokenId;
     }
-
+    
+    public boolean isTieWordEmbeddings() {
+        return tieWordEmbeddings;
+    }
+    
+    public void setTieWordEmbeddings(boolean tieWordEmbeddings) {
+        this.tieWordEmbeddings = tieWordEmbeddings;
+    }
+    
     /**
-     * 获取每个注意力头的维度
-     * 
-     * @return 注意力头维度
+     * 计算头维度
      */
     public int getHeadDim() {
         return hiddenSize / numAttentionHeads;
     }
-
+    
     /**
-     * 获取KV头维度
-     * 
-     * @return KV头维度
-     */
-    public int getKvHeadDim() {
-        return hiddenSize / numKeyValueHeads;
-    }
-
-    /**
-     * 获取注意力头分组数（用于分组查询注意力）
-     * 
-     * @return 分组数
+     * 计算键值组数
      */
     public int getNumKeyValueGroups() {
         return numAttentionHeads / numKeyValueHeads;
     }
-
+    
+    /**
+     * 验证配置有效性
+     */
+    public void validate() {
+        if (hiddenSize % numAttentionHeads != 0) {
+            throw new IllegalArgumentException(
+                String.format("hiddenSize (%d) 必须能被 numAttentionHeads (%d) 整除", 
+                    hiddenSize, numAttentionHeads));
+        }
+        
+        if (numAttentionHeads % numKeyValueHeads != 0) {
+            throw new IllegalArgumentException(
+                String.format("numAttentionHeads (%d) 必须能被 numKeyValueHeads (%d) 整除", 
+                    numAttentionHeads, numKeyValueHeads));
+        }
+        
+        if (vocabSize <= 0) {
+            throw new IllegalArgumentException("vocabSize 必须大于 0");
+        }
+        
+        if (hiddenSize <= 0) {
+            throw new IllegalArgumentException("hiddenSize 必须大于 0");
+        }
+        
+        if (numHiddenLayers <= 0) {
+            throw new IllegalArgumentException("numHiddenLayers 必须大于 0");
+        }
+    }
+    
     @Override
     public String toString() {
-        return "Qwen3Config{" +
-                "vocabSize=" + vocabSize +
-                ", hiddenSize=" + hiddenSize +
-                ", numHiddenLayers=" + numHiddenLayers +
-                ", numAttentionHeads=" + numAttentionHeads +
-                ", numKeyValueHeads=" + numKeyValueHeads +
-                ", intermediateSize=" + intermediateSize +
-                ", maxPositionEmbeddings=" + maxPositionEmbeddings +
-                ", rmsNormEps=" + rmsNormEps +
-                ", ropeTheta=" + ropeTheta +
-                ", attentionDropout=" + attentionDropout +
-                ", hiddenDropout=" + hiddenDropout +
-                ", useCache=" + useCache +
-                ", padTokenId=" + padTokenId +
-                ", bosTokenId=" + bosTokenId +
-                ", eosTokenId=" + eosTokenId +
-                '}';
+        return String.format(
+            "Qwen3Config{vocabSize=%d, hiddenSize=%d, intermediateSize=%d, " +
+            "numHiddenLayers=%d, numAttentionHeads=%d, numKeyValueHeads=%d, " +
+            "maxPositionEmbeddings=%d, ropeTheta=%.1f, rmsNormEps=%.0e}",
+            vocabSize, hiddenSize, intermediateSize, numHiddenLayers,
+            numAttentionHeads, numKeyValueHeads, maxPositionEmbeddings,
+            ropeTheta, rmsNormEps
+        );
     }
 }

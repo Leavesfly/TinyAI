@@ -2,9 +2,9 @@
 
 <cite>
 **本文档中引用的文件**
-- [Variable.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Variable.java)
-- [Function.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Function.java)
-- [VariableTest.java](file://tinyai-deeplearning-func/src/test/java/io/leavesfly/tinyai/func/VariableTest.java)
+- [Variable.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Variable.java) - *更新了构造函数和反向传播实现*
+- [Function.java](file://tinyai-deeplearning-func/src/main/java/io/leavesfly/tinyai/func/Function.java) - *计算图构建基础*
+- [VariableTest.java](file://tinyai-deeplearning-func/src/test/java/io/leavesfly/tinyai/func/VariableTest.java) - *包含反向传播测试用例*
 </cite>
 
 ## 目录

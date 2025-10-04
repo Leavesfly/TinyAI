@@ -1,4 +1,4 @@
-# AI编码光标智能体
+# AI编码光标
 
 <cite>
 **本文档中引用的文件**
@@ -12,7 +12,16 @@
 - [CursorDemo.java](file://tinyai-agent-cursor/src/main/java/io/leavesfly/tinyai/agent/cursor/CursorDemo.java)
 - [README.md](file://tinyai-agent-cursor/README.md)
 - [pom.xml](file://tinyai-agent-cursor/pom.xml)
+- [TinyAI-Cursor-API参考文档.md](file://tinyai-agent-cursor/doc/TinyAI-Cursor-API参考文档.md)
+- [TinyAI-Cursor使用指南.md](file://tinyai-agent-cursor/doc/TinyAI-Cursor使用指南.md)
+- [TinyAI-Cursor技术架构文档.md](file://tinyai-agent-cursor/doc/TinyAI-Cursor技术架构文档.md)
 </cite>
+
+## 更新摘要
+- **更新内容**：根据最新的代码变更，更新了文档结构，新增了API参考文档、使用指南和技术架构文档的引用
+- **新增章节**：无
+- **移除章节**：删除了旧版文档引用
+- **源码追踪系统更新**：更新了文档引用文件列表，增加了新的文档文件
 
 ## 目录
 1. [简介](#简介)

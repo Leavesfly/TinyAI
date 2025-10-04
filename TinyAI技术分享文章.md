@@ -39,7 +39,10 @@ graph TB
     end
     
     Agent --> ML
+    Agent --> RL
+    Agent --> Model
     Model --> ML
+    Model --> RL
     ML --> NN
     NN --> Func
     Func --> NdArray

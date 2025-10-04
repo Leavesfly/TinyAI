@@ -1,8 +1,8 @@
-# TinyAI：Java生态中的深度学习与智能体全栈框架
+# TinyAI：全栈式轻量级AI框架
 
 > 山泽 著
 > 
-> 一个完全用Java实现的轻量级AI框架，从零开始构建深度学习的"乐高积木"
+> 一个完全用Java实现的全栈式轻量级AI框架，TinyAI IS ALL YOUR NEED。
 
 ## 前言：为什么要用Java做AI？
 
@@ -22,30 +22,64 @@
 
 ```mermaid
 graph TB
-    subgraph "应用层 - 智能大脑"
-        Agent[智能体系统<br/>🤖 会思考、会学习的AI助手]
-        Model[大语言模型<br/>🧠 GPT、DeepSeek、Qwen等]
+    subgraph "🎯 应用展示层"
+        App1[智能客服系统]
+        App2[代码生成助手] 
+        App3[文档智能处理]
+        App4[股票预测分析]
     end
     
-    subgraph "框架层 - 深度学习引擎"
-        ML[机器学习核心<br/>⚙️ 训练器、优化器、评估器]
-        NN[神经网络层<br/>🔗 各种神经网络组件]
-        RL[强化学习<br/>🎯 智能决策与策略学习]
+    subgraph "🤖 智能体系统层"
+        Agent1[tinyai-agent-base<br/>基础智能体框架]
+        Agent2[tinyai-agent-rag<br/>检索增强生成]
+        Agent3[tinyai-agent-multi<br/>多智能体协作]
+        Agent4[tinyai-agent-evol<br/>自进化智能体]
+        Agent5[tinyai-agent-pattern<br/>认知模式库]
+        Agent6[tinyai-agent-cursor<br/>AI编码光标]
+        Agent7[tinyai-agent-research<br/>深度研究智能体]
     end
     
-    subgraph "计算层 - 数学基础"
-        Func[自动微分引擎<br/>📊 自动计算梯度的魔法]
-        NdArray[多维数组库<br/>🔢 高效的数值计算基石]
+    subgraph "🧠 大语言模型层"
+        Model1[tinyai-model-gpt<br/>GPT系列模型]
+        Model2[tinyai-model-deepseek<br/>DeepSeek模型]
+        Model3[tinyai-model-qwen<br/>Qwen3模型]
+        Model4[tinyai-model-lora<br/>LoRA微调]
+        Model5[tinyai-model-moe<br/>混合专家模型]
     end
     
-    Agent --> ML
-    Agent --> RL
-    Agent --> Model
-    Model --> ML
-    Model --> RL
-    ML --> NN
-    NN --> Func
-    Func --> NdArray
+    subgraph "🚀 深度学习框架层"
+        DL1[tinyai-deeplearning-ml<br/>机器学习核心]
+        DL2[tinyai-deeplearning-nnet<br/>神经网络层]
+        DL3[tinyai-deeplearning-rl<br/>强化学习模块]
+        DL4[tinyai-deeplearning-case<br/>应用示例集]
+    end
+    
+    subgraph "⚡ 计算引擎层"
+        Engine1[tinyai-deeplearning-func<br/>自动微分引擎]
+    end
+    
+    subgraph "🧮 数值基础层"
+        Base1[tinyai-deeplearning-ndarr<br/>多维数组库]
+    end
+    
+    App1 --> Agent1
+    App2 --> Agent6
+    App3 --> Agent2
+    App4 --> Model1
+    
+    Agent1 --> Model1
+    Agent2 --> DL1
+    Agent3 --> DL1
+    
+    Model1 --> DL1
+    Model2 --> DL1
+    Model3 --> DL1
+    
+    DL1 --> DL2
+    DL2 --> Engine1
+    DL3 --> Engine1
+    
+    Engine1 --> Base1
 ```
 
 这种分层设计的好处显而易见：
@@ -92,6 +126,26 @@ NdArray result = a.add(b)           // 矩阵加法
 - **内存优化**：智能的内存管理，避免不必要的数据拷贝
 
 ### 2.2 自动微分：深度学习的"魔法"核心
+
+
+```mermaid
+graph TD
+    subgraph "计算图构建过程"
+        A[输入变量 x, y] --> B[前向计算: z = x*y + x²]
+        B --> C[构建计算图]
+        C --> D[反向传播: 自动计算梯度]
+        D --> E[输出: dz/dx, dz/dy]
+    end
+    
+    subgraph "技术实现特点"
+        F[动态计算图] --> G[支持条件分支]
+        F --> H[支持循环结构]
+        I[递归与迭代] --> J[深度网络支持]
+        I --> K[栈溢出避免]
+        L[梯度累积] --> M[复杂网络支持]
+        L --> N[参数共享处理]
+    end
+```
 
 自动微分是深度学习的核心技术。TinyAI的`Variable`类通过计算图自动追踪操作历史：
 
@@ -150,6 +204,40 @@ public void backward() {
 ### 3.1 Layer与Block：组合的艺术
 
 TinyAI采用了类似PyTorch的Layer-Block设计模式：
+
+```mermaid
+graph TB
+    subgraph "Layer层设计"
+        L1[LinearLayer<br/>线性变换]
+        L2[ReluLayer<br/>激活函数]
+        L3[DropoutLayer<br/>正则化]
+        L4[BatchNormLayer<br/>批标准化]
+    end
+    
+    subgraph "Block块组合"
+        B1[SequentialBlock<br/>顺序连接]
+        B2[ResidualBlock<br/>残差连接]
+        B3[AttentionBlock<br/>注意力机制]
+        B4[TransformerBlock<br/>Transformer块]
+    end
+    
+    subgraph "Model模型封装"
+        M1[参数管理]
+        M2[训练/推理模式]
+        M3[序列化支持]
+        M4[状态控制]
+    end
+    
+    L1 --> B1
+    L2 --> B1
+    L3 --> B1
+    L4 --> B1
+    
+    B1 --> M1
+    B2 --> M1
+    B3 --> M1
+    B4 --> M1
+```
 
 ```java
 // Layer：最基础的计算单元
@@ -251,7 +339,57 @@ public class LstmLayer extends Layer {
 
 ## 第四章：训练的艺术——从数据到智慧
 
+```mermaid
+graph LR
+    A[🧮 NdArray<br/>数值计算基石] --> B[⚡ Variable<br/>自动微分节点]
+    B --> C[🧱 Layer/Block<br/>网络构建积木]
+    C --> D[🎯 Model<br/>模型生命周期]
+    D --> E[🚀 Trainer<br/>智能训练器]
+    
+    A1[高效计算] -.-> A
+    A2[内存优化] -.-> A
+    A3[广播机制] -.-> A
+    
+    B1[计算图构建] -.-> B
+    B2[梯度自动传播] -.-> B
+    B3[动态求导] -.-> B
+    
+    C1[组合模式] -.-> C
+    C2[模块化设计] -.-> C
+    C3[层次抽象] -.-> C
+    
+    D1[参数管理] -.-> D
+    D2[状态控制] -.-> D
+    D3[序列化支持] -.-> D
+    
+    E1[并行训练] -.-> E
+    E2[智能监控] -.-> E
+    E3[自动优化] -.-> E
+```
+
 ### 4.1 Trainer：训练过程的指挥家
+
+```mermaid
+sequenceDiagram
+    participant Data as 📊 数据集
+    participant Model as 🧠 模型
+    participant Loss as 📉 损失函数
+    participant Optimizer as ⚡ 优化器
+    participant Monitor as 📈 监控器
+    
+    Note over Data, Monitor: 训练循环开始
+    Data->>Model: 批次数据输入
+    Model->>Model: 前向传播
+    Model->>Loss: 预测结果
+    Loss->>Loss: 计算损失值
+    Loss->>Model: 反向传播
+    Model->>Optimizer: 梯度信息
+    Optimizer->>Model: 参数更新
+    Model->>Monitor: 训练指标
+    Monitor->>Monitor: 记录和可视化
+    
+    Note over Data, Monitor: 自动重复直至收敛
+```
 
 TinyAI的`Trainer`类封装了完整的训练流程，让复杂的训练过程变得简单：
 
@@ -528,6 +666,25 @@ public class GroupedQueryAttention extends Layer {
 
 ### 6.1 智能体的层次化设计
 
+```mermaid
+graph TB
+    subgraph "智能体能力金字塔"
+        L1[🧠 自我进化<br/>反思学习、策略优化]
+        L2[🤝 协作交互<br/>多智能体、任务分工]
+        L3[🔍 知识检索<br/>RAG系统、语义搜索]
+        L4[💭 推理思考<br/>认知模式、逻辑推导]
+        L5[👁️ 感知理解<br/>输入处理、意图识别]
+        L6[🛠️ 基础能力<br/>记忆管理、工具调用]
+        
+        L6 --> L5
+        L5 --> L4
+        L4 --> L3
+        L3 --> L2
+        L2 --> L1
+    end
+```
+
+
 TinyAI的智能体系统从最基础的Agent开始，逐步发展到具备自我进化能力的高级智能体：
 
 ```java
@@ -571,6 +728,29 @@ public class AdvancedAgent extends BaseAgent {
 ```
 
 ### 6.2 自进化智能体：具备学习能力的AI
+
+```mermaid
+graph TD
+    subgraph "自进化循环"
+        A[🎯 执行任务] --> B[📊 收集经验]
+        B --> C[🧠 分析反思]
+        C --> D[⚡ 策略优化]
+        D --> E[📈 能力提升]
+        E --> A
+    end
+    
+    subgraph "学习机制"
+        F[经验缓冲区<br/>Experience Buffer]
+        G[性能分析器<br/>Performance Analyzer]
+        H[策略优化器<br/>Strategy Optimizer]
+        I[知识图谱<br/>Knowledge Graph]
+    end
+    
+    B --> F
+    C --> G
+    D --> H
+    E --> I
+```
 
 自进化智能体是TinyAI的一个重要创新，它能够从经验中学习并优化自己的行为：
 
@@ -625,41 +805,45 @@ public class SelfEvolvingAgent extends AdvancedAgent {
 
 TinyAI支持多个智能体之间的协作，实现复杂任务的分工合作：
 
-```java
-public class MultiAgentSystem {
-    private Map<String, Agent> agents;
-    private MessageBus messageBus;
-    private TaskCoordinator coordinator;
-    
-    public void executeCollaborativeTask(ComplexTask task) {
-        // 1. 任务分解
-        List<SubTask> subTasks = coordinator.decomposeTask(task);
+```mermaid
+graph TB
+    subgraph "协作场景示例：技术文档生成"
+        Task[📝 文档生成任务] --> Coordinator[🎯 任务协调器]
         
-        // 2. 智能体分配
-        Map<Agent, SubTask> assignments = coordinator.assignTasks(subTasks, agents.values());
+        Coordinator --> Agent1[📚 研究专家<br/>收集技术资料]
+        Coordinator --> Agent2[✍️ 写作专家<br/>内容创作编辑] 
+        Coordinator --> Agent3[🎨 设计专家<br/>图表可视化]
+        Coordinator --> Agent4[🔍 审核专家<br/>质量把控]
         
-        // 3. 并行执行
-        List<Future<SubTaskResult>> futures = new ArrayList<>();
-        for (Map.Entry<Agent, SubTask> entry : assignments.entrySet()) {
-            Future<SubTaskResult> future = executorService.submit(() -> {
-                return entry.getKey().executeSubTask(entry.getValue());
-            });
-            futures.add(future);
-        }
+        Agent1 --> Aggregator[🔄 结果聚合器]
+        Agent2 --> Aggregator
+        Agent3 --> Aggregator
+        Agent4 --> Aggregator
         
-        // 4. 结果聚合
-        List<SubTaskResult> results = futures.stream()
-            .map(this::getFutureResult)
-            .collect(Collectors.toList());
-        
-        TaskResult finalResult = coordinator.aggregateResults(results);
-    }
-}
+        Aggregator --> Result[📄 最终文档]
+    end
 ```
 
 ### 6.4 RAG系统：知识检索增强生成
 
 TinyAI实现了完整的RAG（Retrieval-Augmented Generation）系统：
+
+```mermaid
+graph LR
+    subgraph "知识准备阶段"
+        A[📄 原始文档] --> B[✂️ 文档切片]
+        B --> C[🔢 向量化编码]
+        C --> D[🗃️ 向量数据库]
+    end
+    
+    subgraph "问答生成阶段"
+        E[❓ 用户问题] --> F[🔍 语义检索]
+        F --> D
+        D --> G[📋 相关上下文]
+        G --> H[🤖 大模型生成]
+        H --> I[💬 智能回答]
+    end
+```
 
 ```java
 public class RAGSystem {
@@ -884,64 +1068,25 @@ public class Variable {
 
 ### 8.1 MNIST手写数字识别
 
-让我们通过一个完整的例子来展示TinyAI的使用：
+**问题场景**：经典的计算机视觉入门任务
 
-```java
-public class MnistExample {
-    public static void main(String[] args) {
-        // 1. 数据准备
-        DataSet trainData = loadMnistData("train");
-        DataSet testData = loadMnistData("test");
-        
-        // 2. 模型构建
-        SequentialBlock network = new SequentialBlock("mnist_net");
-        network.addLayer(new FlattenLayer("flatten"))
-               .addLayer(new LinearLayer("fc1", 784, 256))
-               .addLayer(new ReluLayer("relu1"))
-               .addLayer(new DropoutLayer("dropout1", 0.2f))
-               .addLayer(new LinearLayer("fc2", 256, 128))
-               .addLayer(new ReluLayer("relu2"))
-               .addLayer(new DropoutLayer("dropout2", 0.2f))
-               .addLayer(new LinearLayer("fc3", 128, 10))
-               .addLayer(new SoftmaxLayer("softmax"));
-        
-        Model model = new Model("mnist_classifier", network);
-        
-        // 3. 训练配置
-        Trainer trainer = new Trainer(
-            epochs: 50,
-            monitor: new TrainingMonitor(),
-            evaluator: new AccuracyEvaluator(),
-            useParallel: true,
-            threadCount: 4
-        );
-        
-        // 4. 开始训练
-        trainer.init(trainData, model, 
-                    new CrossEntropyLoss(), 
-                    new AdamOptimizer(0.001f));
-        
-        trainer.train(true);  // 显示训练曲线
-        
-        // 5. 模型评估
-        float testAccuracy = trainer.evaluate(testData);
-        System.out.printf("测试准确率: %.2f%%\n", testAccuracy * 100);
-        
-        // 6. 模型保存
-        ModelSerializer.save(model, "mnist_model.json");
-    }
-}
+```mermaid
+graph LR
+    A[📸 手写数字图像<br/>28x28像素] --> B[🔄 数据预处理<br/>归一化/展平]
+    B --> C[🧠 MLP网络<br/>784→128→64→10]
+    C --> D[📊 Softmax输出<br/>10个类别概率]
+    D --> E[🎯 预测结果<br/>0-9数字]
 ```
 
-**运行结果：**
+**训练效果可视化**：
 ```
-Epoch 1/50: Loss=2.156, Accuracy=0.234
-Epoch 5/50: Loss=0.845, Accuracy=0.756
-Epoch 10/50: Loss=0.423, Accuracy=0.867
-...
-Epoch 50/50: Loss=0.089, Accuracy=0.973
-测试准确率: 97.3%
-模型已保存到: mnist_model.json
+📈 训练进度展示
+Epoch 1/50:  Loss=2.156, Accuracy=23.4% ████▒▒▒▒▒▒
+Epoch 10/50: Loss=0.845, Accuracy=75.6% ████████▒▒
+Epoch 25/50: Loss=0.234, Accuracy=89.3% █████████▒
+Epoch 50/50: Loss=0.089, Accuracy=97.3% ██████████
+
+🎯 最终测试准确率: 97.3%
 ```
 
 ### 8.2 智能客服系统
@@ -985,6 +1130,41 @@ public class IntelligentCustomerService {
 ```
 
 ### 8.3 股票预测系统
+
+```mermaid
+graph LR
+    subgraph "数据输入"
+        D1[📈 股价历史]
+        D2[📊 技术指标]
+        D3[📰 新闻情感]
+        D4[💹 市场数据]
+    end
+    
+    subgraph "模型处理"
+        M1[🔄 LSTM网络<br/>时序建模]
+        M2[🧠 注意力机制<br/>重要信息聚焦]
+        M3[🎯 全连接层<br/>最终预测]
+    end
+    
+    subgraph "输出结果"
+        O1[📈 价格预测]
+        O2[📊 置信区间]
+        O3[⚠️ 风险评估]
+    end
+    
+    D1 --> M1
+    D2 --> M1
+    D3 --> M2
+    D4 --> M2
+    
+    M1 --> M3
+    M2 --> M3
+    
+    M3 --> O1
+    M3 --> O2
+    M3 --> O3
+```
+
 
 ```java
 public class StockPredictionSystem {

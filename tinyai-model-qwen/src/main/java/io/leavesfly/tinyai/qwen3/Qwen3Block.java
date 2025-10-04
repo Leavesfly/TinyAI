@@ -6,7 +6,7 @@ import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Block;
 import io.leavesfly.tinyai.nnet.layer.dnn.LinearLayer;
 import io.leavesfly.tinyai.nnet.layer.embedd.Embedding;
-import io.leavesfly.tinyai.qwen3.layer.Qwen3DecoderLayer;
+import io.leavesfly.tinyai.qwen3.block.Qwen3DecoderBlock;
 import io.leavesfly.tinyai.qwen3.layer.RMSNormLayer;
 
 /**
@@ -31,8 +31,8 @@ public class Qwen3Block extends Block {
     /** 词嵌入层 */
     private Embedding embedTokens;
     
-    /** 解码器层列表 */
-    private Qwen3DecoderLayer[] decoderLayers;
+    /** 解码器块列表 */
+    private Qwen3DecoderBlock[] decoderBlocks;
     
     /** 最终归一化层 */
     private RMSNormLayer finalNorm;
@@ -94,10 +94,10 @@ public class Qwen3Block extends Block {
             config.getHiddenSize()
         );
         
-        // 2. 初始化解码器层
-        decoderLayers = new Qwen3DecoderLayer[config.getNumHiddenLayers()];
+        // 2. 初始化解码器块
+        decoderBlocks = new Qwen3DecoderBlock[config.getNumHiddenLayers()];
         for (int i = 0; i < config.getNumHiddenLayers(); i++) {
-            decoderLayers[i] = new Qwen3DecoderLayer(
+            decoderBlocks[i] = new Qwen3DecoderBlock(
                 name + "_layer_" + i, config);
         }
         
@@ -132,9 +132,9 @@ public class Qwen3Block extends Block {
         // 添加词嵌入层
         addLayer(embedTokens);
         
-        // 添加所有解码器层
-        for (Qwen3DecoderLayer decoderLayer : decoderLayers) {
-            addLayer(decoderLayer);
+        // 添加所有解码器块
+        for (Qwen3DecoderBlock decoderBlock : decoderBlocks) {
+            addLayer(decoderBlock);
         }
         
         // 添加最终归一化层
@@ -174,12 +174,12 @@ public class Qwen3Block extends Block {
         // 1. 词嵌入
         Variable hiddenStates = embedTokens.layerForward(inputIds);
         
-        // 2. 通过所有解码器层
-        for (Qwen3DecoderLayer decoderLayer : decoderLayers) {
+        // 2. 通过所有解码器块
+        for (Qwen3DecoderBlock decoderBlock : decoderBlocks) {
             if (attentionMask != null) {
-                hiddenStates = decoderLayer.layerForward(hiddenStates, attentionMask);
+                hiddenStates = decoderBlock.layerForward(hiddenStates, attentionMask);
             } else {
-                hiddenStates = decoderLayer.layerForward(hiddenStates);
+                hiddenStates = decoderBlock.layerForward(hiddenStates);
             }
         }
         
@@ -251,7 +251,7 @@ public class Qwen3Block extends Block {
         // 词嵌入参数
         totalParams += (long) config.getVocabSize() * config.getHiddenSize();
         
-        // 每个解码器层的参数
+        // 每个解码器块的参数
         long layerParams = 0;
         
         // 注意力层参数
@@ -290,7 +290,7 @@ public class Qwen3Block extends Block {
     // Getter方法
     public Qwen3Config getConfig() { return config; }
     public Embedding getEmbedTokens() { return embedTokens; }
-    public Qwen3DecoderLayer[] getDecoderLayers() { return decoderLayers; }
+    public Qwen3DecoderBlock[] getDecoderBlocks() { return decoderBlocks; }
     public RMSNormLayer getFinalNorm() { return finalNorm; }
     public boolean isWithLMHead() { return withLMHead; }
     public LinearLayer getLmHead() { return lmHead; }

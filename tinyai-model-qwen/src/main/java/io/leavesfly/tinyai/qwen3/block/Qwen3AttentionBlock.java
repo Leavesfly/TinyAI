@@ -1,14 +1,15 @@
-package io.leavesfly.tinyai.qwen3.layer;
+package io.leavesfly.tinyai.qwen3.block;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.Layer;
+import io.leavesfly.tinyai.nnet.Block;
 import io.leavesfly.tinyai.nnet.layer.dnn.LinearLayer;
 import io.leavesfly.tinyai.qwen3.Qwen3Config;
+import io.leavesfly.tinyai.qwen3.layer.RotaryPositionalEmbeddingLayer;
 
 /**
- * Qwen3多头注意力机制层
+ * Qwen3多头注意力机制块
  * 
  * 支持分组查询注意力 (Grouped Query Attention, GQA)：
  * - 查询头数量通常大于键值头数量
@@ -22,7 +23,7 @@ import io.leavesfly.tinyai.qwen3.Qwen3Config;
  * @author 山泽
  * @version 1.0
  */
-public class Qwen3AttentionLayer extends Layer {
+public class Qwen3AttentionBlock extends Block {
     
     /** 配置对象 */
     private Qwen3Config config;
@@ -55,12 +56,12 @@ public class Qwen3AttentionLayer extends Layer {
     private RotaryPositionalEmbeddingLayer rotary;
     
     /**
-     * 构造Qwen3注意力层
+     * 构造Qwen3注意力块
      * 
-     * @param name 层名称
+     * @param name 块名称
      * @param config Qwen3配置
      */
-    public Qwen3AttentionLayer(String name, Qwen3Config config) {
+    public Qwen3AttentionBlock(String name, Qwen3Config config) {
         super(name, Shape.of(-1, -1, config.getHiddenSize()), 
               Shape.of(-1, -1, config.getHiddenSize()));
         
@@ -95,7 +96,7 @@ public class Qwen3AttentionLayer extends Layer {
             queryProjection = new LinearLayer(
                 name + "_query", hiddenSize, numHeads * headDim, false);
             keyProjection = new LinearLayer(
-                name + "_key", hiddenSize, numKeyValueHeads * headDim, false);
+                name + "_key", hiddenSize, numKeyValueHeads * headDim, false);  
             valueProjection = new LinearLayer(
                 name + "_value", hiddenSize, numKeyValueHeads * headDim, false);
             outputProjection = new LinearLayer(
@@ -104,6 +105,13 @@ public class Qwen3AttentionLayer extends Layer {
             // 初始化旋转位置编码
             rotary = new RotaryPositionalEmbeddingLayer(
                 name + "_rope", headDim, config.getMaxPositionEmbeddings(), config.getRopeTheta());
+            
+            // 添加到Block的层列表中
+            addLayer(queryProjection);
+            addLayer(keyProjection);
+            addLayer(valueProjection);
+            addLayer(outputProjection);
+            addLayer(rotary);
             
             alreadyInit = true;
         }

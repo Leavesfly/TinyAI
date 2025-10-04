@@ -1,13 +1,14 @@
-package io.leavesfly.tinyai.qwen3.layer;
+package io.leavesfly.tinyai.qwen3.block;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.Layer;
+import io.leavesfly.tinyai.nnet.Block;
 import io.leavesfly.tinyai.qwen3.Qwen3Config;
+import io.leavesfly.tinyai.qwen3.layer.RMSNormLayer;
 
 /**
- * Qwen3解码器层
+ * Qwen3解码器块
  * 
  * 包含自注意力机制、前馈网络和残差连接：
  * 1. 输入 -> RMSNorm -> 自注意力 -> 残差连接
@@ -21,7 +22,7 @@ import io.leavesfly.tinyai.qwen3.Qwen3Config;
  * @author 山泽
  * @version 1.0
  */
-public class Qwen3DecoderLayer extends Layer {
+public class Qwen3DecoderBlock extends Block {
     
     /** 配置对象 */
     private Qwen3Config config;
@@ -29,11 +30,11 @@ public class Qwen3DecoderLayer extends Layer {
     /** 隐藏维度 */
     private int hiddenSize;
     
-    /** 自注意力层 */
-    private Qwen3AttentionLayer selfAttention;
+    /** 自注意力块 */
+    private Qwen3AttentionBlock selfAttention;
     
-    /** MLP前馈网络 */
-    private Qwen3MLPLayer mlp;
+    /** MLP前馈网络块 */
+    private Qwen3MLPBlock mlp;
     
     /** 输入层归一化（注意力前） */
     private RMSNormLayer inputLayerNorm;
@@ -42,12 +43,12 @@ public class Qwen3DecoderLayer extends Layer {
     private RMSNormLayer postAttentionLayerNorm;
     
     /**
-     * 构造Qwen3解码器层
+     * 构造Qwen3解码器块
      * 
-     * @param name 层名称
+     * @param name 块名称
      * @param config Qwen3配置
      */
-    public Qwen3DecoderLayer(String name, Qwen3Config config) {
+    public Qwen3DecoderBlock(String name, Qwen3Config config) {
         super(name, Shape.of(-1, -1, config.getHiddenSize()), 
               Shape.of(-1, -1, config.getHiddenSize()));
         
@@ -60,17 +61,23 @@ public class Qwen3DecoderLayer extends Layer {
     @Override
     public void init() {
         if (!alreadyInit) {
-            // 初始化自注意力层
-            selfAttention = new Qwen3AttentionLayer(name + "_attention", config);
+            // 初始化自注意力块
+            selfAttention = new Qwen3AttentionBlock(name + "_attention", config);
             
-            // 初始化MLP层
-            mlp = new Qwen3MLPLayer(name + "_mlp", config);
+            // 初始化MLP块
+            mlp = new Qwen3MLPBlock(name + "_mlp", config);
             
             // 初始化RMSNorm层
             inputLayerNorm = new RMSNormLayer(
                 name + "_input_layernorm", hiddenSize, config.getRmsNormEps());
             postAttentionLayerNorm = new RMSNormLayer(
                 name + "_post_attention_layernorm", hiddenSize, config.getRmsNormEps());
+            
+            // 添加到Block的层列表中
+            addLayer(inputLayerNorm);
+            addLayer(selfAttention);
+            addLayer(postAttentionLayerNorm);
+            addLayer(mlp);
             
             alreadyInit = true;
         }
@@ -90,11 +97,11 @@ public class Qwen3DecoderLayer extends Layer {
     }
     
     /**
-     * 解码器层前向传播
+     * 解码器块前向传播
      * 
      * @param hiddenStates 输入隐藏状态 [batch_size, seq_len, hidden_size]
      * @param attentionMask 注意力掩码
-     * @return 解码器层输出
+     * @return 解码器块输出
      */
     private Variable forwardDecoder(Variable hiddenStates, Variable attentionMask) {
         // 保存残差连接的输入
@@ -185,16 +192,16 @@ public class Qwen3DecoderLayer extends Layer {
     }
     
     /**
-     * 获取自注意力层
+     * 获取自注意力块
      */
-    public Qwen3AttentionLayer getSelfAttention() {
+    public Qwen3AttentionBlock getSelfAttention() {
         return selfAttention;
     }
     
     /**
-     * 获取MLP层
+     * 获取MLP块
      */
-    public Qwen3MLPLayer getMlp() {
+    public Qwen3MLPBlock getMlp() {
         return mlp;
     }
     

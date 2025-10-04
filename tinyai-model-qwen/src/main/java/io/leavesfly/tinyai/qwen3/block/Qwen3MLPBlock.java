@@ -1,14 +1,14 @@
-package io.leavesfly.tinyai.qwen3.layer;
+package io.leavesfly.tinyai.qwen3.block;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.Layer;
+import io.leavesfly.tinyai.nnet.Block;
 import io.leavesfly.tinyai.nnet.layer.dnn.LinearLayer;
 import io.leavesfly.tinyai.qwen3.Qwen3Config;
 
 /**
- * Qwen3 多层感知机 (MLP) 层
+ * Qwen3 多层感知机 (MLP) 块
  * 
  * 使用SwiGLU激活函数的前馈网络：
  * MLP(x) = down_proj(SwiGLU(gate_proj(x), up_proj(x)))
@@ -26,7 +26,7 @@ import io.leavesfly.tinyai.qwen3.Qwen3Config;
  * @author 山泽
  * @version 1.0
  */
-public class Qwen3MLPLayer extends Layer {
+public class Qwen3MLPBlock extends Block {
     
     /** 配置对象 */
     private Qwen3Config config;
@@ -47,12 +47,12 @@ public class Qwen3MLPLayer extends Layer {
     private LinearLayer downProjection;
     
     /**
-     * 构造Qwen3 MLP层
+     * 构造Qwen3 MLP块
      * 
-     * @param name 层名称
+     * @param name 块名称
      * @param config Qwen3配置
      */
-    public Qwen3MLPLayer(String name, Qwen3Config config) {
+    public Qwen3MLPBlock(String name, Qwen3Config config) {
         super(name, Shape.of(-1, -1, config.getHiddenSize()), 
               Shape.of(-1, -1, config.getHiddenSize()));
         
@@ -73,6 +73,11 @@ public class Qwen3MLPLayer extends Layer {
                 name + "_up", hiddenSize, intermediateSize, false);
             downProjection = new LinearLayer(
                 name + "_down", intermediateSize, hiddenSize, false);
+            
+            // 添加到Block的层列表中
+            addLayer(gateProjection);
+            addLayer(upProjection);  
+            addLayer(downProjection);
             
             alreadyInit = true;
         }

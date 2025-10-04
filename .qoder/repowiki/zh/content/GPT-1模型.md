@@ -241,18 +241,18 @@ Note over Input,Output : Post-LayerNorm结构
 
 ```mermaid
 flowchart TD
-A[隐藏状态<br/>(batch, seq_len, hidden)] --> B[线性投影]
-B --> C{是否共享权重?}
-C --> |是| D[使用Token嵌入权重]
-C --> |否| E[独立输出权重]
-D --> F[添加偏置]
-E --> F
-F --> G[词汇表Logits<br/>(batch, seq_len, vocab)]
-subgraph "权重共享优势"
-H[减少参数量]
-I[提高训练稳定性]
-J[改善泛化能力]
-end
+    A["隐藏状态<br/>(batch, seq_len, hidden)"] --> B["线性投影"]
+    B --> C{"是否共享权重?"}
+    C --> |是| D["使用Token嵌入权重"]
+    C --> |否| E["独立输出权重"]
+    D --> F["添加偏置"]
+    E --> F
+    F --> G["词汇表Logits<br/>(batch, seq_len, vocab)"]
+    subgraph "权重共享优势"
+        H["减少参数量"]
+        I["提高训练稳定性"]
+        J["改善泛化能力"]
+    end
 ```
 
 **图表来源**

@@ -2,7 +2,7 @@
 
 > 山泽 著
 > 
-> 一个完全用Java实现的全栈式轻量级AI框架，TinyAI IS ALL YOUR NEED。
+> 一个完全用Java实现的全栈式轻量级AI框架，TinyAI IS ALL YOU NEED。
 
 ## 前言：为什么要用Java做AI？
 

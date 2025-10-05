@@ -4,6 +4,7 @@ package io.leavesfly.tinyai.func;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.util.Config;
 
+import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -15,7 +16,7 @@ import java.util.Objects;
  * 它定义了前向传播和反向传播的接口，并负责构建计算图。
  * 每个函数实例都维护输入变量和输出变量之间的关系。
  */
-public abstract class Function {
+public abstract class Function implements Serializable {
 
     /**
      * 函数的输入变量数组

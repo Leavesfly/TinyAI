@@ -18,10 +18,10 @@ import io.leavesfly.tinyai.util.Config;
 
 /**
  * 手写数字识别示例
- * 
+ *
  * @author leavesfly
  * @version 0.01
- * 
+ * <p>
  * 使用MLP神经网络对MNIST手写数字数据集进行分类训练的示例。
  * 展示了完整的深度学习训练流程：
  * 1. 定义超参数
@@ -35,7 +35,7 @@ public class MnistMlpExam {
 
     /**
      * 主函数，执行MNIST手写数字识别训练
-     * 
+     *
      * @param args 命令行参数
      */
     public static void main(String[] args) {
@@ -64,6 +64,7 @@ public class MnistMlpExam {
         trainer.init(mnistDataSet, model, loss, optimizer);
 
         //===3,模型训练==
+//        trainer.configureParallelTraining(true, 10); //可开启并行训练
         trainer.train(true);
 
         //===4,效果评估==

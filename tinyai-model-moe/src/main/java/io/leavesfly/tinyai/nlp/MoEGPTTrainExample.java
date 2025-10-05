@@ -28,7 +28,7 @@ import java.util.Random;
  * @author leavesfly
  * @version 0.01
  */
-public class MoEGPTExample {
+public class MoEGPTTrainExample {
 
     /**
      * 训练文本数据

@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.nnet;
+package io.leavesfly.tinyai.util;
 
 
 import io.leavesfly.tinyai.func.Function;

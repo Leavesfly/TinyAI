@@ -3,7 +3,7 @@ package io.leavesfly.tinyai.example.regress;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.Plot;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.nnet.Uml;
+import io.leavesfly.tinyai.util.Uml;
 
 
 import java.util.Random;

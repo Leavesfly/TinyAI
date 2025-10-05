@@ -19,7 +19,7 @@
     <dependencies>
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
-            <artifactId>tinyai-agent-base</artifactId>
+            <artifactId>tinyai-agent-context</artifactId>
         </dependency>
 
         <!-- 测试依赖 -->

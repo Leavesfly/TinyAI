@@ -13,8 +13,8 @@
 
     <artifactId>tinyai-deeplearning-ndarr</artifactId>
     <packaging>jar</packaging>
-    <name>tinyai-ndarr</name>
-    <description>TinyAI项目的N维数组处理模块</description>
+    <name>tinyai-deeplearning-ndarr</name>
+    <description>tinyai-deeplearning-ndarr</description>
 
     <dependencies>
 

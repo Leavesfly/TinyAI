@@ -13,8 +13,8 @@
 
     <artifactId>tinyai-deeplearning-rl</artifactId>
     <packaging>jar</packaging>
-    <name>tinyai-rl</name>
-    <description>tinyai-rl</description>
+    <name>tinyai-deeplearning-rl</name>
+    <description>tinyai-deeplearning-rl</description>
 
     <dependencies>
         <!-- 依赖tinyai-ml 模块 -->

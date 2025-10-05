@@ -13,8 +13,8 @@
 
     <artifactId>tinyai-deeplearning-func</artifactId>
     <packaging>jar</packaging>
-    <name>tinyai-dl-func</name>
-    <description>TinyAI项目的函数计算模块</description>
+    <name>tinyai-deeplearning-func</name>
+    <description>tinyai-deeplearning-func</description>
 
     <dependencies>
         <!-- 依赖tinyai-ndarr模块 -->

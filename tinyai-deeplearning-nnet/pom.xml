@@ -13,8 +13,8 @@
 
     <artifactId>tinyai-deeplearning-nnet</artifactId>
     <packaging>jar</packaging>
-    <name>tinyai-nnet</name>
-    <description>tinyai-nnet</description>
+    <name>tinyai-deeplearning-nnet</name>
+    <description>tinyai-deeplearning-nnet</description>
 
     <dependencies>
         <!-- 依赖tinyai-ndarr模块 -->

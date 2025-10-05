@@ -13,8 +13,8 @@
 
     <artifactId>tinyai-deeplearning-case</artifactId>
     <packaging>jar</packaging>
-    <name>tinyai-case</name>
-    <description>tinyai-example for case</description>
+    <name>tinyai-deeplearning-case</name>
+    <description>tinyai-deeplearning-case</description>
 
     <dependencies>
 

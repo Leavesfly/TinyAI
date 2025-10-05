@@ -38,6 +38,9 @@ public class Sigmoid extends Function {
      */
     @Override
     public List<NdArray> backward(NdArray yGrad) {
+        if (inputs == null || inputs.length == 0) {
+            throw new RuntimeException("Sigmoid backward called without proper forward initialization. This usually happens when using new Sigmoid().backward() instead of reusing a forward-passed instance.");
+        }
         NdArray x = inputs[0].getValue();
         NdArray sigmoidX = x.sigmoid();
         return Collections.singletonList(yGrad.mul(sigmoidX).mul(NdArray.ones(sigmoidX.getShape()).sub(sigmoidX)));

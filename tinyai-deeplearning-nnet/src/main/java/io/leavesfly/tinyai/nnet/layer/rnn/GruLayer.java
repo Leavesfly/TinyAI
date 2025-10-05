@@ -273,11 +273,11 @@ public class GruLayer extends Layer {
             // 第一次前向传播
             // 计算更新门
             x_z = x.linear(w_z, b_z);
-            zGate = new SigmoidLayer("").call(x_z);
+            zGate = x_z.sigmoid();
 
             // 计算重置门
             x_r = x.linear(w_r, b_r);
-            rGate = new SigmoidLayer("").call(x_r);
+            rGate = x_r.sigmoid();
 
             // 计算候选状态
             x_h = x.linear(w_h, b_h);
@@ -299,12 +299,12 @@ public class GruLayer extends Layer {
             // 计算更新门
             x_z = x.linear(w_z, b_z);
             h_z = state.linear(u_z, null);
-            zGate = new SigmoidLayer("").call(x_z.add(h_z));
+            zGate = x_z.add(h_z).sigmoid();
 
             // 计算重置门
             x_r = x.linear(w_r, b_r);
             h_r = state.linear(u_r, null);
-            rGate = new SigmoidLayer("").call(x_r.add(h_r));
+            rGate = x_r.add(h_r).sigmoid();
 
             // 重置前一状态
             resetState = rGate.mul(state);

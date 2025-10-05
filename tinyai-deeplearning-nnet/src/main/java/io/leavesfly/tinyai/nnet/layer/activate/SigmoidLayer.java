@@ -7,6 +7,7 @@ import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.nnet.Layer;
 
 import java.util.List;
+import java.util.Collections;
 
 /**
  * Sigmoid激活函数层
@@ -21,12 +22,23 @@ import java.util.List;
 public class SigmoidLayer extends Layer {
     
     /**
+     * Sigmoid函数实例，用于复用
+     */
+    private Sigmoid sigmoidFunc;
+    
+    /**
+     * 最后一次前向传播的输入，用于反向传播
+     */
+    private NdArray lastInput;
+    
+    /**
      * 构造一个Sigmoid激活函数层
      * 
      * @param _name 层名称
      */
     public SigmoidLayer(String _name) {
         super(_name, null, null);
+        this.sigmoidFunc = new Sigmoid();
     }
 
     /**
@@ -45,17 +57,26 @@ public class SigmoidLayer extends Layer {
      */
     @Override
     public Variable layerForward(Variable... inputs) {
-        return new Sigmoid().call(inputs[0]);
+        this.lastInput = inputs[0].getValue();
+        return sigmoidFunc.call(inputs[0]);
     }
 
     @Override
     public NdArray forward(NdArray... inputs) {
-        return new Sigmoid().forward(inputs);
+        this.lastInput = inputs[0];
+        return sigmoidFunc.forward(inputs);
     }
 
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        return new Sigmoid().backward(yGrad);
+        // 手动计算Sigmoid的反向传播：梯度 = yGrad * sigmoid(x) * (1 - sigmoid(x))
+        if (lastInput != null) {
+            NdArray sigmoidX = lastInput.sigmoid();
+            NdArray grad = yGrad.mul(sigmoidX).mul(NdArray.ones(sigmoidX.getShape()).sub(sigmoidX));
+            return Collections.singletonList(grad);
+        } else {
+            throw new RuntimeException("SigmoidLayer backward called without forward pass");
+        }
     }
 
     @Override

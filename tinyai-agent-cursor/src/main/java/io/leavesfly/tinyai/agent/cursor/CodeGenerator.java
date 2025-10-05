@@ -295,20 +295,28 @@ public class CodeGenerator {
             return "// 请提供有效的代码生成请求";
         }
         
-        request = request.toLowerCase();
+        // 保存原始请求
+        String originalRequest = request;
+        String lowerRequest = request.toLowerCase();
         
-        // 解析请求类型
-        if (request.contains("method") || request.contains("function")) {
-            return generateMethodFromRequest(request);
-        } else if (request.contains("class")) {
-            return generateClassFromRequest(request);
-        } else if (request.contains("test")) {
-            return generateTestFromRequest(request);
-        } else if (request.contains("interface")) {
-            return generateInterfaceFromRequest(request);
+        // 解析请求类型（按优先级顺序）
+        if (lowerRequest.contains("test")) {
+            // 检查是否是测试代码生成请求
+            if (lowerRequest.contains("test method") || lowerRequest.contains("unit test") || 
+                lowerRequest.contains("test case") || lowerRequest.matches(".*test\\s+\\w.*")) {
+                return generateTestFromRequest(originalRequest);
+            }
+        }
+        
+        if (lowerRequest.contains("method") || lowerRequest.contains("function")) {
+            return generateMethodFromRequest(originalRequest);
+        } else if (lowerRequest.contains("class")) {
+            return generateClassFromRequest(originalRequest);
+        } else if (lowerRequest.contains("interface")) {
+            return generateInterfaceFromRequest(originalRequest);
         } else {
             // 默认生成方法
-            return generateMethodFromRequest(request);
+            return generateMethodFromRequest(originalRequest);
         }
     }
     
@@ -355,7 +363,13 @@ public class CodeGenerator {
      */
     private String generateTestFromRequest(String request) {
         String methodName = extractMethodName(request);
+        if (methodName.equals("newMethod")) {
+            methodName = "testMethod"; // 为测试提供更合适的默认名称
+        }
         String className = extractClassName(request);
+        if (className.equals("NewClass")) {
+            className = "TestClass"; // 为测试提供更合适的默认类名
+        }
         String returnType = inferReturnType(request);
         
         return generateJavaTest(methodName, className, returnType);
@@ -381,13 +395,14 @@ public class CodeGenerator {
         Matcher matcher = pattern.matcher(request);
         
         if (matcher.find()) {
+            // 保持原始的大小写
             return matcher.group(2);
         }
         
         // 查找动词
         String[] verbs = {"calculate", "get", "set", "process", "handle", "validate", "check", "create", "update", "delete"};
         for (String verb : verbs) {
-            if (request.contains(verb)) {
+            if (request.toLowerCase().contains(verb)) {
                 return verb + "Data";
             }
         }
@@ -404,13 +419,14 @@ public class CodeGenerator {
         Matcher matcher = pattern.matcher(request);
         
         if (matcher.find()) {
-            return capitalize(matcher.group(1));
+            // 保持原始的大小写
+            return matcher.group(1);
         }
         
         // 查找名词
         String[] nouns = {"manager", "service", "controller", "processor", "handler", "validator", "creator", "updater", "deleter"};
         for (String noun : nouns) {
-            if (request.contains(noun)) {
+            if (request.toLowerCase().contains(noun)) {
                 return capitalize(noun.replace("er", "")) + "Manager";
             }
         }
@@ -424,14 +440,15 @@ public class CodeGenerator {
     private List<String> extractParameters(String request) {
         List<String> parameters = new ArrayList<>();
         
+        String lowerRequest = request.toLowerCase();
         // 简单的参数推断
-        if (request.contains("string") || request.contains("text")) {
+        if (lowerRequest.contains("string") || lowerRequest.contains("text")) {
             parameters.add("String input");
         }
-        if (request.contains("number") || request.contains("int")) {
+        if (lowerRequest.contains("number") || lowerRequest.contains("int")) {
             parameters.add("int value");
         }
-        if (request.contains("list") || request.contains("array")) {
+        if (lowerRequest.contains("list") || lowerRequest.contains("array")) {
             parameters.add("List<String> items");
         }
         
@@ -447,19 +464,20 @@ public class CodeGenerator {
      * 推断返回类型
      */
     private String inferReturnType(String request) {
-        if (request.contains("void") || request.contains("nothing")) {
+        String lowerRequest = request.toLowerCase();
+        if (lowerRequest.contains("void") || lowerRequest.contains("nothing")) {
             return "void";
         }
-        if (request.contains("string") || request.contains("text")) {
+        if (lowerRequest.contains("string") || lowerRequest.contains("text")) {
             return "String";
         }
-        if (request.contains("int") || request.contains("number")) {
+        if (lowerRequest.contains("int") || lowerRequest.contains("number")) {
             return "int";
         }
-        if (request.contains("boolean") || request.contains("true") || request.contains("false")) {
+        if (lowerRequest.contains("boolean") || lowerRequest.contains("true") || lowerRequest.contains("false")) {
             return "boolean";
         }
-        if (request.contains("list") || request.contains("array")) {
+        if (lowerRequest.contains("list") || lowerRequest.contains("array")) {
             return "List<Object>";
         }
         
@@ -560,16 +578,17 @@ public class CodeGenerator {
     private List<String> generateFieldsFromRequest(String request) {
         List<String> fields = new ArrayList<>();
         
-        if (request.contains("name")) {
+        String lowerRequest = request.toLowerCase();
+        if (lowerRequest.contains("name")) {
             fields.add("String name");
         }
-        if (request.contains("id")) {
+        if (lowerRequest.contains("id")) {
             fields.add("Long id");
         }
-        if (request.contains("value")) {
+        if (lowerRequest.contains("value")) {
             fields.add("Object value");
         }
-        if (request.contains("data")) {
+        if (lowerRequest.contains("data")) {
             fields.add("Map<String, Object> data");
         }
         

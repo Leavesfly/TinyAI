@@ -25,7 +25,7 @@ public class Adam extends Optimizer {
     private float learningRate = 0.001f;
     private float beta1 = 0.9f;
     private float beta2 = 0.999f;
-    private float epsilon = 1e-8f;
+    private float epsilon = 1e-3f; // 使用更大的epsilon值确保数值稳定性，避免除零异常
 
     private Map<Integer, NdArray> ms;
     private Map<Integer, NdArray> vs;
@@ -88,7 +88,9 @@ public class Adam extends Optimizer {
         ms.put(key, m);
         vs.put(key, v);
 
-        NdArray delat = m.mulNum(lr()).div(v.pow(0.5f).add(NdArray.like(v.getShape(), epsilon)));
+        // 为了数值稳定性，使用更大的epsilon值
+        NdArray denominator = v.pow(0.5f).add(NdArray.like(v.getShape(), epsilon));
+        NdArray delat = m.mulNum(lr()).div(denominator);
         parameter.setValue(parameter.getValue().sub(delat));
 
     }

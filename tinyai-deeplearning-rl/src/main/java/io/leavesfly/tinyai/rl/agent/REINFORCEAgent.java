@@ -71,12 +71,12 @@ public class REINFORCEAgent extends Agent {
         
         // 创建策略网络
         this.model = createPolicyNetwork(stateDim, actionDim, hiddenSizes);
-        this.policyOptimizer = new Adam(model, learningRate, 0.9f, 0.999f, 1e-8f);
+        this.policyOptimizer = new Adam(model, learningRate, 0.9f, 0.999f, 1e-3f); // 使用安全的epsilon值
         
         // 创建基线网络（如果使用）
         if (useBaseline) {
             this.baselineModel = createBaselineNetwork(stateDim, hiddenSizes);
-            this.baselineOptimizer = new Adam(baselineModel, learningRate, 0.9f, 0.999f, 1e-8f);
+            this.baselineOptimizer = new Adam(baselineModel, learningRate, 0.9f, 0.999f, 1e-2f); // 使用更大的epsilon值确保稳定性
         } else {
             this.baselineModel = null;
             this.baselineOptimizer = null;

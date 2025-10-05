@@ -83,7 +83,7 @@ public class DQNAgent extends Agent {
                 state -> model.forward(state));
 
         // 创建优化器和损失函数
-        this.optimizer = new Adam(model, learningRate, 0.9f, 0.999f, 1e-8f);
+        this.optimizer = new Adam(model, learningRate, 0.9f, 0.999f, 1e-3f); // 使用安全的epsilon值
         this.lossFunction = new MeanSquaredLoss();
     }
 

@@ -28,6 +28,10 @@ public class SGD extends Optimizer {
 
     @Override
     public void updateOne(Parameter parameter) {
+        // 检查参数的梯度是否为null，如果为null则跳过更新
+        if (parameter.getGrad() == null) {
+            return;
+        }
         parameter.setValue(parameter.getValue().sub(parameter.getGrad().mulNum(lr)));
     }
 }

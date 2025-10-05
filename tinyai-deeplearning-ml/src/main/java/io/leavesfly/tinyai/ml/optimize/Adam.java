@@ -69,6 +69,11 @@ public class Adam extends Optimizer {
 
     @Override
     public void updateOne(Parameter parameter) {
+        // 检查参数的梯度是否为null，如果为null则跳过更新
+        NdArray grad = parameter.getGrad();
+        if (grad == null) {
+            return;
+        }
 
         int key = parameter.hashCode();
         if (!ms.containsKey(key)) {
@@ -77,8 +82,6 @@ public class Adam extends Optimizer {
         }
         NdArray m = ms.get(key);
         NdArray v = vs.get(key);
-
-        NdArray grad = parameter.getGrad();
 
         m = m.add(grad.sub(m).mulNum(1 - beta1));
         v = v.add(grad.mul(grad).sub(v).mulNum(1 - beta2));

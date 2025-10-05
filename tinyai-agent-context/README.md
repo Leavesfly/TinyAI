@@ -1,8 +1,8 @@
-# TinyAI Agent 模块
+# TinyAI Agent Context 模块
 
 ## 概述
 
-TinyAI Agent 模块是一个完整的Java版本高级LLM Agent系统，参考Python实现`agent_mem.py`创建。该模块实现了记忆管理、RAG（检索增强生成）、工具调用和上下文工程等核心功能。
+TinyAI Agent Context 模块是一个完整的Java版本高级LLM Agent系统，参考Python实现`agent_mem.py`创建。该模块实现了记忆管理、RAG（检索增强生成）、工具调用和上下文工程等核心功能。
 
 ## 功能特性
 

@@ -58,11 +58,13 @@ public class SimpleEmbedding {
             }
         }
         
-        // 构建词汇表索引
+        // 构建词汇表索引（只包含频率足够的词汇）
         this.vocabulary = new HashMap<>();
         int index = 0;
         for (String word : wordCounts.keySet()) {
-            this.vocabulary.put(word, index++);
+            if (wordCounts.get(word) >= 1) { // 至少出现一次
+                this.vocabulary.put(word, index++);
+            }
         }
         
         // 计算IDF值
@@ -70,9 +72,12 @@ public class SimpleEmbedding {
         int numDocs = texts.size();
         for (Map.Entry<String, Set<Integer>> entry : docWordCounts.entrySet()) {
             String word = entry.getKey();
-            int docFreq = entry.getValue().size();
-            double idfValue = Math.log((double) numDocs / docFreq);
-            this.idf.put(word, idfValue);
+            if (vocabulary.containsKey(word)) {
+                int docFreq = entry.getValue().size();
+                // 使用平滑化的IDF计算，避免IDF为0
+                double idfValue = Math.log((double) (numDocs + 1) / (docFreq + 1)) + 1.0;
+                this.idf.put(word, idfValue);
+            }
         }
         
         this.isTrained = true;
@@ -100,6 +105,9 @@ public class SimpleEmbedding {
         }
         
         int totalWords = words.size();
+        if (totalWords == 0) {
+            return vector;
+        }
         
         // 计算TF-IDF向量
         for (Map.Entry<String, Integer> entry : wordFreq.entrySet()) {
@@ -116,6 +124,11 @@ public class SimpleEmbedding {
                 
                 // 累加到对应维度
                 vector.set(wordIndex, vector.get(wordIndex) + tfidf);
+            } else {
+                // 处理未知词汇：使用一个固定的缺省值和随机维度
+                int unknownIndex = Math.abs(word.hashCode()) % dimension;
+                double unknownValue = 0.1; // 给未知词一个小的值
+                vector.set(unknownIndex, vector.get(unknownIndex) + unknownValue);
             }
         }
         
@@ -213,21 +226,44 @@ public class SimpleEmbedding {
     /**
      * 提取文本中的词汇
      */
-    private Set<String> extractWords(String text) {
+    public Set<String> extractWords(String text) {
         if (text == null || text.trim().isEmpty()) {
             return new HashSet<>();
         }
         
-        // 使用正则表达式提取单词（支持中英文）
-        Pattern pattern = Pattern.compile("[\\w\\u4e00-\\u9fa5]+");
-        Matcher matcher = pattern.matcher(text.toLowerCase());
-        
         Set<String> words = new HashSet<>();
-        while (matcher.find()) {
-            String word = matcher.group();
-            if (word.length() > 1) {  // 过滤单字符
+        
+        // 对中文文本，按字符切分（简化处理）
+        String processedText = text.toLowerCase().trim();
+        
+        // 先提取英文单词
+        Pattern englishPattern = Pattern.compile("[a-zA-Z]+");
+        Matcher englishMatcher = englishPattern.matcher(processedText);
+        while (englishMatcher.find()) {
+            String word = englishMatcher.group();
+            if (word.length() >= 2) {
                 words.add(word);
             }
+        }
+        
+        // 对中文，按字符和双字组合切分
+        Pattern chinesePattern = Pattern.compile("[\u4e00-\u9fa5]");
+        Matcher chineseMatcher = chinesePattern.matcher(processedText);
+        
+        List<String> chineseChars = new ArrayList<>();
+        while (chineseMatcher.find()) {
+            chineseChars.add(chineseMatcher.group());
+        }
+        
+        // 添加单个中文字符
+        for (String ch : chineseChars) {
+            words.add(ch);
+        }
+        
+        // 添加中文双字词组
+        for (int i = 0; i < chineseChars.size() - 1; i++) {
+            String bigram = chineseChars.get(i) + chineseChars.get(i + 1);
+            words.add(bigram);
         }
         
         return words;

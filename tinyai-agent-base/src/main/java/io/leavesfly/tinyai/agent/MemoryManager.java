@@ -341,6 +341,11 @@ public class MemoryManager {
             return false;
         }
         
+        // 直接包含关系检查（对中文更友好）
+        if (content.toLowerCase().contains(query.toLowerCase())) {
+            return true;
+        }
+        
         Set<String> queryWords = extractWords(query.toLowerCase());
         Set<String> contentWords = extractWords(content.toLowerCase());
         
@@ -355,13 +360,15 @@ public class MemoryManager {
      * 提取单词集合
      */
     private Set<String> extractWords(String text) {
-        Pattern pattern = Pattern.compile("\\w+");
+        // 支持中英文词汇提取
+        Pattern pattern = Pattern.compile("[\\w\\u4e00-\\u9fa5]+");
         Matcher matcher = pattern.matcher(text);
         
         Set<String> words = new HashSet<>();
         while (matcher.find()) {
             String word = matcher.group();
-            if (word.length() > 2) {
+            // 对中文词汇更宽松的长度要求
+            if (word.length() >= 1) {
                 words.add(word);
             }
         }

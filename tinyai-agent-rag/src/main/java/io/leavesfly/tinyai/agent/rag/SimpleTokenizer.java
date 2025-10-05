@@ -41,34 +41,21 @@ public class SimpleTokenizer {
         // 移除标点符号，保留中英文字符和数字
         text = punctuationPattern.matcher(text).replaceAll(" ");
         
-        // 按空格分割
-        String[] words = text.split("\\s+");
-        
         List<String> result = new ArrayList<>();
         
-        for (String word : words) {
-            if (word.trim().isEmpty()) {
-                continue;
-            }
-            
-            // 检查是否包含中文字符
-            if (chinesePattern.matcher(word).find()) {
-                // 包含中文，按字符分词
-                for (char c : word.toCharArray()) {
-                    String charStr = String.valueOf(c);
-                    if (!charStr.trim().isEmpty()) {
-                        result.add(charStr);
-                    }
-                }
-            } else {
-                // 英文单词，直接添加
-                result.add(word);
+        // 使用正则表达式分离中英文
+        // 匹配连续的英文单词或单个中文字符
+        Pattern tokenPattern = Pattern.compile("[a-zA-Z]+|[\\u4e00-\\u9fff]");
+        java.util.regex.Matcher matcher = tokenPattern.matcher(text);
+        
+        while (matcher.find()) {
+            String token = matcher.group().trim();
+            if (!token.isEmpty()) {
+                result.add(token);
             }
         }
         
-        return result.stream()
-                .filter(token -> !token.trim().isEmpty())
-                .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+        return result;
     }
 
     /**

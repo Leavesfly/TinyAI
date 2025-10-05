@@ -1,8 +1,10 @@
-package io.leavesfly.tinyai.util;
+package io.leavesfly.tinyai.func;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
+import io.leavesfly.tinyai.util.ComputationGraphVisualizer;
+import io.leavesfly.tinyai.util.StepByStepVisualizer;
 
 /**
  * 计算图可视化演示程序

@@ -1,6 +1,7 @@
 package io.leavesfly.tinyai.deepseek.v3;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.ml.Model;
 import io.leavesfly.tinyai.ml.Trainer;
 import io.leavesfly.tinyai.ml.dataset.Batch;
 import io.leavesfly.tinyai.ml.dataset.DataSet;
@@ -10,7 +11,6 @@ import io.leavesfly.tinyai.ml.optimize.Optimizer;
 import io.leavesfly.tinyai.ml.Monitor;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -33,7 +33,7 @@ public class V3RLTrainer extends Trainer {
     
     // 继承的字段（由于父类字段为private，需要在子类中重新定义）
     private DataSet dataSet;
-    private io.leavesfly.tinyai.ml.Model model;
+    private Model model;
     private Loss loss;
     private Optimizer optimizer;
     private Monitor monitor;
@@ -102,7 +102,7 @@ public class V3RLTrainer extends Trainer {
      * @param optimizer 优化器
      */
     @Override
-    public void init(DataSet dataSet, io.leavesfly.tinyai.ml.Model model, Loss loss, Optimizer optimizer) {
+    public void init(DataSet dataSet, Model model, Loss loss, Optimizer optimizer) {
         if (!(model instanceof DeepSeekV3Model)) {
             throw new IllegalArgumentException("V3RLTrainer requires DeepSeekV3Model");
         }

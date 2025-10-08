@@ -5,8 +5,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 代码生成器 - 基于上下文和需求生成代码
+ * 代码生成器 - 基于上下文和需求生成代码 (LLM增强版)
  * 支持生成Java函数、类、测试代码等
+ * 集成LLM模拟器，提供智能化代码生成能力
  * 
  * @author 山泽
  */
@@ -14,10 +15,22 @@ public class CodeGenerator {
     
     private final Map<String, String> templates;
     private final Random random;
+    private CursorLLMSimulator llmSimulator; // LLM模拟器 - 用于智能代码生成
     
     public CodeGenerator() {
         this.templates = initializeTemplates();
         this.random = new Random();
+        this.llmSimulator = null; // 默认为空，需要主动设置
+    }
+    
+    /**
+     * 设置LLM模拟器
+     * @param llmSimulator LLM模拟器实例
+     */
+    public void setLLMSimulator(CursorLLMSimulator llmSimulator) {
+        this.llmSimulator = llmSimulator;
+        System.out.println("✅ CodeGenerator已集成LLM模拟器: " + 
+                          (llmSimulator != null ? llmSimulator.getModelName() : "无"));
     }
     
     /**
@@ -90,7 +103,7 @@ public class CodeGenerator {
     }
     
     /**
-     * 生成Java方法
+     * 生成Java方法 - LLM增强版本
      * @param name 方法名
      * @param description 方法描述
      * @param parameters 参数列表
@@ -100,6 +113,53 @@ public class CodeGenerator {
      */
     public String generateJavaMethod(String name, String description, List<String> parameters, 
                                    String returnType, String modifier) {
+        // 如果启用LLM，尝试使用LLM生成
+        if (llmSimulator != null) {
+            try {
+                return generateLLMEnhancedMethod(name, description, parameters, returnType, modifier);
+            } catch (Exception e) {
+                System.err.println("⚠️ LLM方法生成失败，回退到传统模式: " + e.getMessage());
+                // 继续使用传统方法
+            }
+        }
+        
+        return generateTraditionalMethod(name, description, parameters, returnType, modifier);
+    }
+    
+    /**
+     * LLM增强的方法生成
+     */
+    private String generateLLMEnhancedMethod(String name, String description, List<String> parameters, 
+                                            String returnType, String modifier) {
+        // 构建方法生成请求
+        StringBuilder request = new StringBuilder();
+        request.append("请生成一个Java方法，要求如下：\n");
+        request.append("方法名: ").append(name != null ? name : "newMethod").append("\n");
+        request.append("描述: ").append(description != null ? description : "生成的方法").append("\n");
+        request.append("返回类型: ").append(returnType != null ? returnType : "void").append("\n");
+        request.append("访问修饰符: ").append(modifier != null ? modifier : "public").append("\n");
+        
+        if (parameters != null && !parameters.isEmpty()) {
+            request.append("参数列表: ").append(String.join(", ", parameters)).append("\n");
+        }
+        
+        request.append("\n请生成完整的方法代码，包含适当的注释和实现。");
+        
+        // 使用LLM生成代码
+        String llmGeneratedCode = llmSimulator.generateCodeImplementation(request.toString(), "");
+        
+        // 获取传统生成结果作为备选
+        String traditionalCode = generateTraditionalMethod(name, description, parameters, returnType, modifier);
+        
+        // 结合LLM和传统生成结果
+        return enhanceMethodGeneration(llmGeneratedCode, traditionalCode, name, description);
+    }
+    
+    /**
+     * 传统的方法生成（原有逻辑）
+     */
+    private String generateTraditionalMethod(String name, String description, List<String> parameters, 
+                                           String returnType, String modifier) {
         if (name == null || name.isEmpty()) {
             name = "newMethod";
         }
@@ -148,7 +208,21 @@ public class CodeGenerator {
     }
     
     /**
-     * 生成Java类
+     * 增强方法生成结果
+     */
+    private String enhanceMethodGeneration(String llmCode, String traditionalCode, String name, String description) {
+        // 如果LLM生成的代码看起来合理，优先使用
+        if (llmCode != null && llmCode.trim().length() > 50 && 
+            llmCode.contains(name != null ? name : "newMethod")) {
+            return "// 🤖 LLM智能生成的方法\n" + llmCode + 
+                   "\n\n// 📝 传统生成备选方案（仅作参考）\n/* \n" + traditionalCode + "\n*/";
+        } else {
+            return "// 📝 传统生成方法（LLM生成失败）\n" + traditionalCode;
+        }
+    }
+    
+    /**
+     * 生成Java类 - LLM增强版本
      * @param name 类名
      * @param description 类描述
      * @param modifier 访问修饰符
@@ -159,6 +233,60 @@ public class CodeGenerator {
      */
     public String generateJavaClass(String name, String description, String modifier, 
                                   String inheritance, List<String> fields, List<String> methods) {
+        // 如果启用LLM，尝试使用LLM生成
+        if (llmSimulator != null) {
+            try {
+                return generateLLMEnhancedClass(name, description, modifier, inheritance, fields, methods);
+            } catch (Exception e) {
+                System.err.println("⚠️ LLM类生成失败，回退到传统模式: " + e.getMessage());
+                // 继续使用传统方法
+            }
+        }
+        
+        return generateTraditionalClass(name, description, modifier, inheritance, fields, methods);
+    }
+    
+    /**
+     * LLM增强的类生成
+     */
+    private String generateLLMEnhancedClass(String name, String description, String modifier, 
+                                           String inheritance, List<String> fields, List<String> methods) {
+        // 构建类生成请求
+        StringBuilder request = new StringBuilder();
+        request.append("请生成一个Java类，要求如下：\n");
+        request.append("类名: ").append(name != null ? name : "NewClass").append("\n");
+        request.append("描述: ").append(description != null ? description : "生成的类").append("\n");
+        request.append("访问修饰符: ").append(modifier != null ? modifier : "public").append("\n");
+        
+        if (inheritance != null && !inheritance.isEmpty()) {
+            request.append("继承关系: ").append(inheritance).append("\n");
+        }
+        
+        if (fields != null && !fields.isEmpty()) {
+            request.append("字段列表: ").append(String.join(", ", fields)).append("\n");
+        }
+        
+        if (methods != null && !methods.isEmpty()) {
+            request.append("方法列表: ").append(String.join(", ", methods)).append("\n");
+        }
+        
+        request.append("\n请生成完整的Java类代码，包含适当的注释、构造函数和getter/setter方法。");
+        
+        // 使用LLM生成代码
+        String llmGeneratedCode = llmSimulator.generateCodeImplementation(request.toString(), "");
+        
+        // 获取传统生成结果作为备选
+        String traditionalCode = generateTraditionalClass(name, description, modifier, inheritance, fields, methods);
+        
+        // 结合LLM和传统生成结果
+        return enhanceClassGeneration(llmGeneratedCode, traditionalCode, name, description);
+    }
+    
+    /**
+     * 传统的类生成（原有逻辑）
+     */
+    private String generateTraditionalClass(String name, String description, String modifier, 
+                                           String inheritance, List<String> fields, List<String> methods) {
         if (name == null || name.isEmpty()) {
             name = "NewClass";
         }
@@ -221,6 +349,20 @@ public class CodeGenerator {
                 .replace("{constructor_params}", constructorParams)
                 .replace("{constructor_body}", constructorBody.toString())
                 .replace("{methods}", methodsCode.toString());
+    }
+    
+    /**
+     * 增强类生成结果
+     */
+    private String enhanceClassGeneration(String llmCode, String traditionalCode, String name, String description) {
+        // 如果LLM生成的代码看起来合理，优先使用
+        if (llmCode != null && llmCode.trim().length() > 100 && 
+            llmCode.contains("class") && llmCode.contains(name != null ? name : "NewClass")) {
+            return "// 🤖 LLM智能生成的类\n" + llmCode + 
+                   "\n\n// 📝 传统生成备选方案（仅作参考）\n/* \n" + traditionalCode + "\n*/";
+        } else {
+            return "// 📝 传统生成类（LLM生成失败）\n" + traditionalCode;
+        }
     }
     
     /**
@@ -645,5 +787,95 @@ public class CodeGenerator {
      */
     public String getTemplate(String name) {
         return templates.get(name);
+    }
+    
+    // ========== LLM增强方法 ==========
+    
+    /**
+     * 从请求生成代码 - LLM增强版本
+     * @param request 代码生成请求
+     * @return 生成的代码
+     */
+    public String generateFromRequestEnhanced(String request) {
+        if (request == null || request.trim().isEmpty()) {
+            return "// 错误：代码生成请求不能为空";
+        }
+        
+        System.out.println("🤖 正在生成代码...");
+        
+        // 如果启用LLM，优先使用LLM生成
+        if (llmSimulator != null) {
+            try {
+                String llmCode = llmSimulator.generateCodeImplementation(request, "");
+                String traditionalCode = generateFromRequest(request);
+                
+                return enhanceRequestGeneration(llmCode, traditionalCode, request);
+            } catch (Exception e) {
+                System.err.println("⚠️ LLM代码生成失败，回退到传统模式: " + e.getMessage());
+            }
+        }
+        
+        return generateFromRequest(request);
+    }
+    
+    /**
+     * 增强请求生成结果
+     */
+    private String enhanceRequestGeneration(String llmCode, String traditionalCode, String request) {
+        // 如果LLM生成的代码合理，优先使用
+        if (llmCode != null && llmCode.trim().length() > 30) {
+            return "// 🤖 LLM智能生成的代码\n" + 
+                   "// 请求: " + request.substring(0, Math.min(50, request.length())) + "...\n" +
+                   llmCode + 
+                   "\n\n// 📝 传统生成备选方案（仅作参考）\n/* \n" + traditionalCode + "\n*/";
+        } else {
+            return "// 📝 传统生成代码（LLM生成失败）\n" + 
+                   "// 请求: " + request.substring(0, Math.min(50, request.length())) + "...\n" +
+                   traditionalCode;
+        }
+    }
+    
+    /**
+     * 生成智能化代码建议
+     * @param context 上下文信息
+     * @param requirement 需求描述
+     * @return 代码建议
+     */
+    public String generateCodeSuggestion(String context, String requirement) {
+        if (llmSimulator == null) {
+            return "// LLM未启用，无法提供智能建议\n" +
+                   "// 请设置LLM模拟器以获得更好的代码生成体验";
+        }
+        
+        try {
+            String suggestion = llmSimulator.generateCodingResponse(
+                "基于以下上下文和需求，请提供代码实现建议：\n" +
+                "上下文：" + (context != null ? context : "无") + "\n" +
+                "需求：" + requirement, 
+                context != null ? context : "", 
+                "generation");
+            
+            return "// 🤖 LLM智能代码建议\n" +
+                   "// 需求: " + requirement + "\n" +
+                   suggestion;
+        } catch (Exception e) {
+            return "// ❌ 智能建议生成失败: " + e.getMessage();
+        }
+    }
+    
+    /**
+     * 获取LLM模拟器状态
+     */
+    public Map<String, Object> getLLMStatus() {
+        Map<String, Object> status = new HashMap<>();
+        status.put("llm_enabled", llmSimulator != null);
+        if (llmSimulator != null) {
+            status.put("model_name", llmSimulator.getModelName());
+            status.put("temperature", llmSimulator.getTemperature());
+        } else {
+            status.put("model_name", "未设置");
+            status.put("temperature", 0.0);
+        }
+        return status;
     }
 }

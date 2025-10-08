@@ -5,8 +5,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 重构代理 - 智能分析和建议代码重构
- * 基于代码分析结果，提供具体的重构建议和代码示例
+ * 重构代理 - 基于LLM的智能分析和建议代码重构
+ * 结合传统静态分析和LLM智能推理，提供更准确的重构建议和代码示例
  * 
  * @author 山泽
  */
@@ -14,6 +14,7 @@ public class RefactorAgent {
     
     private final CodeAnalyzer analyzer;
     private final Map<String, RefactorPattern> refactorPatterns;
+    private final CursorLLMSimulator llmSimulator;  // 新增LLM模拟器
     
     /**
      * 重构模式内部类
@@ -41,6 +42,7 @@ public class RefactorAgent {
     public RefactorAgent(CodeAnalyzer analyzer) {
         this.analyzer = analyzer;
         this.refactorPatterns = loadRefactorPatterns();
+        this.llmSimulator = new CursorLLMSimulator();  // 初始化LLM模拟器
     }
     
     /**
@@ -77,7 +79,7 @@ public class RefactorAgent {
     }
     
     /**
-     * 分析重构机会
+     * 分析重构机会 - LLM增强版本
      * @param code 待分析的代码
      * @return 重构建议列表
      */
@@ -86,30 +88,46 @@ public class RefactorAgent {
             return new ArrayList<>();
         }
         
+        System.out.println("🔧 启动LLM增强重构分析...");
+        
         List<RefactorSuggestion> suggestions = new ArrayList<>();
         
-        // 获取代码分析结果
-        Map<String, Object> analysis = analyzer.analyzeJavaCode(code);
-        
-        if (!(Boolean) analysis.getOrDefault("syntax_valid", false)) {
-            // 如果语法无效，先修复语法问题
-            suggestions.add(createSyntaxFixSuggestion());
-            return suggestions;
+        try {
+            // 获取代码分析结果
+            Map<String, Object> analysis = analyzer.analyzeJavaCode(code);
+            
+            if (!(Boolean) analysis.getOrDefault("syntax_valid", false)) {
+                // 如果语法无效，先修复语法问题
+                suggestions.add(createSyntaxFixSuggestion());
+                return suggestions;
+            }
+            
+            // 1. 传统静态分析重构机会
+            List<RefactorSuggestion> staticSuggestions = performStaticRefactorAnalysis(code, analysis);
+            
+            // 2. LLM智能重构分析
+            String llmRefactorAdvice = llmSimulator.generateRefactorAdvice(code, "general");
+            
+            // 3. LLM智能重构建议
+            List<RefactorSuggestion> llmSuggestions = generateLLMRefactorSuggestions(code, llmRefactorAdvice);
+            
+            // 4. 结合传统和LLM结果
+            suggestions.addAll(staticSuggestions);
+            suggestions.addAll(llmSuggestions);
+            
+            // 5. 增强重构建议（加入LLM分析）
+            suggestions = enhanceRefactorSuggestions(suggestions, code, llmRefactorAdvice);
+            
+            // 6. 按优先级排序
+            suggestions.sort((a, b) -> Integer.compare(b.getPriority(), a.getPriority()));
+            
+            System.out.println("✅ LLM增强重构分析完成，发现 " + suggestions.size() + " 个建议");
+            
+        } catch (Exception e) {
+            System.err.println("❌ LLM重构分析失败: " + e.getMessage());
+            // 回退到传统分析
+            return performTraditionalRefactorAnalysis(code, analyzer.analyzeJavaCode(code));
         }
-        
-        // 检查各种重构模式
-        suggestions.addAll(checkLongMethods(code, analysis));
-        suggestions.addAll(checkDuplicateCode(code));
-        suggestions.addAll(checkComplexConditions(code));
-        suggestions.addAll(checkDeepNesting(code));
-        suggestions.addAll(checkLongParameterLists(code));
-        suggestions.addAll(checkMagicNumbers(code));
-        suggestions.addAll(checkSwitchStatements(code));
-        suggestions.addAll(checkLargeClass(code, analysis));
-        suggestions.addAll(checkNamingConventions(code));
-        
-        // 按优先级排序
-        suggestions.sort((a, b) -> Integer.compare(b.getPriority(), a.getPriority()));
         
         return suggestions;
     }
@@ -609,5 +627,187 @@ public class RefactorAgent {
      */
     public void addRefactorPattern(String name, RefactorPattern pattern) {
         refactorPatterns.put(name, pattern);
+    }
+    
+    // ========== LLM增强方法 ==========
+    
+    /**
+     * 执行传统静态重构分析
+     */
+    private List<RefactorSuggestion> performStaticRefactorAnalysis(String code, Map<String, Object> analysis) {
+        List<RefactorSuggestion> suggestions = new ArrayList<>();
+        
+        // 检查各种重构模式
+        suggestions.addAll(checkLongMethods(code, analysis));
+        suggestions.addAll(checkDuplicateCode(code));
+        suggestions.addAll(checkComplexConditions(code));
+        suggestions.addAll(checkDeepNesting(code));
+        suggestions.addAll(checkLongParameterLists(code));
+        suggestions.addAll(checkMagicNumbers(code));
+        suggestions.addAll(checkSwitchStatements(code));
+        suggestions.addAll(checkLargeClass(code, analysis));
+        suggestions.addAll(checkNamingConventions(code));
+        
+        return suggestions;
+    }
+    
+    /**
+     * 生成LLM重构建议
+     */
+    private List<RefactorSuggestion> generateLLMRefactorSuggestions(String code, String llmAdvice) {
+        List<RefactorSuggestion> suggestions = new ArrayList<>();
+        
+        // 基于LLM建议生成重构建议
+        if (llmAdvice.contains("方法过长") || llmAdvice.contains("long method")) {
+            suggestions.add(createLLMEnhancedSuggestion(
+                "llm_long_method",
+                "LLM识别: 方法过长，建议分解",
+                code.substring(0, Math.min(100, code.length())) + "...",
+                generateMethodExtractionExample(),
+                Arrays.asList("提高可读性", "便于测试", "LLM建议"),
+                "高"
+            ));
+        }
+        
+        if (llmAdvice.contains("重复") || llmAdvice.contains("duplicate")) {
+            suggestions.add(createLLMEnhancedSuggestion(
+                "llm_duplicate_code",
+                "LLM识别: 存在重复代码，建议提取",
+                "重复代码片段",
+                generateDuplicateExtractionExample(),
+                Arrays.asList("消除重复", "提高维护性", "LLM指导"),
+                "高"
+            ));
+        }
+        
+        if (llmAdvice.contains("复杂") || llmAdvice.contains("complex")) {
+            suggestions.add(createLLMEnhancedSuggestion(
+                "llm_complex_logic",
+                "LLM识别: 逻辑过于复杂，建议简化",
+                "复杂逻辑代码段",
+                generateComplexityReductionExample(),
+                Arrays.asList("降低复杂度", "提高可读性", "LLM优化"),
+                "中等"
+            ));
+        }
+        
+        return suggestions;
+    }
+    
+    /**
+     * 增强重构建议
+     */
+    private List<RefactorSuggestion> enhanceRefactorSuggestions(List<RefactorSuggestion> suggestions, 
+                                                               String code, String llmAdvice) {
+        List<RefactorSuggestion> enhanced = new ArrayList<>();
+        
+        for (RefactorSuggestion suggestion : suggestions) {
+            // 为每个建议添加LLM增强信息
+            RefactorSuggestion enhancedSuggestion = enhanceSuggestionWithLLM(suggestion, llmAdvice);
+            enhanced.add(enhancedSuggestion);
+        }
+        
+        return enhanced;
+    }
+    
+    /**
+     * 执行传统重构分析（回退方案）
+     */
+    private List<RefactorSuggestion> performTraditionalRefactorAnalysis(String code, Map<String, Object> analysis) {
+        List<RefactorSuggestion> suggestions = new ArrayList<>();
+        
+        // 基础检查
+        suggestions.addAll(checkLongMethods(code, analysis));
+        suggestions.addAll(checkDuplicateCode(code));
+        suggestions.addAll(checkComplexConditions(code));
+        suggestions.addAll(checkDeepNesting(code));
+        
+        return suggestions;
+    }
+    
+    /**
+     * 创建LLM增强建议
+     */
+    private RefactorSuggestion createLLMEnhancedSuggestion(String type, String description, 
+                                                          String originalCode, String refactoredCode,
+                                                          List<String> benefits, String priority) {
+        return new RefactorSuggestion(
+            type,
+            description + " [🤖 LLM增强]",
+            originalCode,
+            refactoredCode,
+            benefits,
+            priority
+        );
+    }
+    
+    /**
+     * 使LLM增强建议
+     */
+    private RefactorSuggestion enhanceSuggestionWithLLM(RefactorSuggestion original, String llmAdvice) {
+        // 复制原始建议并添加LLM见解
+        String enhancedDescription = original.getDescription() + "\n\n🤖 LLM分析: " + 
+                                   extractRelevantLLMInsight(llmAdvice, original.getSuggestionType());
+        
+        return new RefactorSuggestion(
+            original.getSuggestionType(),
+            enhancedDescription,
+            original.getOriginalCode(),
+            original.getRefactoredCode(),
+            original.getBenefits(),
+            original.getEstimatedImpact()
+        );
+    }
+    
+    /**
+     * 提取相关LLM见解
+     */
+    private String extractRelevantLLMInsight(String llmAdvice, String suggestionType) {
+        // 根据建议类型提取相关的LLM建议
+        if (suggestionType.contains("method") && llmAdvice.contains("方法")) {
+            return "建议将大方法分解为多个小方法，提高可读性和可维护性";
+        } else if (suggestionType.contains("duplicate") && llmAdvice.contains("重复")) {
+            return "建议提取公共代码为独立方法，减少代码重复";
+        } else {
+            return "建议优化代码结构，提高代码质量";
+        }
+    }
+    
+    /**
+     * 生成方法提取示例
+     */
+    private String generateMethodExtractionExample() {
+        return "public void processData() {\n" +
+               "    validateInput();\n" +
+               "    performCalculation();\n" +
+               "    generateReport();\n" +
+               "}\n\n" +
+               "private void validateInput() {\n" +
+               "    // 提取的输入验证逻辑\n" +
+               "}";
+    }
+    
+    /**
+     * 生成重复代码提取示例
+     */
+    private String generateDuplicateExtractionExample() {
+        return "private void extractedCommonLogic() {\n" +
+               "    // 公共逻辑处理\n" +
+               "}\n\n" +
+               "// 在多个地方调用\n" +
+               "extractedCommonLogic();";
+    }
+    
+    /**
+     * 生成复杂度减少示例
+     */
+    private String generateComplexityReductionExample() {
+        return "// 简化复杂条件\n" +
+               "private boolean isValidUser(User user) {\n" +
+               "    return user != null && user.isActive() && user.hasPermission();\n" +
+               "}\n\n" +
+               "if (isValidUser(currentUser)) {\n" +
+               "    // 业务逻辑\n" +
+               "}";
     }
 }

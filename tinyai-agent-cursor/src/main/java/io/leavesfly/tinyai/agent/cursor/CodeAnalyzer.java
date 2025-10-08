@@ -5,8 +5,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 代码分析器 - 分析代码结构、质量和潜在问题
+ * 代码分析器 - 分析代码结构、质量和潜在问题 (LLM增强版)
  * 基于静态分析技术，支持Java代码的深度解析
+ * 集成LLM模拟器，提供智能化代码分析能力
  * 
  * @author 山泽
  */
@@ -14,14 +15,26 @@ public class CodeAnalyzer {
     
     private final Map<String, Object> analysisCache;
     private final List<Pattern> syntaxPatterns;
+    private CursorLLMSimulator llmSimulator; // LLM模拟器 - 用于智能分析
     
     public CodeAnalyzer() {
         this.analysisCache = new HashMap<>();
         this.syntaxPatterns = initializeSyntaxPatterns();
+        this.llmSimulator = null; // 默认为空，需要主动设置
     }
     
     /**
-     * 分析Java代码
+     * 设置LLM模拟器
+     * @param llmSimulator LLM模拟器实例
+     */
+    public void setLLMSimulator(CursorLLMSimulator llmSimulator) {
+        this.llmSimulator = llmSimulator;
+        System.out.println("✅ CodeAnalyzer已集成LLM模拟器: " + 
+                          (llmSimulator != null ? llmSimulator.getModelName() : "无"));
+    }
+    
+    /**
+     * 分析Java代码 - LLM增强版本
      * @param code 待分析的代码
      * @return 分析结果
      */
@@ -39,24 +52,17 @@ public class CodeAnalyzer {
         Map<String, Object> analysis = new HashMap<>();
         
         try {
-            // 基本语法检查
-            List<CodeIssue> syntaxIssues = checkSyntax(code);
-            analysis.put("syntax_valid", syntaxIssues.isEmpty());
-            analysis.put("syntax_issues", syntaxIssues);
+            // 基本静态分析
+            analysis = performStaticAnalysis(code);
             
-            // 提取代码结构
-            analysis.put("imports", extractImports(code));
-            analysis.put("classes", extractClasses(code));
-            analysis.put("methods", extractMethods(code));
-            analysis.put("variables", extractVariables(code));
-            
-            // 计算代码度量
-            analysis.put("metrics", calculateMetrics(code));
-            analysis.put("complexity", calculateComplexity(code));
-            
-            // 发现代码问题
-            List<CodeIssue> codeIssues = findCodeIssues(code);
-            analysis.put("issues", codeIssues);
+            // 如果启用LLM，添加LLM增强分析
+            if (llmSimulator != null) {
+                try {
+                    enhanceWithLLMAnalysis(analysis, code);
+                } catch (Exception e) {
+                    System.err.println("⚠️ LLM分析失败，使用传统分析结果: " + e.getMessage());
+                }
+            }
             
             // 缓存结果
             analysisCache.put(cacheKey, analysis);
@@ -66,6 +72,93 @@ public class CodeAnalyzer {
         }
         
         return analysis;
+    }
+    
+    /**
+     * 执行传统静态分析
+     */
+    private Map<String, Object> performStaticAnalysis(String code) {
+        Map<String, Object> analysis = new HashMap<>();
+        
+        // 基本语法检查
+        List<CodeIssue> syntaxIssues = checkSyntax(code);
+        analysis.put("syntax_valid", syntaxIssues.isEmpty());
+        analysis.put("syntax_issues", syntaxIssues);
+        
+        // 提取代码结构
+        analysis.put("imports", extractImports(code));
+        analysis.put("classes", extractClasses(code));
+        analysis.put("methods", extractMethods(code));
+        analysis.put("variables", extractVariables(code));
+        
+        // 计算代码度量
+        analysis.put("metrics", calculateMetrics(code));
+        analysis.put("complexity", calculateComplexity(code));
+        
+        // 发现代码问题
+        List<CodeIssue> codeIssues = findCodeIssues(code);
+        analysis.put("issues", codeIssues);
+        
+        return analysis;
+    }
+    
+    /**
+     * 使用LLM增强分析结果
+     */
+    private void enhanceWithLLMAnalysis(Map<String, Object> analysis, String code) {
+        // LLM智能代码分析
+        String llmCodeAnalysis = llmSimulator.generateCodeAnalysis(code, "comprehensive");
+        analysis.put("llm_analysis", llmCodeAnalysis);
+        
+        // LLM智能建议
+        String llmSuggestions = llmSimulator.generateCodingResponse(
+            "请对以下代码提供改进建议和最佳实践指导", 
+            code, "analysis");
+        analysis.put("llm_suggestions", llmSuggestions);
+        
+        // LLM质量评估
+        String llmQualityAssessment = llmSimulator.generateCodingResponse(
+            "请评估以下代码的质量，包括可读性、可维护性、性能等方面", 
+            code, "quality");
+        analysis.put("llm_quality_assessment", llmQualityAssessment);
+        
+        // 增强的问题检测
+        List<CodeIssue> existingIssues = (List<CodeIssue>) analysis.get("issues");
+        List<CodeIssue> llmIssues = extractLLMIssues(llmCodeAnalysis, code);
+        existingIssues.addAll(llmIssues);
+        analysis.put("issues", existingIssues);
+        
+        // LLM增强标记
+        analysis.put("llm_enhanced", true);
+        analysis.put("enhancement_timestamp", System.currentTimeMillis());
+    }
+    
+    /**
+     * 从 LLM 分析中提取问题
+     */
+    private List<CodeIssue> extractLLMIssues(String llmAnalysis, String code) {
+        List<CodeIssue> issues = new ArrayList<>();
+        
+        // 简单的关键词匹配来提取问题
+        if (llmAnalysis.contains("性能问题") || llmAnalysis.contains("性能优化")) {
+            issues.add(new CodeIssue("llm_performance", "medium", 
+                "LLM识别: 可能存在性能问题", 0, 
+                "考虑优化算法或数据结构"));
+        }
+        
+        if (llmAnalysis.contains("安全问题") || llmAnalysis.contains("安全风险")) {
+            issues.add(new CodeIssue("llm_security", "high", 
+                "LLM识别: 可能存在安全风险", 0, 
+                "检查输入验证和数据处理"));
+        }
+        
+        if (llmAnalysis.contains("可读性") || llmAnalysis.contains("可理解性")) {
+            issues.add(new CodeIssue("llm_readability", "low", 
+                "LLM识别: 可读性可以改善", 0, 
+                "添加注释和改善命名"));
+        }
+        
+        return issues;
     }
     
     /**
@@ -495,5 +588,75 @@ public class CodeAnalyzer {
      */
     public int getCacheSize() {
         return analysisCache.size();
+    }
+    
+    // ========== LLM增强方法 ==========
+    
+    /**
+     * 生成智能代码分析报告
+     * @param code 待分析的代码
+     * @return 分析报告
+     */
+    public String generateSmartAnalysisReport(String code) {
+        if (llmSimulator == null) {
+            return "⚠️ LLM未启用，无法生成智能分析报告";
+        }
+        
+        try {
+            Map<String, Object> analysis = analyzeJavaCode(code);
+            
+            StringBuilder report = new StringBuilder();
+            report.append("📈 智能代码分析报告\n");
+            report.append("============================\n\n");
+            
+            // 基本信息
+            report.append("📝 基本信息:\n");
+            report.append("- 语法有效性: ").append(analysis.get("syntax_valid")).append("\n");
+            report.append("- 复杂度: ").append(analysis.get("complexity")).append("\n");
+            
+            if (analysis.containsKey("llm_analysis")) {
+                report.append("\n🤖 LLM智能分析:\n");
+                report.append(analysis.get("llm_analysis")).append("\n");
+            }
+            
+            if (analysis.containsKey("llm_suggestions")) {
+                report.append("\n💡 智能建议:\n");
+                report.append(analysis.get("llm_suggestions")).append("\n");
+            }
+            
+            if (analysis.containsKey("llm_quality_assessment")) {
+                report.append("\n🏆 质量评估:\n");
+                report.append(analysis.get("llm_quality_assessment")).append("\n");
+            }
+            
+            return report.toString();
+            
+        } catch (Exception e) {
+            return "❌ 生成分析报告失败: " + e.getMessage();
+        }
+    }
+    
+    /**
+     * 获取LLM模拟器状态
+     */
+    public Map<String, Object> getLLMStatus() {
+        Map<String, Object> status = new HashMap<>();
+        status.put("llm_enabled", llmSimulator != null);
+        if (llmSimulator != null) {
+            status.put("model_name", llmSimulator.getModelName());
+            status.put("temperature", llmSimulator.getTemperature());
+        } else {
+            status.put("model_name", "未设置");
+            status.put("temperature", 0.0);
+        }
+        return status;
+    }
+    
+    /**
+     * 清空分析缓存并重置状态
+     */
+    public void resetAnalyzer() {
+        analysisCache.clear();
+        System.out.println("✅ CodeAnalyzer 已重置，缓存已清空");
     }
 }

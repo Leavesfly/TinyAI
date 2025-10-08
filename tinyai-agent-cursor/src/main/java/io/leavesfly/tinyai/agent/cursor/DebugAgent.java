@@ -5,8 +5,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 调试代理 - 智能错误诊断和修复建议
- * 分析代码中的潜在错误，提供诊断和修复建议
+ * 调试代理 - 基于LLM的智能错误诊断和修复建议
+ * 结合传统静态分析和LLM智能推理，提供更准确的错误诊断和解决方案
  * 
  * @author 山泽
  */
@@ -14,6 +14,7 @@ public class DebugAgent {
     
     private final CodeAnalyzer analyzer;
     private final Map<String, ErrorPattern> errorPatterns;
+    private final CursorLLMSimulator llmSimulator;  // 新增LLM模拟器
     
     /**
      * 错误模式内部类
@@ -41,6 +42,7 @@ public class DebugAgent {
     public DebugAgent(CodeAnalyzer analyzer) {
         this.analyzer = analyzer;
         this.errorPatterns = loadErrorPatterns();
+        this.llmSimulator = new CursorLLMSimulator();  // 初始化LLM模拟器
     }
     
     /**
@@ -101,13 +103,15 @@ public class DebugAgent {
     }
     
     /**
-     * 诊断代码错误
+     * 诊断代码错误 - 增强LLM智能诊断
      * @param code 待诊断的代码
      * @param errorMessage 可选的错误消息
      * @return 诊断结果
      */
     public Map<String, Object> diagnoseError(String code, String errorMessage) {
         Map<String, Object> diagnosis = new HashMap<>();
+        
+        System.out.println("🔍 启动LLM增强错误诊断...");
         
         // 初始化诊断结果
         diagnosis.put("error_found", false);
@@ -126,46 +130,40 @@ public class DebugAgent {
             return diagnosis;
         }
         
-        // 分析代码语法
-        Map<String, Object> analysis = analyzer.analyzeJavaCode(code);
-        
-        // 检查语法错误
-        if (!(Boolean) analysis.getOrDefault("syntax_valid", true)) {
-            return diagnoseSyntaxError(analysis, code);
-        }
-        
-        // 检查逻辑错误
-        List<String> logicErrors = findLogicErrors(code);
-        if (!logicErrors.isEmpty()) {
-            diagnosis.put("error_found", true);
-            diagnosis.put("error_type", "LogicError");
-            diagnosis.put("diagnosis", "发现潜在逻辑错误");
-            diagnosis.put("suggestions", logicErrors);
-            diagnosis.put("confidence", 0.7);
-        }
-        
-        // 检查运行时错误风险
-        List<String> runtimeRisks = findRuntimeErrorRisks(code);
-        if (!runtimeRisks.isEmpty()) {
-            diagnosis.put("error_found", true);
-            diagnosis.put("error_type", "RuntimeRisk");
-            diagnosis.put("diagnosis", "发现运行时错误风险");
-            diagnosis.put("suggestions", runtimeRisks);
-            diagnosis.put("confidence", 0.6);
-        }
-        
-        // 如果提供了错误消息，进行特定诊断
-        if (errorMessage != null && !errorMessage.trim().isEmpty()) {
-            Map<String, Object> specificDiagnosis = diagnoseSpecificError(code, errorMessage);
-            if ((Boolean) specificDiagnosis.get("error_found")) {
-                return specificDiagnosis;
+        try {
+            // 1. 传统静态分析
+            Map<String, Object> staticAnalysis = performStaticAnalysis(code, errorMessage);
+            
+            // 2. LLM智能诊断
+            String llmDiagnosis = llmSimulator.generateDebugAdvice(code, errorMessage);
+            diagnosis.put("llm_diagnosis", llmDiagnosis);
+            
+            // 3. LLM智能修复建议
+            String fixSuggestion = llmSimulator.generateCodingResponse(
+                "请为以下错误提供详细的修复方案: " + errorMessage,
+                code, "debug");
+            diagnosis.put("llm_fix_suggestion", fixSuggestion);
+            
+            // 4. 结合传统和LLM结果
+            diagnosis = mergeAnalysisResults(diagnosis, staticAnalysis, llmDiagnosis);
+            
+            // 5. 生成综合建议
+            List<String> comprehensiveSuggestions = generateComprehensiveSuggestions(
+                staticAnalysis, llmDiagnosis, errorMessage);
+            diagnosis.put("comprehensive_suggestions", comprehensiveSuggestions);
+            
+            // 6. 智能修复代码
+            if ((Boolean) diagnosis.get("error_found")) {
+                String smartFixedCode = generateSmartFixedCode(code, diagnosis);
+                diagnosis.put("smart_fixed_code", smartFixedCode);
             }
-        }
-        
-        // 尝试自动修复
-        if ((Boolean) diagnosis.get("error_found")) {
-            String fixedCode = attemptAutoFix(code, (String) diagnosis.get("error_type"));
-            diagnosis.put("fixed_code", fixedCode);
+            
+            System.out.println("✅ LLM增强诊断完成，置信度: " + diagnosis.get("confidence"));
+            
+        } catch (Exception e) {
+            System.err.println("❌ LLM诊断失败: " + e.getMessage());
+            // 回退到传统诊断
+            return performTraditionalDiagnosis(code, errorMessage);
         }
         
         return diagnosis;
@@ -687,5 +685,203 @@ public class DebugAgent {
      */
     public void addErrorPattern(String name, ErrorPattern pattern) {
         errorPatterns.put(name, pattern);
+    }
+    
+    // ========== LLM增强方法 ==========
+    
+    /**
+     * 执行传统静态分析
+     */
+    private Map<String, Object> performStaticAnalysis(String code, String errorMessage) {
+        Map<String, Object> analysis = new HashMap<>();
+        
+        // 语法分析
+        Map<String, Object> codeAnalysis = analyzer.analyzeJavaCode(code);
+        analysis.put("syntax_valid", codeAnalysis.getOrDefault("syntax_valid", true));
+        analysis.put("syntax_issues", codeAnalysis.getOrDefault("syntax_issues", new ArrayList<>()));
+        
+        // 逻辑错误检查
+        List<String> logicErrors = findLogicErrors(code);
+        analysis.put("logic_errors", logicErrors);
+        
+        // 运行时风险检查
+        List<String> runtimeRisks = findRuntimeErrorRisks(code);
+        analysis.put("runtime_risks", runtimeRisks);
+        
+        // 特定错误分析
+        if (errorMessage != null && !errorMessage.trim().isEmpty()) {
+            Map<String, Object> specificError = diagnoseSpecificError(code, errorMessage);
+            analysis.put("specific_error", specificError);
+        }
+        
+        return analysis;
+    }
+    
+    /**
+     * 合并分析结果
+     */
+    private Map<String, Object> mergeAnalysisResults(Map<String, Object> diagnosis, 
+                                                     Map<String, Object> staticAnalysis, 
+                                                     String llmDiagnosis) {
+        // 检查是否发现错误
+        boolean errorFound = false;
+        String errorType = "Unknown";
+        double confidence = 0.5;
+        
+        // 从静态分析中提取信息
+        if (!(Boolean) staticAnalysis.getOrDefault("syntax_valid", true)) {
+            errorFound = true;
+            errorType = "SyntaxError";
+            confidence = 0.9;
+        } else if (!((List<?>) staticAnalysis.getOrDefault("logic_errors", new ArrayList<>())).isEmpty()) {
+            errorFound = true;
+            errorType = "LogicError";
+            confidence = 0.7;
+        } else if (!((List<?>) staticAnalysis.getOrDefault("runtime_risks", new ArrayList<>())).isEmpty()) {
+            errorFound = true;
+            errorType = "RuntimeRisk";
+            confidence = 0.6;
+        }
+        
+        // 结合LLM分析提高置信度
+        if (llmDiagnosis.contains("错误") || llmDiagnosis.contains("问题")) {
+            errorFound = true;
+            confidence = Math.min(1.0, confidence + 0.2);
+        }
+        
+        diagnosis.put("error_found", errorFound);
+        diagnosis.put("error_type", errorType);
+        diagnosis.put("confidence", confidence);
+        diagnosis.put("static_analysis", staticAnalysis);
+        
+        return diagnosis;
+    }
+    
+    /**
+     * 生成综合建议
+     */
+    private List<String> generateComprehensiveSuggestions(Map<String, Object> staticAnalysis, 
+                                                         String llmDiagnosis, 
+                                                         String errorMessage) {
+        List<String> suggestions = new ArrayList<>();
+        
+        // 添加静态分析建议
+        @SuppressWarnings("unchecked")
+        List<String> logicErrors = (List<String>) staticAnalysis.getOrDefault("logic_errors", new ArrayList<>());
+        suggestions.addAll(logicErrors);
+        
+        @SuppressWarnings("unchecked")
+        List<String> runtimeRisks = (List<String>) staticAnalysis.getOrDefault("runtime_risks", new ArrayList<>());
+        suggestions.addAll(runtimeRisks);
+        
+        // 添加LLM建议
+        if (llmDiagnosis != null && !llmDiagnosis.isEmpty()) {
+            suggestions.add("LLM分析结果: " + llmDiagnosis);
+        }
+        
+        // 添加基于错误类型的建议
+        if (errorMessage != null) {
+            suggestions.addAll(generateErrorSpecificSuggestions(errorMessage));
+        }
+        
+        // 如果没有建议，添加通用建议
+        if (suggestions.isEmpty()) {
+            suggestions.add("代码看起来基本正常，建议检查运行时环境和输入数据");
+            suggestions.add("建议添加更多的单元测试来验证代码正确性");
+        }
+        
+        return suggestions;
+    }
+    
+    /**
+     * 生成智能修复代码
+     */
+    private String generateSmartFixedCode(String originalCode, Map<String, Object> diagnosis) {
+        StringBuilder fixedCode = new StringBuilder();
+        
+        fixedCode.append("// === 智能修复建议 ===\n");
+        fixedCode.append("// 错误类型: ").append(diagnosis.get("error_type")).append("\n");
+        fixedCode.append("// 置信度: ").append(diagnosis.get("confidence")).append("\n\n");
+        
+        String errorType = (String) diagnosis.get("error_type");
+        
+        switch (errorType) {
+            case "SyntaxError":
+                fixedCode.append("传统修复: 检查语法结构\n");
+                fixedCode.append(attemptSyntaxFix(originalCode, null));
+                break;
+                
+            case "LogicError":
+                fixedCode.append("逻辑修复: 添加检查和验证\n");
+                fixedCode.append(attemptLogicFix(originalCode));
+                break;
+                
+            case "RuntimeRisk":
+                fixedCode.append("运行时修复: 添加异常处理\n");
+                fixedCode.append(attemptRuntimeRiskFix(originalCode));
+                break;
+                
+            default:
+                fixedCode.append("通用修复: 添加注释和验证\n");
+                fixedCode.append("// 建议添加适当的错误处理和日志\n");
+                fixedCode.append(originalCode);
+        }
+        
+        return fixedCode.toString();
+    }
+    
+    /**
+     * 执行传统诊断（回退方案）
+     */
+    private Map<String, Object> performTraditionalDiagnosis(String code, String errorMessage) {
+        Map<String, Object> diagnosis = new HashMap<>();
+        
+        // 初始化
+        diagnosis.put("error_found", false);
+        diagnosis.put("error_type", "");
+        diagnosis.put("error_line", 0);
+        diagnosis.put("diagnosis", "");
+        diagnosis.put("suggestions", new ArrayList<>());
+        diagnosis.put("fixed_code", "");
+        diagnosis.put("confidence", 0.0);
+        
+        // 基础分析
+        Map<String, Object> analysis = analyzer.analyzeJavaCode(code);
+        
+        // 检查语法错误
+        if (!(Boolean) analysis.getOrDefault("syntax_valid", true)) {
+            return diagnoseSyntaxError(analysis, code);
+        }
+        
+        // 检查逻辑错误
+        List<String> logicErrors = findLogicErrors(code);
+        if (!logicErrors.isEmpty()) {
+            diagnosis.put("error_found", true);
+            diagnosis.put("error_type", "LogicError");
+            diagnosis.put("diagnosis", "发现潜在逻辑错误");
+            diagnosis.put("suggestions", logicErrors);
+            diagnosis.put("confidence", 0.7);
+        }
+        
+        return diagnosis;
+    }
+    
+    /**
+     * 生成错误特定建议
+     */
+    private List<String> generateErrorSpecificSuggestions(String errorMessage) {
+        List<String> suggestions = new ArrayList<>();
+        
+        if (errorMessage.toLowerCase().contains("null")) {
+            suggestions.add("在使用对象前检查是否为null");
+            suggestions.add("使用Optional类处理可能为null的值");
+        }
+        
+        if (errorMessage.toLowerCase().contains("array") || errorMessage.toLowerCase().contains("index")) {
+            suggestions.add("检查数组边界条件");
+            suggestions.add("使用增强for循环避免索引错误");
+        }
+        
+        return suggestions;
     }
 }

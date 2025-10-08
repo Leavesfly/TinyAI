@@ -1,15 +1,13 @@
 package io.leavesfly.tinyai.agent.cursor;
 
-import io.leavesfly.tinyai.agent.Message;
-import io.leavesfly.tinyai.agent.SimplifiedAdvancedAgent;
-
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * AI Coding Cursor 主系统 - 智能编程助手
+ * AI Coding Cursor 主系统 - 基于LLM的智能编程助手
  * 整合代码分析、生成、重构、调试等功能，提供统一的智能编程辅助服务
+ * 已集成LLM模拟器，提供更智能的代码理解和建议能力
  * 
  * @author 山泽
  */
@@ -21,11 +19,13 @@ public class AICodingCursor {
     private final RefactorAgent refactorAgent;
     private final DebugAgent debugAgent;
     
+    // LLM模拟器 - 核心智能引擎
+    private final CursorLLMSimulator llmSimulator;
+    
     // 系统状态和配置
     private final Map<String, Object> preferences;
-    private final List<Message> sessionHistory;
+    private final List<String> sessionHistory;
     private final Map<String, Object> currentContext;
-    private final SimplifiedAdvancedAgent llmAgent;
     
     // 性能和统计信息
     private final Map<String, Integer> operationStats;
@@ -38,11 +38,20 @@ public class AICodingCursor {
     public AICodingCursor(String name) {
         this.name = name != null ? name : "AI Coding Cursor";
         
+        // 初始化LLM模拟器 - 核心智能引擎
+        this.llmSimulator = new CursorLLMSimulator();
+        
         // 初始化核心组件
         this.analyzer = new CodeAnalyzer();
         this.generator = new CodeGenerator();
         this.refactorAgent = new RefactorAgent(analyzer);
         this.debugAgent = new DebugAgent(analyzer);
+        
+        // 为CodeGenerator设置LLM模拟器
+        this.generator.setLLMSimulator(llmSimulator);
+        this.analyzer.setLLMSimulator(llmSimulator);
+        
+        System.out.println("✅ LLM增强的AI编程助手初始化完成");
         
         // 初始化系统状态
         this.preferences = new ConcurrentHashMap<>();
@@ -51,16 +60,12 @@ public class AICodingCursor {
         this.operationStats = new ConcurrentHashMap<>();
         this.startTime = LocalDateTime.now();
         
-        // 初始化LLM代理
-        this.llmAgent = new SimplifiedAdvancedAgent("CursorLLM", 
-            "你是一个专业的Java编程助手，能够帮助用户进行代码分析、生成、重构和调试。" +
-            "请用中文回答问题，提供准确、实用的编程建议。");
-        
         // 设置默认偏好
         initializeDefaultPreferences();
         
         System.out.println("🚀 " + this.name + " 智能编程助手已启动!");
-        System.out.println("💡 支持功能：代码分析、生成、重构、调试、智能对话");
+        System.out.println("💡 支持功能：代码分析、生成、重构、调试、LLM智能对话");
+        System.out.println("🤖 集成LLM模拟器：" + llmSimulator.getModelName());
     }
     
     /**
@@ -83,29 +88,39 @@ public class AICodingCursor {
     }
     
     /**
-     * 分析代码
+     * 分析代码 - 增强LLM能力
      * @param code 待分析的代码
      * @return 分析结果
      */
     public Map<String, Object> analyzeCode(String code) {
         long startTime = System.currentTimeMillis();
-        System.out.println("🔍 正在分析代码...");
+        System.out.println("🔍 正在进行智能代码分析...");
         
         try {
+            // 基础分析
             Map<String, Object> analysis = analyzer.analyzeJavaCode(code);
+            
+            // LLM增强分析
+            String llmAnalysis = llmSimulator.generateCodeAnalysis(code, "general");
+            analysis.put("llm_analysis", llmAnalysis);
+            
+            // 智能建议
+            String smartSuggestions = llmSimulator.generateCodingResponse(
+                "请对以下代码提供改进建议", code, "analysis");
+            analysis.put("smart_suggestions", smartSuggestions);
             
             // 记录操作统计
             operationStats.merge("analyze", 1, Integer::sum);
             
             // 记录到会话历史
-            recordOperation("analyze", "代码分析", analysis);
+            recordOperation("analyze", "智能代码分析", analysis);
             
             // 更新当前上下文
             currentContext.put("last_analysis", analysis);
             currentContext.put("last_code", code);
             
             long duration = System.currentTimeMillis() - startTime;
-            System.out.println("✅ 代码分析完成 (耗时: " + duration + "ms)");
+            System.out.println("✅ 智能代码分析完成 (耗时: " + duration + "ms)");
             
             return analysis;
             
@@ -121,16 +136,17 @@ public class AICodingCursor {
     }
     
     /**
-     * 生成代码
+     * 生成代码 - 增强LLM能力
      * @param request 生成请求
      * @return 生成的代码
      */
     public String generateCode(String request) {
         long startTime = System.currentTimeMillis();
-        System.out.println("🤖 正在生成代码: " + request);
+        System.out.println("🤖 正在智能生成代码: " + request);
         
         try {
-            String generatedCode = generator.generateFromRequest(request);
+            // 使用LLM增强版本生成代码
+            String generatedCode = generator.generateFromRequestEnhanced(request);
             
             // 记录操作统计
             operationStats.merge("generate", 1, Integer::sum);
@@ -143,7 +159,7 @@ public class AICodingCursor {
             currentContext.put("last_request", request);
             
             long duration = System.currentTimeMillis() - startTime;
-            System.out.println("✅ 代码生成完成 (耗时: " + duration + "ms)");
+            System.out.println("✅ 智能代码生成完成 (耗时: " + duration + "ms)");
             
             return generatedCode;
             
@@ -188,7 +204,7 @@ public class AICodingCursor {
     }
     
     /**
-     * 调试代码
+     * 调试代码 - 增强LLM能力
      * @param code 待调试的代码
      * @param errorMessage 可选的错误消息
      * @return 调试结果
@@ -198,7 +214,18 @@ public class AICodingCursor {
         System.out.println("🐛 正在进行智能调试...");
         
         try {
+            // 基础调试分析
             Map<String, Object> debugResult = debugAgent.diagnoseError(code, errorMessage);
+            
+            // LLM增强调试
+            String llmDebugAdvice = llmSimulator.generateDebugAdvice(code, errorMessage);
+            debugResult.put("llm_debug_advice", llmDebugAdvice);
+            
+            // 智能解决方案
+            String smartSolution = llmSimulator.generateCodingResponse(
+                "请为以下错误提供详细的解决方案: " + errorMessage, 
+                code, "debug");
+            debugResult.put("smart_solution", smartSolution);
             
             // 记录操作统计
             operationStats.merge("debug", 1, Integer::sum);
@@ -206,13 +233,13 @@ public class AICodingCursor {
             // 记录到会话历史
             String resultSummary = (Boolean) debugResult.get("error_found") ? 
                 "发现错误: " + debugResult.get("error_type") : "未发现明显错误";
-            recordOperation("debug", "错误诊断", resultSummary);
+            recordOperation("debug", "智能错误诊断", resultSummary);
             
             // 更新当前上下文
             currentContext.put("last_debug_result", debugResult);
             
             long duration = System.currentTimeMillis() - startTime;
-            System.out.println("✅ 调试分析完成 (耗时: " + duration + "ms)");
+            System.out.println("✅ 智能调试分析完成 (耗时: " + duration + "ms)");
             
             return debugResult;
             
@@ -289,7 +316,7 @@ public class AICodingCursor {
     }
     
     /**
-     * 智能对话功能
+     * 智能对话功能 - 使用LLM模拟器
      * @param userInput 用户输入
      * @return AI回复
      */
@@ -305,8 +332,9 @@ public class AICodingCursor {
             // 构建上下文信息
             String contextualInput = buildContextualInput(userInput);
             
-            // 调用LLM代理
-            String response = llmAgent.processMessage(contextualInput);
+            // 使用LLM模拟器生成回复
+            String response = llmSimulator.generateCodingResponse(contextualInput, 
+                getCurrentContextString(), "general");
             
             // 记录操作统计
             operationStats.merge("chat", 1, Integer::sum);
@@ -344,6 +372,21 @@ public class AICodingCursor {
         contextBuilder.append("用户问题：").append(userInput);
         
         return contextBuilder.toString();
+    }
+    
+    /**
+     * 获取当前上下文字符串
+     */
+    private String getCurrentContextString() {
+        StringBuilder context = new StringBuilder();
+        
+        if (currentContext.containsKey("last_code")) {
+            context.append("最近处理的代码：\n");
+            context.append(currentContext.get("last_code").toString());
+            context.append("\n\n");
+        }
+        
+        return context.toString();
     }
     
     /**
@@ -465,14 +508,10 @@ public class AICodingCursor {
      */
     private void recordOperation(String operation, String input, Object result) {
         try {
-            Map<String, Object> metadata = new HashMap<>();
-            metadata.put("operation", operation);
-            metadata.put("input", input);
-            metadata.put("result_summary", result.toString());
-            metadata.put("timestamp", LocalDateTime.now());
+            String record = String.format("[%s] %s: %s -> %s", 
+                LocalDateTime.now().toString(), operation, input, result.toString());
             
-            Message message = new Message("system", "操作记录: " + operation, metadata);
-            sessionHistory.add(message);
+            sessionHistory.add(record);
             
             // 限制历史记录长度
             if (sessionHistory.size() > 100) {
@@ -512,7 +551,7 @@ public class AICodingCursor {
     /**
      * 获取会话历史
      */
-    public List<Message> getSessionHistory() {
+    public List<String> getSessionHistory() {
         return new ArrayList<>(sessionHistory);
     }
     
@@ -562,19 +601,20 @@ public class AICodingCursor {
      */
     public String getHelp() {
         return "🚀 AI Coding Cursor 智能编程助手\n\n" +
-               "📋 主要功能：\n" +
-               "• analyzeCode(code) - 分析代码结构和质量\n" +
-               "• generateCode(request) - 根据需求生成代码\n" +
+               "📝 主要功能：\n" +
+               "• analyzeCode(code) - LLM增强的代码结构和质量分析\n" +
+               "• generateCode(request) - LLM智能代码生成\n" +
                "• suggestRefactor(code) - 提供重构建议\n" +
-               "• debugCode(code) - 诊断和修复错误\n" +
+               "• debugCode(code) - LLM智能错误诊断和修复\n" +
                "• reviewCode(code) - 综合代码审查\n" +
-               "• chat(message) - 智能对话功能\n\n" +
+               "• chat(message) - LLM智能对话功能\n\n" +
                "⚙️ 系统管理：\n" +
                "• getSystemStatus() - 查看系统状态\n" +
                "• updatePreferences(prefs) - 更新设置\n" +
                "• clearSessionHistory() - 清空历史\n" +
                "• getHelp() - 查看帮助信息\n\n" +
-               "作者：山泽 | 版本：1.0.0";
+               "🤖 LLM模拟器：" + llmSimulator.getModelName() + "\n" +
+               "作者：山泽 | 版本：2.0.0 (LLM Enhanced)";
     }
     
     // Getter 方法
@@ -596,5 +636,9 @@ public class AICodingCursor {
     
     public DebugAgent getDebugAgent() {
         return debugAgent;
+    }
+    
+    public CursorLLMSimulator getLLMSimulator() {
+        return llmSimulator;
     }
 }

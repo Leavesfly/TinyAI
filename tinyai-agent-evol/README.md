@@ -1,39 +1,41 @@
-# TinyAI Agent Evol 自进化智能体系统
+# TinyAI Agent Evol 自进化智能体系统 (LLM增强版)
 
 [![Java Version](https://img.shields.io/badge/Java-17+-blue.svg)](https://openjdk.org/projects/jdk/17/)
 [![Maven](https://img.shields.io/badge/Maven-3.6+-blue.svg)](https://maven.apache.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![LLM Enhanced](https://img.shields.io/badge/LLM-Enhanced-green.svg)](#)
 
 ## 🌟 项目简介
 
-TinyAI Agent Evol 是 TinyAI 框架的革命性模块，实现了具备**自进化**、**自学习**和**自适应**能力的智能体系统。该模块采用纯Java实现，通过经验记忆、策略优化、反思改进和知识图谱构建等核心机制，让AI智能体具备真正的学习和成长能力。
+TinyAI Agent Evol 是 TinyAI 框架的革命性模块，现已升级为**LLM增强版本**！该模块结合了传统自进化能力与大语言模型的智能推理，实现了具备**深度智能推理**、**自进化**、**自学习**和**自适应**能力的新一代智能体系统。采用纯Java实现，通过LLM驱动的经验分析、智能策略优化、深度反思改进和语义知识图谱等核心机制，让AI智能体具备真正的智能学习和成长能力。
 
-## 🚀 核心特性
+## 🚀 LLM增强特性
 
-### 🧠 自学习能力
-- **经验积累系统** - 完整记录每次任务执行的经验数据
-- **策略进化机制** - 基于成功率动态调整决策策略权重
-- **知识图谱构建** - 自动构建概念关系网络和语义关联
-- **深度反思模块** - 智能分析成功失败原因，生成学习洞察
+### 🧠 LLM驱动的深度智能
+- **智能策略推理** - LLM分析上下文，提供智能决策建议
+- **深度反思分析** - 基于语义理解的深层经验分析
+- **语义知识图谱** - LLM增强的概念关系和知识推理
+- **智能模式识别** - 发现隐藏的行为模式和潜在关联
 
-### 🔄 自适应能力
-- **探索-利用平衡** - 动态调整探索新策略与利用已知策略的比例
-- **上下文感知决策** - 基于环境上下文匹配最适合的执行策略
-- **不确定性评估** - 智能评估任务复杂度和执行风险
-- **学习率自调整** - 根据性能表现自适应调整学习参数
+### 🔄 自适应智能决策
+- **置信度驱动决策** - 基于LLM分析置信度的智能决策
+- **多层次推理** - 策略推理、知识推理、模式推理的多维分析
+- **异步智能处理** - 非阻塞式LLM分析，保证系统响应性
+- **智能降级机制** - LLM失效时的优雅回退和容错处理
 
-### 🌱 自进化能力
-- **策略优化** - 自动移除低效策略，合并相似策略
-- **知识整合** - 发现概念间潜在关联，构建知识网络
-- **能力扩展** - 基于成功模式动态创建新的工具组合
-- **模式识别** - 多维度识别行为模式和性能趋势
+### 🌱 LLM增强的自进化
+- **智能策略生成** - LLM辅助创建和优化执行策略
+- **语义知识整合** - 基于语义理解的知识关联发现
+- **智能能力扩展** - LLM推荐的新工具和能力组合
+- **元学习分析** - 对学习过程本身的深度反思和优化
 
-### 🛠️ 内置工具库
-- **search** - 信息搜索和知识检索
-- **calculate** - 数学计算和表达式求值
-- **analyze** - 数据分析和模式识别
-- **plan** - 目标规划和任务分解
-- **combo_*_*** - 动态生成的智能工具组合
+### 🛠️ LLM增强工具库
+- **intelligent_search** - LLM增强的智能信息搜索和知识检索
+- **smart_calculate** - 带有LLM洞察的数学计算和表达式求值
+- **deep_analyze** - LLM驱动的深度数据分析和模式识别
+- **strategic_plan** - 基于LLM的智能目标规划和任务分解
+- **llm_specialized_*** - 动态生成的LLM专用工具组合
+- **combo_*_*** - LLM建议的智能工具组合
 
 ## 📦 模块架构
 
@@ -46,16 +48,23 @@ tinyai-agent-evol/
 │   │   ├── Experience.java           # 经验记录数据结构
 │   │   └── Strategy.java             # 策略记录数据结构
 │   ├── 核心引擎层
-│   │   ├── SelfEvolvingAgent.java    # 自进化智能体主引擎
-│   │   ├── KnowledgeGraph.java       # 知识图谱管理引擎
-│   │   └── ReflectionModule.java     # 反思分析引擎
+│   │   ├── SelfEvolvingAgent.java    # 传统自进化智能体
+│   │   ├── LLMSelfEvolvingAgent.java # LLM增强自进化智能体
+│   │   ├── KnowledgeGraph.java       # 传统知识图谱管理
+│   │   ├── LLMKnowledgeGraph.java    # LLM增强知识图谱
+│   │   ├── ReflectionModule.java     # 传统反思分析引擎
+│   │   └── LLMReflectionModule.java  # LLM增强反思模块
+│   ├── LLM增强层
+│   │   └── EvolLLMSimulator.java     # 自进化专用LLM模拟器
 │   └── 演示程序
-│       └── EvolDemo.java             # 功能演示程序
+│       ├── EvolDemo.java             # 传统功能演示程序
+│       └── LLMEvolDemo.java          # LLM增强演示程序
 ├── src/test/java/io/leavesfly/tinyai/agent/evol/
 │   └── SelfEvolvingAgentTest.java    # 单元测试套件
 ├── doc/
 │   ├── README.md                     # 技术实现文档
 │   └── evol.txt                      # 设计参考文档
+├── LLM改造技术文档.md                # LLM改造详细文档
 └── pom.xml
 ```
 
@@ -122,12 +131,44 @@ mvn test
 
 ### 基础使用示例
 
-#### 创建自进化智能体
+#### 创建LLM增强的自进化智能体
 
 ```java
 import io.leavesfly.tinyai.agent.evol.*;
 
-// 创建自进化智能体
+// 创建LLM增强的自进化智能体
+LLMSelfEvolvingAgent llmAgent = new LLMSelfEvolvingAgent("智能学习助手");
+
+// 配置LLM参数
+llmAgent.setLlmConfidenceThreshold(0.7);
+llmAgent.setEnableAsyncLLM(true);
+
+// 准备任务上下文
+Map<String, Object> context = new HashMap<>();
+context.put("query", "机器学习入门");
+context.put("difficulty", "beginner");
+context.put("creativity_required", true);
+
+// 处理任务并学习（LLM增强版）
+LLMSelfEvolvingAgent.EnhancedTaskResult result = 
+    llmAgent.processTaskWithLLM("搜索学习资源", context);
+
+// 查看执行结果
+System.out.println("执行动作: " + result.getAction());
+System.out.println("是否成功: " + result.isSuccess());
+System.out.println("奖励值: " + result.getReward());
+System.out.println("基础学习洞察: " + result.getLearningInsights());
+System.out.println("LLM深度反思: " + result.getLlmReflection());
+System.out.println("改进建议: " + result.getImprovementAdvice());
+System.out.println("发现的模式: " + result.getDiscoveredPatterns());
+```
+
+#### 传统智能体使用示例（向后兼容）
+
+```java
+import io.leavesfly.tinyai.agent.evol.*;
+
+// 创建传统自进化智能体
 SelfEvolvingAgent agent = new SelfEvolvingAgent("智能学习助手");
 
 // 准备任务上下文
@@ -145,21 +186,65 @@ System.out.println("奖励值: " + result.getReward());
 System.out.println("学习洞察: " + result.getLearningInsights());
 ```
 
-#### 监控学习进度
+### 监控LLM增强学习进度
 
 ```java
-// 获取性能摘要
-Map<String, Object> performance = agent.getPerformanceSummary();
+// 获取LLM增强性能摘要
+Map<String, Object> performance = llmAgent.getEnhancedPerformanceSummary();
 System.out.println("总任务数: " + performance.get("total_tasks"));
-System.out.println("成功率: " + performance.get("current_success_rate"));
+System.out.println("成功率: " + String.format("%.1f%%", 
+                 ((Number) performance.get("current_success_rate")).doubleValue() * 100));
 System.out.println("策略数量: " + performance.get("strategies_count"));
 System.out.println("知识概念: " + performance.get("knowledge_concepts"));
+System.out.println("LLM功能状态: " + performance.get("llm_enabled"));
+System.out.println("LLM辅助决策: " + performance.get("llm_assisted_decisions"));
+System.out.println("LLM参与率: " + String.format("%.1f%%", 
+                 ((Number) performance.get("llm_assistance_rate")).doubleValue() * 100));
+
+// 传统性能摘要（向后兼容）
+Map<String, Object> basicPerformance = agent.getPerformanceSummary();
+System.out.println("总任务数: " + basicPerformance.get("total_tasks"));
+System.out.println("成功率: " + basicPerformance.get("current_success_rate"));
+System.out.println("策略数量: " + basicPerformance.get("strategies_count"));
+System.out.println("知识概念: " + basicPerformance.get("knowledge_concepts"));
 ```
 
-#### 手动触发自进化
+#### 手动触发LLM增强自进化
 
 ```java
-// 手动触发自我进化过程
+// 手动触发LLM增强的自我进化过程
+llmAgent.selfEvolveWithLLM();
+
+// 查看LLM增强学习到的策略
+Map<String, Strategy> strategies = llmAgent.getStrategies();
+strategies.values().forEach(strategy -> {
+    System.out.println(String.format("策略: %s, 成功率: %.1f%%, 使用次数: %d",
+        strategy.getName(), 
+        strategy.getSuccessRate() * 100,
+        strategy.getUsageCount()));
+});
+
+// LLM增强反思模块的智能洞察
+if (llmAgent.getReflectionModule() instanceof LLMReflectionModule) {
+    LLMReflectionModule llmReflection = (LLMReflectionModule) llmAgent.getReflectionModule();
+    List<String> insights = llmReflection.extractIntelligentInsights(
+        llmAgent.getExperiences(), "学习效率");
+    insights.forEach(insight -> System.out.println("💡 LLM洞察: " + insight));
+}
+
+// LLM增强知识图谱的智能推理
+if (llmAgent.getKnowledgeGraph() instanceof LLMKnowledgeGraph) {
+    LLMKnowledgeGraph llmKG = (LLMKnowledgeGraph) llmAgent.getKnowledgeGraph();
+    String reasoning = llmKG.performIntelligentReasoning(
+        "分析学习成果与策略的关系", "correlation_analysis");
+    System.out.println("🧠 LLM推理: " + reasoning);
+}
+```
+
+#### 传统自进化（向后兼容）
+
+```java
+// 手动触发传统的自我进化过程
 agent.selfEvolve();
 
 // 查看学习到的策略

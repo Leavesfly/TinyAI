@@ -9,9 +9,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * ReAct (Reasoning and Acting) Agent
+ * ReAct (Reasoning and Acting) Agent - LLM模拟版本
  * OpenManus分层架构的第二层
- * 实现基础的推理-行动循环
+ * 基于LLM模拟实现智能的推理-行动循环
  * 
  * @author 山泽
  */
@@ -32,16 +32,42 @@ public class ReActAgent extends BaseAgent {
         super(name);
         this.verboseMode = false;
         this.maxIterations = MAX_ITERATIONS;
+        // 设置ReAct专用的系统提示
+        this.systemPrompt = generateReActSystemPrompt();
     }
     
     public ReActAgent(String name, boolean verboseMode) {
         super(name);
         this.verboseMode = verboseMode;
         this.maxIterations = MAX_ITERATIONS;
+        this.systemPrompt = generateReActSystemPrompt();
+    }
+    
+    public ReActAgent(String name, boolean verboseMode, boolean llmEnabled) {
+        super(name, null, llmEnabled);
+        this.verboseMode = verboseMode;
+        this.maxIterations = MAX_ITERATIONS;
+        this.systemPrompt = generateReActSystemPrompt();
     }
     
     /**
-     * 处理消息 - 实现ReAct循环
+     * 生成ReAct专用的系统提示
+     */
+    private String generateReActSystemPrompt() {
+        return String.format(
+            "你是%s，一个基于ReAct（推理-行动）模式的智能助手。" +
+            "你会按照'思考-行动-观察'的循环来解决问题。" +
+            "在每轮推理中，你需要：" +
+            "1. 思考：分析问题，制定策略 " +
+            "2. 行动：选择并执行合适的工具 " +
+            "3. 观察：分析执行结果，判断是否达到目标 " +
+            "请保持逻辑清晰，推理有序。", 
+            name
+        );
+    }
+    
+    /**
+     * 处理消息 - 基于LLM模拟的ReAct循环
      */
     @Override
     public Message processMessage(Message message) {
@@ -52,54 +78,60 @@ public class ReActAgent extends BaseAgent {
         StringBuilder response = new StringBuilder();
         
         try {
-            // 开始ReAct循环
+            // 构建上下文
+            String context = buildContext();
+            
+            // 开始LLM驱动的ReAct循环
             for (int iteration = 0; iteration < maxIterations; iteration++) {
                 if (verboseMode) {
                     response.append(String.format("=== 第 %d 轮推理 ===\n", iteration + 1));
                 }
                 
-                // 1. 思考阶段
+                // 1. 思考阶段 - 使用LLM生成
                 updateState(AgentState.THINKING);
-                String thought = think(query, response.toString());
+                String thought = generateThought(query, context, iteration);
                 
                 if (verboseMode) {
                     response.append("思考：").append(thought).append("\n");
                 }
                 
                 // 检查是否需要行动
-                if (shouldAct(thought)) {
-                    // 2. 行动阶段
+                if (shouldTakeAction(thought)) {
+                    // 2. 行动阶段 - 使用LLM规划行动
                     updateState(AgentState.ACTING);
-                    String action = planAction(thought);
+                    String actionPlan = generateActionPlan(thought, getAvailableToolsInfo());
                     
                     if (verboseMode) {
-                        response.append("行动：").append(action).append("\n");
+                        response.append("行动计划：").append(actionPlan).append("\n");
                     }
                     
                     // 执行行动
-                    String observation = executeAction(action);
+                    String actionResult = executeActionWithLLM(actionPlan, query);
                     
-                    // 3. 观察阶段
+                    // 3. 观察阶段 - 使用LLM分析结果
                     updateState(AgentState.OBSERVING);
+                    String observation = generateObservation(actionResult, query);
+                    
                     if (verboseMode) {
-                        response.append("观察：").append(observation).append("\n");
+                        response.append("行动结果：").append(actionResult).append("\n");
+                        response.append("观察分析：").append(observation).append("\n");
                     }
                     
                     // 检查是否达到目标
-                    if (isGoalReached(observation, query)) {
+                    if (isGoalAchieved(observation, query)) {
                         updateState(AgentState.DONE);
-                        String conclusion = formulate_conclusion(observation, query);
+                        String conclusion = generateConclusion(observation, query);
                         response.append("结论：").append(conclusion);
                         break;
                     }
                     
-                    // 更新查询上下文
-                    query = updateContext(query, thought, action, observation);
+                    // 更新上下文信息
+                    context = updateContextWithIteration(context, thought, actionPlan, actionResult, observation);
                 } else {
                     // 直接给出结论
                     updateState(AgentState.DONE);
                     String conclusion = thought.contains("结论") ? thought : 
-                        formulate_conclusion(thought, message.getContent());
+                        generateDirectConclusion(thought, query);
                     response.append("结论：").append(conclusion);
                     break;
                 }
@@ -126,7 +158,184 @@ public class ReActAgent extends BaseAgent {
     }
     
     /**
-     * 思考阶段 - 分析问题并规划下一步
+     * 使用LLM生成思考内容
+     */
+    private String generateThought(String query, String context, int iteration) {
+        if (!llmEnabled) {
+            return think(query, context); // 回退到原有逻辑
+        }
+        
+        try {
+            return llmSimulator.generateThought(query, context, iteration);
+        } catch (Exception e) {
+            return "思考过程出现问题：" + e.getMessage();
+        }
+    }
+    
+    /**
+     * 使用LLM生成行动计划
+     */
+    private String generateActionPlan(String thought, String availableTools) {
+        if (!llmEnabled) {
+            return planAction(thought); // 回退到原有逻辑
+        }
+        
+        try {
+            return llmSimulator.generateAction(thought, availableTools);
+        } catch (Exception e) {
+            return "生成行动计划出现问题：" + e.getMessage();
+        }
+    }
+    
+    /**
+     * 使用LLM生成观察分析
+     */
+    private String generateObservation(String actionResult, String originalQuery) {
+        if (!llmEnabled) {
+            return actionResult; // 直接返回结果
+        }
+        
+        try {
+            return llmSimulator.generateObservation(actionResult, originalQuery);
+        } catch (Exception e) {
+            return "观察分析出现问题：" + e.getMessage();
+        }
+    }
+    
+    /**
+     * 获取可用工具信息
+     */
+    private String getAvailableToolsInfo() {
+        Map<String, Integer> toolStats = getToolStats();
+        StringBuilder tools = new StringBuilder();
+        
+        if (toolStats.isEmpty()) {
+            tools.append("calculator, get_time, text_analyzer"); // 默认工具
+        } else {
+            tools.append(String.join(", ", toolStats.keySet()));
+        }
+        
+        return tools.toString();
+    }
+    
+    /**
+     * 使用LLM执行行动
+     */
+    private String executeActionWithLLM(String actionPlan, String query) {
+        try {
+            // 从行动计划中提取工具名称和参数
+            String toolName = extractToolNameFromAction(actionPlan);
+            Map<String, Object> args = extractToolArgumentsFromAction(actionPlan, query);
+            
+            if (toolName != null) {
+                ToolCall result = callTool(toolName, args);
+                
+                if (result.isSuccess()) {
+                    return "工具执行成功：" + result.getResult();
+                } else {
+                    return "工具执行失败：" + result.getError();
+                }
+            } else {
+                return "无法从行动计划中提取工具信息";
+            }
+        } catch (Exception e) {
+            return "行动执行异常：" + e.getMessage();
+        }
+    }
+    
+    /**
+     * 从行动计划中提取工具名称
+     */
+    private String extractToolNameFromAction(String actionPlan) {
+        if (actionPlan.contains("calculator") || actionPlan.contains("计算")) {
+            return "calculator";
+        } else if (actionPlan.contains("get_time") || actionPlan.contains("时间")) {
+            return "get_time";
+        } else if (actionPlan.contains("text_analyzer") || actionPlan.contains("分析")) {
+            return "text_analyzer";
+        }
+        return null;
+    }
+    
+    /**
+     * 从行动计划中提取工具参数
+     */
+    private Map<String, Object> extractToolArgumentsFromAction(String actionPlan, String query) {
+        Map<String, Object> args = new HashMap<>();
+        
+        if (actionPlan.contains("calculator") || actionPlan.contains("计算")) {
+            String expression = extractMathExpression(query);
+            if (expression != null) {
+                args.put("expression", expression);
+            }
+        } else if (actionPlan.contains("text_analyzer") || actionPlan.contains("分析")) {
+            String textToAnalyze = extractTextForAnalysis(query);
+            args.put("text", textToAnalyze);
+        }
+        // get_time 不需要参数
+        
+        return args;
+    }
+    
+    /**
+     * 判断是否需要采取行动
+     */
+    private boolean shouldTakeAction(String thought) {
+        return thought.contains("需要") || thought.contains("使用") || 
+               thought.contains("工具") || thought.contains("计算") ||
+               thought.contains("获取") || thought.contains("分析") ||
+               thought.contains("执行") || thought.contains("调用");
+    }
+    
+    /**
+     * 判断是否达到目标
+     */
+    private boolean isGoalAchieved(String observation, String query) {
+        return observation.contains("成功") || observation.contains("结果") ||
+               observation.contains("完成") || observation.contains("获得");
+    }
+    
+    /**
+     * 生成结论
+     */
+    private String generateConclusion(String observation, String query) {
+        if (!llmEnabled) {
+            return observation;
+        }
+        
+        String context = String.format("基于观察结果'%s'和原始查询'%s'", observation, query);
+        return generateLLMResponse("请生成最终结论", context);
+    }
+    
+    /**
+     * 生成直接结论（不需要行动时）
+     */
+    private String generateDirectConclusion(String thought, String query) {
+        if (!llmEnabled) {
+            return thought;
+        }
+        
+        String context = String.format("基于思考结果'%s'和查询'%s'", thought, query);
+        return generateLLMResponse("请直接给出结论", context);
+    }
+    
+    /**
+     * 更新上下文信息
+     */
+    private String updateContextWithIteration(String context, String thought, String action, String actionResult, String observation) {
+        StringBuilder newContext = new StringBuilder(context);
+        newContext.append("\n上一轮的推理：");
+        newContext.append("思考: ").append(thought).append("; ");
+        newContext.append("行动: ").append(action).append("; ");
+        newContext.append("结果: ").append(actionResult).append("; ");
+        newContext.append("观察: ").append(observation).append("\n");
+        return newContext.toString();
+    }
+    
+    // 原有的逻辑方法，作为回退方案
+    
+    /**
+     * 思考阶段 - 分析问题并规划下一步（回退方案）
      */
     private String think(String query, String context) {
         // 简化的思考逻辑
@@ -155,16 +364,7 @@ public class ReActAgent extends BaseAgent {
     }
     
     /**
-     * 判断是否需要行动
-     */
-    private boolean shouldAct(String thought) {
-        return thought.contains("需要使用") || thought.contains("应该使用") || 
-               thought.contains("工具") || thought.contains("计算") ||
-               thought.contains("获取") || thought.contains("分析");
-    }
-    
-    /**
-     * 规划行动
+     * 规划行动（回退方案）
      */
     private String planAction(String thought) {
         if (thought.contains("计算器")) {
@@ -176,113 +376,6 @@ public class ReActAgent extends BaseAgent {
         } else {
             return "使用合适的工具解决问题";
         }
-    }
-    
-    /**
-     * 执行行动
-     */
-    private String executeAction(String action) {
-        try {
-            if (action.contains("计算器")) {
-                return executeCalculatorAction();
-            } else if (action.contains("时间")) {
-                return executeTimeAction();
-            } else if (action.contains("文本分析")) {
-                return executeTextAnalysisAction();
-            } else {
-                return "无法执行指定的行动：" + action;
-            }
-        } catch (Exception e) {
-            return "行动执行失败：" + e.getMessage();
-        }
-    }
-    
-    /**
-     * 执行计算器行动
-     */
-    private String executeCalculatorAction() {
-        // 从最后一条用户消息中提取数学表达式
-        String lastUserMessage = getLastUserMessage();
-        String expression = extractMathExpression(lastUserMessage);
-        
-        if (expression != null) {
-            Map<String, Object> args = new HashMap<>();
-            args.put("expression", expression);
-            ToolCall result = callTool("calculator", args);
-            
-            if (result.isSuccess()) {
-                return "计算结果：" + result.getResult();
-            } else {
-                return "计算失败：" + result.getError();
-            }
-        } else {
-            return "无法从输入中提取数学表达式";
-        }
-    }
-    
-    /**
-     * 执行时间查询行动
-     */
-    private String executeTimeAction() {
-        ToolCall result = callTool("get_time", new HashMap<>());
-        
-        if (result.isSuccess()) {
-            return "当前时间：" + result.getResult();
-        } else {
-            return "获取时间失败：" + result.getError();
-        }
-    }
-    
-    /**
-     * 执行文本分析行动
-     */
-    private String executeTextAnalysisAction() {
-        String lastUserMessage = getLastUserMessage();
-        String textToAnalyze = extractTextForAnalysis(lastUserMessage);
-        
-        if (textToAnalyze != null) {
-            Map<String, Object> args = new HashMap<>();
-            args.put("text", textToAnalyze);
-            ToolCall result = callTool("text_analyzer", args);
-            
-            if (result.isSuccess()) {
-                return "分析结果：" + result.getResult();
-            } else {
-                return "分析失败：" + result.getError();
-            }
-        } else {
-            return "无法从输入中提取需要分析的文本";
-        }
-    }
-    
-    /**
-     * 判断是否达到目标
-     */
-    private boolean isGoalReached(String observation, String query) {
-        return observation.contains("结果") || observation.contains("成功") ||
-               observation.contains("时间") || observation.contains("分析结果");
-    }
-    
-    /**
-     * 形成结论
-     */
-    private String formulate_conclusion(String observation, String query) {
-        if (observation.contains("计算结果")) {
-            return observation;
-        } else if (observation.contains("当前时间")) {
-            return observation;
-        } else if (observation.contains("分析结果")) {
-            return observation;
-        } else {
-            return "基于分析，" + observation;
-        }
-    }
-    
-    /**
-     * 更新上下文
-     */
-    private String updateContext(String originalQuery, String thought, String action, String observation) {
-        return originalQuery + " [上一轮：" + thought + " -> " + action + " -> " + observation + "]";
     }
     
     /**

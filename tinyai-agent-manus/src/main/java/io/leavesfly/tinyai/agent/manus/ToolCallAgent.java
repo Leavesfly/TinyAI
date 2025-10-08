@@ -8,9 +8,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 工具调用Agent
+ * 工具调用Agent - LLM模拟版本
  * OpenManus分层架构的第三层
- * 专门处理工具调用和结果解析
+ * 基于LLM模拟实现智能的工具选择和调用
  * 
  * @author 山泽
  */
@@ -20,6 +20,7 @@ public class ToolCallAgent extends ReActAgent {
     private boolean autoToolSelection;                  // 自动工具选择
     private List<String> preferredTools;                // 优先使用的工具
     private Map<String, Integer> toolUsageCount;       // 工具使用计数
+    private boolean enableLLMToolSelection;             // 启用LLM工具选择
     
     /**
      * 构造函数
@@ -30,6 +31,10 @@ public class ToolCallAgent extends ReActAgent {
         this.autoToolSelection = true;
         this.preferredTools = new ArrayList<>();
         this.toolUsageCount = new HashMap<>();
+        this.enableLLMToolSelection = true;
+        
+        // 设置工具调用专用的系统提示
+        this.systemPrompt = generateToolCallSystemPrompt();
         
         // 初始化工具映射
         initializeToolMappings();
@@ -41,8 +46,36 @@ public class ToolCallAgent extends ReActAgent {
         this.autoToolSelection = autoToolSelection;
         this.preferredTools = new ArrayList<>();
         this.toolUsageCount = new HashMap<>();
+        this.enableLLMToolSelection = true;
+        this.systemPrompt = generateToolCallSystemPrompt();
         
         initializeToolMappings();
+    }
+    
+    public ToolCallAgent(String name, boolean autoToolSelection, boolean enableLLMToolSelection) {
+        super(name, false, true); // verboseMode=false, llmEnabled=true
+        this.toolMappings = new HashMap<>();
+        this.autoToolSelection = autoToolSelection;
+        this.preferredTools = new ArrayList<>();
+        this.toolUsageCount = new HashMap<>();
+        this.enableLLMToolSelection = enableLLMToolSelection;
+        this.systemPrompt = generateToolCallSystemPrompt();
+        
+        initializeToolMappings();
+    }
+    
+    /**
+     * 生成工具调用专用的系统提示
+     */
+    private String generateToolCallSystemPrompt() {
+        return String.format(
+            "你是%s，一个专业的工具调用智能助手。" +
+            "你擅长分析用户需求，智能选择最合适的工具来解决问题。" +
+            "可用的工具包括：calculator（数学计算）、get_time（时间查询）、text_analyzer（文本分析）。" +
+            "请根据用户的具体需求，选择最恰当的工具并正确使用。" +
+            "始终以准确、高效的方式完成任务。",
+            name
+        );
     }
     
     /**
@@ -82,13 +115,15 @@ public class ToolCallAgent extends ReActAgent {
         String query = message.getContent();
         
         try {
-            // 1. 智能工具选择
-            List<String> recommendedTools = recommendTools(query);
+            // 1. 使用LLM进行智能工具选择
+            List<String> recommendedTools = enableLLMToolSelection ? 
+                getRecommendedToolsFromLLM(query) : 
+                getRecommendedTools(query);
             
             // 2. 如果有明确的工具需求，直接调用
             if (!recommendedTools.isEmpty() && autoToolSelection) {
                 updateState(AgentState.ACTING);
-                String result = executeToolChain(recommendedTools, query);
+                String result = executeToolChainWithLLM(recommendedTools, query);
                 
                 updateState(AgentState.DONE);
                 Message responseMessage = new Message("assistant", result);
@@ -109,9 +144,64 @@ public class ToolCallAgent extends ReActAgent {
     }
     
     /**
-     * 推荐工具
+     * 使用LLM获取推荐工具
      */
-    private List<String> recommendTools(String query) {
+    private List<String> getRecommendedToolsFromLLM(String query) {
+        if (!llmEnabled) {
+            return getRecommendedTools(query); // 回退到传统方法
+        }
+        
+        try {
+            String context = buildToolSelectionContext(query);
+            String toolSuggestion = generateLLMResponse(
+                "请分析用户查询并推荐最合适的工具（从calculator, get_time, text_analyzer中选择）", 
+                context
+            );
+            
+            return parseToolSuggestionFromLLM(toolSuggestion);
+        } catch (Exception e) {
+            // 出错时回退到传统方法
+            return getRecommendedTools(query);
+        }
+    }
+    
+    /**
+     * 构建工具选择上下文
+     */
+    private String buildToolSelectionContext(String query) {
+        StringBuilder context = new StringBuilder();
+        context.append("用户查询：").append(query).append("\n");
+        context.append("可用工具说明：\n");
+        context.append("- calculator：用于数学计算，需要数学表达式\n");
+        context.append("- get_time：用于获取当前时间，无需参数\n");
+        context.append("- text_analyzer：用于文本分析，需要待分析的文本\n");
+        context.append("工具使用统计：").append(toolUsageCount.toString()).append("\n");
+        return context.toString();
+    }
+    
+    /**
+     * 从LLM响应中解析工具建议
+     */
+    private List<String> parseToolSuggestionFromLLM(String suggestion) {
+        List<String> tools = new ArrayList<>();
+        
+        if (suggestion.contains("calculator") || suggestion.contains("计算")) {
+            tools.add("calculator");
+        }
+        if (suggestion.contains("get_time") || suggestion.contains("时间")) {
+            tools.add("get_time");
+        }
+        if (suggestion.contains("text_analyzer") || suggestion.contains("分析")) {
+            tools.add("text_analyzer");
+        }
+        
+        return tools;
+    }
+    
+    /**
+     * 传统的工具推荐方法（回退方案）
+     */
+    private List<String> getRecommendedTools(String query) {
         List<String> recommended = new ArrayList<>();
         Map<String, Integer> toolScores = new HashMap<>();
         
@@ -149,19 +239,28 @@ public class ToolCallAgent extends ReActAgent {
     }
     
     /**
-     * 执行工具链
+     * 使用LLM执行工具链
      */
-    private String executeToolChain(List<String> tools, String query) {
+    private String executeToolChainWithLLM(List<String> tools, String query) {
+        if (!llmEnabled) {
+            return executeToolChain(tools, query); // 回退到传统方法
+        }
+        
         StringBuilder result = new StringBuilder();
         boolean hasSuccessfulCall = false;
         
         for (String toolName : tools) {
             try {
-                ToolCall toolCall = executeSpecificTool(toolName, query);
+                // 使用LLM准备工具参数
+                Map<String, Object> arguments = prepareToolArgumentsWithLLM(toolName, query);
+                
+                ToolCall toolCall = callTool(toolName, arguments);
                 toolUsageCount.merge(toolName, 1, Integer::sum);
                 
                 if (toolCall.isSuccess()) {
-                    result.append(formatToolResult(toolName, toolCall.getResult()));
+                    // 使用LLM格式化结果
+                    String formattedResult = formatToolResultWithLLM(toolName, toolCall.getResult(), query);
+                    result.append(formattedResult);
                     hasSuccessfulCall = true;
                     break; // 成功后停止尝试其他工具
                 } else {
@@ -180,7 +279,142 @@ public class ToolCallAgent extends ReActAgent {
     }
     
     /**
-     * 执行特定工具
+     * 使用LLM准备工具参数
+     */
+    private Map<String, Object> prepareToolArgumentsWithLLM(String toolName, String query) {
+        if (!llmEnabled) {
+            return prepareToolArguments(toolName, query); // 回退到传统方法
+        }
+        
+        Map<String, Object> arguments = new HashMap<>();
+        
+        try {
+            switch (toolName) {
+                case "calculator":
+                    String expression = extractMathExpressionWithLLM(query);
+                    if (expression != null) {
+                        arguments.put("expression", expression);
+                    }
+                    break;
+                    
+                case "text_analyzer":
+                    String textToAnalyze = extractTextForAnalysisWithLLM(query);
+                    arguments.put("text", textToAnalyze);
+                    break;
+                    
+                case "get_time":
+                    // 时间工具不需要参数
+                    break;
+                    
+                default:
+                    arguments.put("query", query);
+                    break;
+            }
+        } catch (Exception e) {
+            // 出错时回退到传统方法
+            return prepareToolArguments(toolName, query);
+        }
+        
+        return arguments;
+    }
+    
+    /**
+     * 使用LLM提取数学表达式
+     */
+    private String extractMathExpressionWithLLM(String query) {
+        String context = "从以下查询中提取数学表达式：" + query;
+        String llmResponse = generateLLMResponse("请提取其中的数学表达式", context);
+        
+        // 从LLM响应中提取表达式
+        Pattern mathPattern = Pattern.compile("([0-9+\\-*/\\s.()]+)");
+        Matcher matcher = mathPattern.matcher(llmResponse);
+        
+        while (matcher.find()) {
+            String expression = matcher.group(1).trim();
+            if (expression.matches(".*[+\\-*/].*") && expression.matches(".*\\d.*")) {
+                return expression;
+            }
+        }
+        
+        // 回退到传统方法
+        return extractMathExpression(query);
+    }
+    
+    /**
+     * 使用LLM提取分析文本
+     */
+    private String extractTextForAnalysisWithLLM(String query) {
+        String context = "从以下查询中提取需要分析的文本：" + query;
+        String llmResponse = generateLLMResponse("请提取需要分析的文本内容", context);
+        
+        // 简单提取逻辑
+        if (llmResponse.contains("\"") || llmResponse.contains("'")) {
+            Pattern quotePattern = Pattern.compile("[\"'](.*?)[\"']");
+            Matcher matcher = quotePattern.matcher(llmResponse);
+            if (matcher.find()) {
+                return matcher.group(1);
+            }
+        }
+        
+        // 回退到传统方法
+        return extractTextForAnalysis(query);
+    }
+    
+    /**
+     * 使用LLM格式化工具结果
+     */
+    private String formatToolResultWithLLM(String toolName, Object result, String originalQuery) {
+        if (!llmEnabled) {
+            return formatToolResult(toolName, result); // 回退到传统方法
+        }
+        
+        try {
+            String context = String.format(
+                "工具：%s\n执行结果：%s\n原始查询：%s", 
+                toolName, result.toString(), originalQuery
+            );
+            
+            return generateLLMResponse("请将工具执行结果格式化为用户友好的回复", context);
+        } catch (Exception e) {
+            return formatToolResult(toolName, result);
+        }
+    }
+    
+    // 传统方法作为回退方案
+    
+    /**
+     * 传统的工具链执行（回退方案）
+     */
+    private String executeToolChain(List<String> tools, String query) {
+        StringBuilder result = new StringBuilder();
+        boolean hasSuccessfulCall = false;
+        
+        for (String toolName : tools) {
+            try {
+                ToolCall toolCall = executeSpecificTool(toolName, query);
+                toolUsageCount.merge(toolName, 1, Integer::sum);
+                
+                if (toolCall.isSuccess()) {
+                    result.append(formatToolResult(toolName, toolCall.getResult()));
+                    hasSuccessfulCall = true;
+                    break;
+                } else {
+                    result.append("工具 ").append(toolName).append(" 执行失败：").append(toolCall.getError()).append("\n");
+                }
+            } catch (Exception e) {
+                result.append("工具 ").append(toolName).append(" 调用异常：").append(e.getMessage()).append("\n");
+            }
+        }
+        
+        if (!hasSuccessfulCall) {
+            result.append("所有推荐的工具都无法成功处理该请求。");
+        }
+        
+        return result.toString().trim();
+    }
+    
+    /**
+     * 执行特定工具（回退方案）
      */
     private ToolCall executeSpecificTool(String toolName, String query) {
         Map<String, Object> arguments = prepareToolArguments(toolName, query);
@@ -188,7 +422,7 @@ public class ToolCallAgent extends ReActAgent {
     }
     
     /**
-     * 准备工具参数
+     * 准备工具参数（回退方案）
      */
     private Map<String, Object> prepareToolArguments(String toolName, String query) {
         Map<String, Object> arguments = new HashMap<>();
@@ -211,7 +445,6 @@ public class ToolCallAgent extends ReActAgent {
                 break;
                 
             default:
-                // 对于未知工具，尝试传递查询内容
                 arguments.put("query", query);
                 break;
         }
@@ -220,74 +453,55 @@ public class ToolCallAgent extends ReActAgent {
     }
     
     /**
-     * 格式化工具结果
+     * 格式化工具结果（回退方案）
      */
     private String formatToolResult(String toolName, Object result) {
         switch (toolName) {
             case "calculator":
                 return "计算结果：" + result;
-                
             case "get_time":
                 return "当前时间：" + result;
-                
             case "text_analyzer":
-                if (result instanceof Map) {
-                    Map<?, ?> analysisResult = (Map<?, ?>) result;
-                    StringBuilder formatted = new StringBuilder("文本分析结果：\n");
-                    for (Map.Entry<?, ?> entry : analysisResult.entrySet()) {
-                        formatted.append("- ").append(entry.getKey()).append(": ").append(entry.getValue()).append("\n");
-                    }
-                    return formatted.toString().trim();
-                } else {
-                    return "文本分析结果：" + result;
-                }
-                
+                return "分析结果：" + result;
             default:
                 return toolName + " 执行结果：" + result;
         }
     }
     
     /**
-     * 检测是否包含数学表达式
+     * 检查是否包含数学表达式
      */
-    private boolean containsMathExpression(String text) {
-        Pattern mathPattern = Pattern.compile("\\d+\\s*[+\\-*/]\\s*\\d+");
-        return mathPattern.matcher(text).find();
+    private boolean containsMathExpression(String query) {
+        return query.matches(".*\\d+\\s*[+\\-*/]\\s*\\d+.*");
     }
     
     /**
-     * 检测是否包含时间查询
+     * 检查是否是时间查询
      */
-    private boolean containsTimeQuery(String text) {
-        return text.contains("时间") || text.contains("几点") || 
-               text.contains("现在") || text.contains("当前时刻");
+    private boolean containsTimeQuery(String query) {
+        return query.contains("时间") || query.contains("几点") || 
+               query.contains("现在") || query.contains("当前");
     }
     
     /**
-     * 检测是否包含文本分析请求
+     * 检查是否是文本分析请求
      */
-    private boolean containsTextAnalysisRequest(String text) {
-        return text.contains("分析") && (text.contains("文本") || text.contains("内容") || 
-               text.contains("\"") || text.contains("'"));
+    private boolean containsTextAnalysisRequest(String query) {
+        return query.contains("分析") || query.contains("统计") || 
+               query.contains("检查") || query.contains("\"") || query.contains("'");
     }
     
     /**
-     * 从文本中提取数学表达式
+     * 提取数学表达式（回退方案）
      */
     private String extractMathExpression(String text) {
-        // 查找数学表达式模式
-        Pattern patterns[] = {
-            Pattern.compile("(\\d+(?:\\.\\d+)?\\s*[+\\-*/]\\s*\\d+(?:\\.\\d+)?(?:\\s*[+\\-*/]\\s*\\d+(?:\\.\\d+)?)*)"),
-            Pattern.compile("([0-9+\\-*/\\s.()]+)")
-        };
+        Pattern mathPattern = Pattern.compile("([0-9+\\-*/\\s.()]+)");
+        Matcher matcher = mathPattern.matcher(text);
         
-        for (Pattern pattern : patterns) {
-            Matcher matcher = pattern.matcher(text);
-            while (matcher.find()) {
-                String expression = matcher.group(1).trim();
-                if (expression.matches(".*[+\\-*/].*") && expression.matches(".*\\d.*")) {
-                    return expression;
-                }
+        while (matcher.find()) {
+            String expression = matcher.group(1).trim();
+            if (expression.matches(".*[+\\-*/].*") && expression.matches(".*\\d.*")) {
+                return expression;
             }
         }
         
@@ -295,85 +509,24 @@ public class ToolCallAgent extends ReActAgent {
     }
     
     /**
-     * 从文本中提取需要分析的内容
+     * 提取分析文本（回退方案）
      */
     private String extractTextForAnalysis(String text) {
-        // 优先查找引号中的内容
-        Pattern quotePatterns[] = {
-            Pattern.compile("[\"'](.*?)[\"']"),
-            Pattern.compile("['](.*?)[']"),
-            Pattern.compile("[\\u201c\\u201d](.*?)[\\u201c\\u201d]")
-        };
+        Pattern quotePattern = Pattern.compile("[\"'](.*?)[\"']");
+        Matcher quoteMatcher = quotePattern.matcher(text);
         
-        for (Pattern pattern : quotePatterns) {
-            Matcher matcher = pattern.matcher(text);
-            if (matcher.find()) {
-                return matcher.group(1);
-            }
+        if (quoteMatcher.find()) {
+            return quoteMatcher.group(1);
         }
         
-        // 查找"分析"关键词后的内容
-        Pattern analysisPattern = Pattern.compile("分析[：:]?\\s*(.+?)(?:[。！？]|$)");
+        Pattern analysisPattern = Pattern.compile("分析[：:](.*?)$");
         Matcher analysisMatcher = analysisPattern.matcher(text);
+        
         if (analysisMatcher.find()) {
-            String content = analysisMatcher.group(1).trim();
-            if (!content.isEmpty()) {
-                return content;
-            }
+            return analysisMatcher.group(1).trim();
         }
         
-        return text; // 默认分析整个文本
-    }
-    
-    /**
-     * 添加工具映射
-     */
-    public void addToolMapping(String keyword, String toolName) {
-        toolMappings.put(keyword, toolName);
-    }
-    
-    /**
-     * 移除工具映射
-     */
-    public void removeToolMapping(String keyword) {
-        toolMappings.remove(keyword);
-    }
-    
-    /**
-     * 设置优先工具
-     */
-    public void setPreferredTools(List<String> tools) {
-        this.preferredTools = new ArrayList<>(tools);
-    }
-    
-    /**
-     * 添加优先工具
-     */
-    public void addPreferredTool(String toolName) {
-        if (!preferredTools.contains(toolName)) {
-            preferredTools.add(toolName);
-        }
-    }
-    
-    /**
-     * 获取工具使用统计
-     */
-    public Map<String, Integer> getToolUsageStatistics() {
-        return new HashMap<>(toolUsageCount);
-    }
-    
-    /**
-     * 重置工具使用统计
-     */
-    public void resetToolUsageStatistics() {
-        toolUsageCount.clear();
-    }
-    
-    /**
-     * 获取推荐工具（调试用）
-     */
-    public List<String> getRecommendedTools(String query) {
-        return recommendTools(query);
+        return text;
     }
     
     // Getter 和 Setter 方法
@@ -385,11 +538,35 @@ public class ToolCallAgent extends ReActAgent {
         this.autoToolSelection = autoToolSelection;
     }
     
-    public Map<String, String> getToolMappings() {
-        return new HashMap<>(toolMappings);
+    public boolean isEnableLLMToolSelection() {
+        return enableLLMToolSelection;
+    }
+    
+    public void setEnableLLMToolSelection(boolean enableLLMToolSelection) {
+        this.enableLLMToolSelection = enableLLMToolSelection;
     }
     
     public List<String> getPreferredTools() {
         return new ArrayList<>(preferredTools);
+    }
+    
+    public void setPreferredTools(List<String> preferredTools) {
+        this.preferredTools = new ArrayList<>(preferredTools);
+    }
+    
+    public Map<String, Integer> getToolUsageCount() {
+        return new HashMap<>(toolUsageCount);
+    }
+    
+    public Map<String, String> getToolMappings() {
+        return new HashMap<>(toolMappings);
+    }
+    
+    public void addToolMapping(String keyword, String tool) {
+        this.toolMappings.put(keyword, tool);
+    }
+    
+    public void removeToolMapping(String keyword) {
+        this.toolMappings.remove(keyword);
     }
 }

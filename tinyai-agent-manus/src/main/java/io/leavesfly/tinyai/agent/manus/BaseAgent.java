@@ -9,10 +9,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
- * 基础Agent抽象类
- * OpenManus分层架构的第一层
+ * 基础Agent抽象类 - LLM模拟版本
+ * OpenManus分层架构的第一层，集成LLM模拟能力
  * 
  * @author 山泽
  */
@@ -27,6 +28,11 @@ public abstract class BaseAgent {
     protected LocalDateTime lastActiveAt;           // 最后活跃时间
     protected Map<String, Object> configuration;    // 配置信息
     
+    // LLM模拟相关组件
+    protected LLMSimulator llmSimulator;             // LLM模拟器
+    protected String systemPrompt;                   // 系统提示
+    protected boolean llmEnabled;                    // 是否启用LLM模拟
+    
     /**
      * 构造函数
      */
@@ -40,8 +46,22 @@ public abstract class BaseAgent {
         this.lastActiveAt = LocalDateTime.now();
         this.configuration = new HashMap<>();
         
+        // 初始化LLM模拟组件
+        this.llmSimulator = new LLMSimulator();
+        this.systemPrompt = generateDefaultSystemPrompt();
+        this.llmEnabled = true;
+        
         // 注册默认工具
         registerDefaultTools();
+    }
+    
+    /**
+     * 构造函数 - 支持自定义LLM配置
+     */
+    public BaseAgent(String name, String systemPrompt, boolean llmEnabled) {
+        this(name);
+        this.systemPrompt = systemPrompt != null ? systemPrompt : generateDefaultSystemPrompt();
+        this.llmEnabled = llmEnabled;
     }
     
     /**
@@ -49,6 +69,71 @@ public abstract class BaseAgent {
      * 子类必须实现此方法
      */
     public abstract Message processMessage(Message message);
+    
+    /**
+     * 生成默认的系统提示
+     */
+    protected String generateDefaultSystemPrompt() {
+        return String.format("你是%s，一个智能AI助手。你擅长分析问题、使用工具和提供准确的回答。请始终保持专业、有帮助的态度。", name);
+    }
+    
+    /**
+     * 使用LLM模拟生成响应
+     */
+    protected String generateLLMResponse(String prompt, String context) {
+        if (!llmEnabled) {
+            return "LLM模拟未启用，使用默认回复。";
+        }
+        
+        try {
+            return llmSimulator.generateResponse(prompt, "base_agent", context);
+        } catch (Exception e) {
+            return "生成回复时遇到问题：" + e.getMessage();
+        }
+    }
+    
+    /**
+     * 异步使用LLM模拟生成响应
+     */
+    protected CompletableFuture<String> generateLLMResponseAsync(String prompt, String context) {
+        if (!llmEnabled) {
+            return CompletableFuture.completedFuture("LLM模拟未启用，使用默认回复。");
+        }
+        
+        return llmSimulator.generateResponseAsync(prompt, "base_agent", context);
+    }
+    
+    /**
+     * 构建上下文信息
+     */
+    protected String buildContext() {
+        StringBuilder context = new StringBuilder();
+        
+        // 添加系统提示
+        if (systemPrompt != null && !systemPrompt.trim().isEmpty()) {
+            context.append("系统提示：").append(systemPrompt).append("\n\n");
+        }
+        
+        // 添加最近的对话历史
+        int recentCount = Math.min(5, messages.size());
+        if (recentCount > 0) {
+            context.append("最近对话：\n");
+            for (int i = messages.size() - recentCount; i < messages.size(); i++) {
+                Message msg = messages.get(i);
+                context.append(msg.getRole()).append(": ").append(msg.getContent()).append("\n");
+            }
+            context.append("\n");
+        }
+        
+        // 添加可用工具信息
+        if (toolRegistry.getToolCount() > 0) {
+            context.append("可用工具：");
+            Map<String, Integer> toolStats = getToolStats();
+            context.append(String.join(", ", toolStats.keySet())).append("\n");
+        }
+        
+        return context.toString();
+    }
     
     /**
      * 获取Agent状态信息
@@ -61,6 +146,9 @@ public abstract class BaseAgent {
         status.put("tool_call_count", toolCallHistory.size());
         status.put("created_at", createdAt.toString());
         status.put("last_active_at", lastActiveAt.toString());
+        status.put("llm_enabled", llmEnabled);
+        status.put("llm_model", llmSimulator.getModelName());
+        status.put("system_prompt_length", systemPrompt.length());
         return status;
     }
     
@@ -210,7 +298,32 @@ public abstract class BaseAgent {
         return stats;
     }
     
-    // Getter 和 Setter 方法
+    // LLM相关的Getter和Setter方法
+    public LLMSimulator getLLMSimulator() {
+        return llmSimulator;
+    }
+    
+    public void setLLMSimulator(LLMSimulator llmSimulator) {
+        this.llmSimulator = llmSimulator;
+    }
+    
+    public String getSystemPrompt() {
+        return systemPrompt;
+    }
+    
+    public void setSystemPrompt(String systemPrompt) {
+        this.systemPrompt = systemPrompt;
+    }
+    
+    public boolean isLLMEnabled() {
+        return llmEnabled;
+    }
+    
+    public void setLLMEnabled(boolean llmEnabled) {
+        this.llmEnabled = llmEnabled;
+    }
+    
+    // 原有的Getter和Setter方法
     public String getName() {
         return name;
     }

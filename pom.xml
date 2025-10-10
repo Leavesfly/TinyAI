@@ -1,158 +1,91 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+                             http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
-
-    <groupId>io.leavesfly.tinyai</groupId>
-    <artifactId>TinyAI</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    
+    <groupId>io.leavesfly</groupId>
+    <artifactId>tinyai</artifactId>
+    <version>1.0.0</version>
     <packaging>pom</packaging>
-
-    <!-- 子模块配置 -->
+    
+    <name>TinyAI</name>
+    <description>A tiny deep learning framework implemented in Java</description>
+    
     <modules>
-        <!--        深度学习-->
         <module>tinyai-deeplearning-ndarr</module>
         <module>tinyai-deeplearning-func</module>
         <module>tinyai-deeplearning-nnet</module>
         <module>tinyai-deeplearning-ml</module>
-        <module>tinyai-deeplearning-rl</module>
         <module>tinyai-deeplearning-case</module>
-
-        <!--        模型层-->
-        <module>tinyai-model-deepseek</module>
-        <module>tinyai-model-lora</module>
-        <module>tinyai-model-gpt</module>
-        <module>tinyai-model-qwen</module>
-        <module>tinyai-model-moe</module>
-
-        <!--        智能体-->
-        <module>tinyai-agent-context</module>
-        <module>tinyai-agent-rag</module>
-        <module>tinyai-agent-multi</module>
-        <module>tinyai-agent-pattern</module>
-        <module>tinyai-agent-evol</module>
-        <module>tinyai-agent-manus</module>
-        <module>tinyai-agent-cursor</module>
-        <module>tinyai-agent-research</module>
+        <!-- 新增计算机视觉模块 -->
+        <module>tinyai-deeplearning-cv</module>
     </modules>
-
+    
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-
-        <!-- 插件版本统一管理 -->
-        <maven-compiler-plugin.version>3.8.1</maven-compiler-plugin.version>
-        <exec-maven-plugin.version>3.1.0</exec-maven-plugin.version>
-
-        <!-- 外部依赖版本统一管理 -->
-        <jfreechart.version>1.0.7</jfreechart.version>
-        <junit.version>4.13.2</junit.version>
-        <junit-jupiter.version>5.8.2</junit-jupiter.version>
+        <junit.version>5.8.2</junit.version>
     </properties>
-
-    <!-- 依赖管理，供子模块继承使用 -->
+    
     <dependencyManagement>
         <dependencies>
-            <!-- 项目内部模块依赖管理 -->
-
             <dependency>
-                <groupId>io.leavesfly.tinyai</groupId>
+                <groupId>io.leavesfly</groupId>
                 <artifactId>tinyai-deeplearning-ndarr</artifactId>
-                <version>${project.version}</version>
+                <version>1.0.0</version>
             </dependency>
             <dependency>
-                <groupId>io.leavesfly.tinyai</groupId>
+                <groupId>io.leavesfly</groupId>
                 <artifactId>tinyai-deeplearning-func</artifactId>
-                <version>${project.version}</version>
+                <version>1.0.0</version>
             </dependency>
             <dependency>
-                <groupId>io.leavesfly.tinyai</groupId>
+                <groupId>io.leavesfly</groupId>
                 <artifactId>tinyai-deeplearning-nnet</artifactId>
-                <version>${project.version}</version>
+                <version>1.0.0</version>
             </dependency>
             <dependency>
-                <groupId>io.leavesfly.tinyai</groupId>
+                <groupId>io.leavesfly</groupId>
                 <artifactId>tinyai-deeplearning-ml</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-deeplearning-rl</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-
-            <dependency>
-                <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-model-gpt</artifactId>
-                <version>${project.version}</version>
+                <version>1.0.0</version>
             </dependency>
             <dependency>
-                <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-model-deepseek</artifactId>
-                <version>${project.version}</version>
+                <groupId>io.leavesfly</groupId>
+                <artifactId>tinyai-deeplearning-cv</artifactId>
+                <version>1.0.0</version>
             </dependency>
-            <dependency>
-                <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-agent-context</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-agent-multi</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>io.leavesfly.tinyai</groupId>
-                <artifactId>tinyai-agent-pattern</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <!-- 外部依赖管理 -->
-            <dependency>
-                <groupId>jfree</groupId>
-                <artifactId>jfreechart</artifactId>
-                <version>${jfreechart.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>junit</groupId>
-                <artifactId>junit</artifactId>
-                <version>${junit.version}</version>
-                <scope>test</scope>
-            </dependency>
+            
+            <!-- Test dependencies -->
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter</artifactId>
-                <version>${junit-jupiter.version}</version>
+                <version>${junit.version}</version>
                 <scope>test</scope>
             </dependency>
         </dependencies>
     </dependencyManagement>
-
-    <!-- 插件管理，供子模块继承使用 -->
+    
     <build>
-        <pluginManagement>
-            <plugins>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-compiler-plugin</artifactId>
-                    <version>${maven-compiler-plugin.version}</version>
-                    <configuration>
-                        <source>${maven.compiler.source}</source>
-                        <target>${maven.compiler.target}</target>
-                    </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>org.codehaus.mojo</groupId>
-                    <artifactId>exec-maven-plugin</artifactId>
-                    <version>${exec-maven-plugin.version}</version>
-                </plugin>
-            </plugins>
-        </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.8.1</version>
+                <configuration>
+                    <source>17</source>
+                    <target>17</target>
+                    <encoding>UTF-8</encoding>
+                </configuration>
+            </plugin>
+            
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.0.0-M7</version>
+            </plugin>
+        </plugins>
     </build>
 </project>

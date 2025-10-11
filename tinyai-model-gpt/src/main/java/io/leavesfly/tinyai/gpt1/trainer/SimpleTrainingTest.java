@@ -49,8 +49,8 @@ public class SimpleTrainingTest {
         // 创建分词器
         ChineseTokenizer tokenizer = new ChineseTokenizer();
         
-        // 构建词汇表
-        String dataPath = "src/main/java/io/leavesfly/tinyai/gpt1/ci.txt";
+        // 构建词汇表 - 修复文件路径，使用相对于项目根目录的路径
+        String dataPath = "tinyai-model-gpt/src/main/java/io/leavesfly/tinyai/gpt1/trainer/ci.txt";
         tokenizer.buildVocabFromFile(dataPath);
         
         // 显示词汇表信息
@@ -77,7 +77,7 @@ public class SimpleTrainingTest {
         
         // 创建分词器和数据集
         ChineseTokenizer tokenizer = new ChineseTokenizer();
-        String dataPath = "src/main/java/io/leavesfly/tinyai/gpt1/ci.txt";
+        String dataPath = "tinyai-model-gpt/src/main/java/io/leavesfly/tinyai/gpt1/trainer/ci.txt";
         tokenizer.buildVocabFromFile(dataPath);
         
         ChinesePoemDataSet dataset = new ChinesePoemDataSet(tokenizer, 32, 4);
@@ -133,7 +133,7 @@ public class SimpleTrainingTest {
         
         // 1. 初始化组件
         ChineseTokenizer tokenizer = new ChineseTokenizer();
-        String dataPath = "src/main/java/io/leavesfly/tinyai/gpt1/ci.txt";
+        String dataPath = "tinyai-model-gpt/src/main/java/io/leavesfly/tinyai/gpt1/trainer/ci.txt";
         
         // 2. 构建词汇表
         System.out.println("构建词汇表...");
@@ -173,14 +173,14 @@ public class SimpleTrainingTest {
         
         // 分词器性能测试
         ChineseTokenizer tokenizer = new ChineseTokenizer();
-        tokenizer.buildVocabFromFile("src/main/java/io/leavesfly/tinyai/gpt1/ci.txt");
+        tokenizer.buildVocabFromFile("tinyai-model-gpt/src/main/java/io/leavesfly/tinyai/gpt1/trainer/ci.txt");
         
         long vocabTime = System.currentTimeMillis();
         System.out.printf("词汇表构建耗时: %d ms\n", vocabTime - startTime);
         
         // 数据加载性能测试
         ChinesePoemDataSet dataset = new ChinesePoemDataSet(tokenizer, 32, 4);
-        dataset.loadFromFile("src/main/java/io/leavesfly/tinyai/gpt1/ci.txt");
+        dataset.loadFromFile("tinyai-model-gpt/src/main/java/io/leavesfly/tinyai/gpt1/trainer/ci.txt");
         
         long dataTime = System.currentTimeMillis();
         System.out.printf("数据集加载耗时: %d ms\n", dataTime - vocabTime);

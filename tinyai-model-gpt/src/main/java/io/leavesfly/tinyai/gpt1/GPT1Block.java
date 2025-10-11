@@ -1,6 +1,7 @@
 package io.leavesfly.tinyai.gpt1;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Block;
 import io.leavesfly.tinyai.nnet.layer.transformer.LayerNorm;
@@ -244,7 +245,7 @@ public class GPT1Block extends Block {
             inputArray[0][i] = tokenIds.get(i);
         }
         
-        return new Variable(io.leavesfly.tinyai.ndarr.NdArray.of(inputArray));
+        return new Variable(NdArray.of(inputArray));
     }
     
     /**
@@ -255,7 +256,7 @@ public class GPT1Block extends Block {
      * @return 采样的token ID
      */
     private int sampleFromLogits(Variable logits, double temperature) {
-        // 简化实现：返回最大概率的token（贪心解码）
+        // 简化实现：返回最大概率的token（贪心解码）todo
         // 实际实现中应该支持温度采样、top-k、top-p等策略
         
         // 这里需要实现softmax和采样逻辑

@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.gpt1.trainer;
+package io.leavesfly.tinyai.gpt1.demo;
 
 import io.leavesfly.tinyai.gpt1.GPT1Config;
 import io.leavesfly.tinyai.gpt1.GPT1Model;
@@ -17,7 +17,7 @@ import java.util.List;
  * @author 山泽
  * @version 1.0
  */
-public class SimpleTrainingTest {
+public class SimpleDataSetTest {
     
     public static void main(String[] args) {
         System.out.println("=== GPT-1古诗词训练测试 ===\n");
@@ -50,8 +50,8 @@ public class SimpleTrainingTest {
         ChineseTokenizer tokenizer = new ChineseTokenizer();
         
         // 构建词汇表 - 修复文件路径，使用相对于项目根目录的路径
-        String dataPath = "tinyai-model-gpt/src/main/java/io/leavesfly/tinyai/gpt1/trainer/ci.txt";
-        tokenizer.buildVocabFromFile(dataPath);
+
+        tokenizer.buildVocabFromFile(ChinesePoemDataSet.dataPath);
         
         // 显示词汇表信息
         tokenizer.printVocabStats();
@@ -77,11 +77,11 @@ public class SimpleTrainingTest {
         
         // 创建分词器和数据集
         ChineseTokenizer tokenizer = new ChineseTokenizer();
-        String dataPath = "tinyai-model-gpt/src/main/java/io/leavesfly/tinyai/gpt1/trainer/ci.txt";
-        tokenizer.buildVocabFromFile(dataPath);
+
+        tokenizer.buildVocabFromFile(ChinesePoemDataSet.dataPath);
         
         ChinesePoemDataSet dataset = new ChinesePoemDataSet(tokenizer, 32, 4);
-        dataset.loadFromFile(dataPath);
+        dataset.loadFromFile(ChinesePoemDataSet.dataPath);
         
         // 显示数据集信息
         dataset.printDatasetStats();
@@ -133,15 +133,15 @@ public class SimpleTrainingTest {
         
         // 1. 初始化组件
         ChineseTokenizer tokenizer = new ChineseTokenizer();
-        String dataPath = "tinyai-model-gpt/src/main/java/io/leavesfly/tinyai/gpt1/trainer/ci.txt";
+
         
         // 2. 构建词汇表
         System.out.println("构建词汇表...");
-        tokenizer.buildVocabFromFile(dataPath);
+        tokenizer.buildVocabFromFile(ChinesePoemDataSet.dataPath);
         
         // 3. 加载和编码数据
         System.out.println("加载和编码数据...");
-        List<List<Integer>> sequences = tokenizer.loadAndEncodeData(dataPath);
+        List<List<Integer>> sequences = tokenizer.loadAndEncodeData(ChinesePoemDataSet.dataPath);
         System.out.printf("加载了 %d 个序列\n", sequences.size());
         
         // 4. 创建训练对
@@ -173,14 +173,14 @@ public class SimpleTrainingTest {
         
         // 分词器性能测试
         ChineseTokenizer tokenizer = new ChineseTokenizer();
-        tokenizer.buildVocabFromFile("tinyai-model-gpt/src/main/java/io/leavesfly/tinyai/gpt1/trainer/ci.txt");
+        tokenizer.buildVocabFromFile(ChinesePoemDataSet.dataPath);
         
         long vocabTime = System.currentTimeMillis();
         System.out.printf("词汇表构建耗时: %d ms\n", vocabTime - startTime);
         
         // 数据加载性能测试
         ChinesePoemDataSet dataset = new ChinesePoemDataSet(tokenizer, 32, 4);
-        dataset.loadFromFile("tinyai-model-gpt/src/main/java/io/leavesfly/tinyai/gpt1/trainer/ci.txt");
+        dataset.loadFromFile(ChinesePoemDataSet.dataPath);
         
         long dataTime = System.currentTimeMillis();
         System.out.printf("数据集加载耗时: %d ms\n", dataTime - vocabTime);

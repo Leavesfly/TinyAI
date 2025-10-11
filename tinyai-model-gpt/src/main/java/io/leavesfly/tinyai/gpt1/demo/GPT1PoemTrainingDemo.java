@@ -1,5 +1,6 @@
-package io.leavesfly.tinyai.gpt1.trainer;
+package io.leavesfly.tinyai.gpt1.demo;
 
+import io.leavesfly.tinyai.gpt1.trainer.ChinesePoemDataSet;
 import io.leavesfly.tinyai.gpt1.trainer.GPT1PoemTrainer;
 
 /**
@@ -34,7 +35,7 @@ public class GPT1PoemTrainingDemo {
             GPT1PoemTrainer trainer = new GPT1PoemTrainer(config);
             
             // 3. 数据文件路径（相对于项目根目录）
-            String dataPath = "src/main/java/io/leavesfly/tinyai/gpt1/ci.txt";
+            String dataPath = ChinesePoemDataSet.dataPath;
             
             // 4. 初始化训练组件
             System.out.println("\n3. 初始化训练组件...");

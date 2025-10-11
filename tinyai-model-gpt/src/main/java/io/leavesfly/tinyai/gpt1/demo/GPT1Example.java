@@ -1,6 +1,8 @@
-package io.leavesfly.tinyai.gpt1;
+package io.leavesfly.tinyai.gpt1.demo;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.gpt1.GPT1Config;
+import io.leavesfly.tinyai.gpt1.GPT1Model;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
 import java.util.ArrayList;

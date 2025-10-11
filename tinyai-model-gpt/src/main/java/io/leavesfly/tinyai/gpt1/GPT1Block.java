@@ -1,6 +1,8 @@
 package io.leavesfly.tinyai.gpt1;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.ndarr.NdArray;
+import io.leavesfly.tinyai.ndarr.NdArrayUtil;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Block;
 import io.leavesfly.tinyai.nnet.layer.transformer.LayerNorm;
@@ -254,13 +256,87 @@ public class GPT1Block extends Block {
      * @param temperature 温度参数
      * @return 采样的token ID
      */
-    private int sampleFromLogits(Variable logits, double temperature) {
-        // 简化实现：返回最大概率的token（贪心解码）
-        // 实际实现中应该支持温度采样、top-k、top-p等策略
+    protected int sampleFromLogits(Variable logits, double temperature) {
+        // 获取logits数据
+        NdArray logitsData = logits.getValue();
         
-        // 这里需要实现softmax和采样逻辑
-        // 暂时返回0作为占位符
-        return 0;
+        // 获取形状信息
+        Shape logitsShape = logitsData.getShape();
+        int dimNum = logitsShape.getDimNum();
+        
+        // 验证维度数
+        if (dimNum < 2) {
+            throw new IllegalArgumentException("Logits必须至少是2维数组");
+        }
+        
+        // 获取batchSize和vocabSize
+        int batchSize = logitsShape.getDimension(0);
+        int vocabSize = logitsShape.getDimension(dimNum - 1); // 最后一个维度是词汇表大小
+        int sequenceLength = 1;
+        
+        // 如果是3维，中间维度是序列长度
+        if (dimNum == 3) {
+            sequenceLength = logitsShape.getDimension(1);
+        }
+        
+        // 应用温度调节
+        if (temperature != 1.0) {
+            logitsData = logitsData.divNum((float) temperature);
+        }
+        
+        // 计算softmax得到概率分布
+        // 我们需要在最后一个维度（词汇表维度）上计算softmax
+        NdArray probabilities = logitsData.softMax();
+        
+        // 如果是2维，直接reshape为(batchSize, vocabSize)
+        if (dimNum == 2) {
+            probabilities = probabilities.reshape(Shape.of(batchSize, vocabSize));
+            sequenceLength = 1;
+        }
+        
+        // 获取最后一个时间步的概率分布
+        NdArray lastPositionProbs = probabilities;
+        if (sequenceLength > 1) {
+            // 提取最后一个时间步的概率分布
+            lastPositionProbs = probabilities.getItem(
+                NdArrayUtil.getSeq(batchSize), 
+                new int[]{sequenceLength - 1}
+            ).reshape(Shape.of(batchSize, vocabSize));
+        } else if (dimNum == 3) {
+            // 如果是3维但序列长度为1，reshape为2维
+            lastPositionProbs = probabilities.reshape(Shape.of(batchSize, vocabSize));
+        }
+        
+        // 从概率分布中采样（这里我们只处理第一个批次）
+        float[] probArray = new float[vocabSize];
+        for (int i = 0; i < vocabSize; i++) {
+            probArray[i] = lastPositionProbs.get(0, i);
+        }
+        
+        // 归一化概率（确保总和为1）
+        float sum = 0;
+        for (float prob : probArray) {
+            sum += prob;
+        }
+        if (sum > 0) {
+            for (int i = 0; i < probArray.length; i++) {
+                probArray[i] /= sum;
+            }
+        }
+        
+        // 使用累积分布函数进行采样
+        double rand = Math.random();
+        double cumulative = 0.0;
+        
+        for (int i = 0; i < probArray.length; i++) {
+            cumulative += probArray[i];
+            if (rand < cumulative) {
+                return i;
+            }
+        }
+        
+        // 如果由于浮点数精度问题没有返回，返回最后一个token
+        return probArray.length - 1;
     }
     
     // ==================== Getter方法 ====================

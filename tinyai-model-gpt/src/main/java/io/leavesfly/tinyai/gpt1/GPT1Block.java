@@ -246,7 +246,7 @@ public class GPT1Block extends Block {
             inputArray[0][i] = tokenIds.get(i);
         }
 
-        return new Variable(io.leavesfly.tinyai.ndarr.NdArray.of(inputArray));
+        return new Variable(NdArray.of(inputArray));
     }
 
     /**

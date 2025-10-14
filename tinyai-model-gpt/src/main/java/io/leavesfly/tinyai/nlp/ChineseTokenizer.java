@@ -207,6 +207,7 @@ public class ChineseTokenizer {
         if (addSpecialTokens) {
             tokenIds.add(EOS_TOKEN_ID);
         }
+
         
         return tokenIds;
     }

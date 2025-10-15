@@ -256,7 +256,7 @@ public class ChineseTokenizer {
      * @return 解码后的文本
      */
     public String decode(List<Integer> tokenIds) {
-        return decode(tokenIds, true);
+        return decode(tokenIds, false);
     }
     
     /**
@@ -298,7 +298,7 @@ public class ChineseTokenizer {
                 if (line.trim().isEmpty() || isTitle(line)) {
                     continue;
                 }
-                
+
                 // 编码每一行为序列
                 List<Integer> encoded = encode(line.trim());
                 if (!encoded.isEmpty()) {

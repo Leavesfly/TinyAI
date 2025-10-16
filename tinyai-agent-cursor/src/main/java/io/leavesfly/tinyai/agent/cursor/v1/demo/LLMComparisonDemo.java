@@ -1,7 +1,8 @@
-package io.leavesfly.tinyai.agent.cursor.demo;
+package io.leavesfly.tinyai.agent.cursor.v1.demo;
 
-import io.leavesfly.tinyai.agent.cursor.AICodingCursor;
-import io.leavesfly.tinyai.agent.cursor.CursorLLMSimulator;
+
+import io.leavesfly.tinyai.agent.cursor.v1.AICodingCursor;
+import io.leavesfly.tinyai.agent.cursor.v1.CursorLLMSimulator;
 
 /**
  * LLM集成效果对比演示

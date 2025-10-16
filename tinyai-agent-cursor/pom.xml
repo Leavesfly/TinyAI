@@ -39,6 +39,10 @@
             <artifactId>junit</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>io.leavesfly.tinyai</groupId>
+            <artifactId>tinyai-deeplearning-ml</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

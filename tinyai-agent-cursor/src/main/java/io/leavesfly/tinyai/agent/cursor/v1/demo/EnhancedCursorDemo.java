@@ -1,10 +1,12 @@
-package io.leavesfly.tinyai.agent.cursor.demo;
+package io.leavesfly.tinyai.agent.cursor.v1.demo;
+
+import io.leavesfly.tinyai.agent.cursor.v1.AICodingCursor;
+import io.leavesfly.tinyai.agent.cursor.v1.RefactorSuggestion;
 
 import java.util.List;
 import java.util.Map;
 
-import io.leavesfly.tinyai.agent.cursor.AICodingCursor;
-import io.leavesfly.tinyai.agent.cursor.RefactorSuggestion;
+
 
 /**
  * LLM增强版Cursor演示程序

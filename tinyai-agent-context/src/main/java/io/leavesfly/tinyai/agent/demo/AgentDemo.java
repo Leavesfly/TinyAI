@@ -1,6 +1,5 @@
 package io.leavesfly.tinyai.agent.demo;
 
-import io.leavesfly.tinyai.agent.*;
 import io.leavesfly.tinyai.agent.context.AdvancedAgent;
 import io.leavesfly.tinyai.agent.context.LLMSimulator;
 import io.leavesfly.tinyai.agent.context.Memory;

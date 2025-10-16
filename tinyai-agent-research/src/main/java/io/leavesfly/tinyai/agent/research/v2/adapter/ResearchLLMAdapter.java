@@ -2,6 +2,8 @@ package io.leavesfly.tinyai.agent.research.v2.adapter;
 
 import io.leavesfly.tinyai.agent.cursor.v2.model.*;
 import io.leavesfly.tinyai.agent.cursor.v2.service.LLMGateway;
+import io.leavesfly.tinyai.agent.cursor.v2.service.StreamCallback;
+
 import java.util.*;
 
 /**
@@ -129,11 +131,11 @@ public class ResearchLLMAdapter {
         
         // 构建消息
         Message systemMessage = new Message();
-        systemMessage.setRole("system");
+//        systemMessage.setRole("system");
         systemMessage.setContent(getSystemPromptForTaskType(taskType));
         
         Message userMessage = new Message();
-        userMessage.setRole("user");
+//        userMessage.setRole("user");
         userMessage.setContent(prompt);
         
         request.setMessages(Arrays.asList(systemMessage, userMessage));

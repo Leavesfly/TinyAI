@@ -120,7 +120,7 @@ public class ContextEngine {
         }
         
         // 5. 长期记忆
-        if (request.includeL ongTermMemory && request.projectId != null) {
+        if (request.includeLongTermMemory && request.projectId != null) {
             List<Memory> longTermMemories = memoryManager.retrieveProjectMemories(
                 request.projectId, 
                 Memory.MemoryType.LONG_TERM

@@ -1,15 +1,15 @@
 package io.leavesfly.tinyai.agent.manus;
 
-import io.leavesfly.tinyai.agent.Message;
-import io.leavesfly.tinyai.agent.ToolCall;
-import io.leavesfly.tinyai.agent.ToolRegistry;
-
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+
+import io.leavesfly.tinyai.agent.context.Message;
+import io.leavesfly.tinyai.agent.context.ToolCall;
+import io.leavesfly.tinyai.agent.context.ToolRegistry;
 
 /**
  * 基础Agent抽象类 - LLM模拟版本

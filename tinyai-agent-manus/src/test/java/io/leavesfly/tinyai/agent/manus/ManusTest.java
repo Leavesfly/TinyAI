@@ -1,9 +1,10 @@
 package io.leavesfly.tinyai.agent.manus;
 
-import io.leavesfly.tinyai.agent.Message;
-import io.leavesfly.tinyai.agent.ToolCall;
 import org.junit.Before;
 import org.junit.Test;
+
+import io.leavesfly.tinyai.agent.context.Message;
+import io.leavesfly.tinyai.agent.context.ToolCall;
 
 import java.util.HashMap;
 import java.util.Map;

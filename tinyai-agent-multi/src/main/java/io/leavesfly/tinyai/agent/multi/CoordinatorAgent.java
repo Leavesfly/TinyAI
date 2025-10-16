@@ -1,8 +1,8 @@
 package io.leavesfly.tinyai.agent.multi;
 
-import io.leavesfly.tinyai.agent.LLMSimulator;
-
 import java.util.*;
+
+import io.leavesfly.tinyai.agent.context.LLMSimulator;
 
 /**
  * 协调员Agent

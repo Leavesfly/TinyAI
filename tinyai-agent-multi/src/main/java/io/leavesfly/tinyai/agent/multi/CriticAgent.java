@@ -1,11 +1,11 @@
 package io.leavesfly.tinyai.agent.multi;
 
-import io.leavesfly.tinyai.agent.LLMSimulator;
-
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import io.leavesfly.tinyai.agent.context.LLMSimulator;
 
 /**
  * 评审员Agent

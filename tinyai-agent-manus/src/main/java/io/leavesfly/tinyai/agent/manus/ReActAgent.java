@@ -1,12 +1,12 @@
 package io.leavesfly.tinyai.agent.manus;
 
-import io.leavesfly.tinyai.agent.Message;
-import io.leavesfly.tinyai.agent.ToolCall;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import io.leavesfly.tinyai.agent.context.Message;
+import io.leavesfly.tinyai.agent.context.ToolCall;
 
 /**
  * ReAct (Reasoning and Acting) Agent - LLM模拟版本

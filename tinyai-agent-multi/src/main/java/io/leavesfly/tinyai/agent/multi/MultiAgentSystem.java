@@ -1,11 +1,11 @@
 package io.leavesfly.tinyai.agent.multi;
 
-import io.leavesfly.tinyai.agent.LLMSimulator;
-
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import io.leavesfly.tinyai.agent.context.LLMSimulator;
 
 /**
  * 多Agent系统管理器

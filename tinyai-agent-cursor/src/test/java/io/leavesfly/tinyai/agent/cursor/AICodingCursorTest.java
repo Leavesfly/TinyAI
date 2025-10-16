@@ -199,7 +199,7 @@ public class AICodingCursorTest {
         cursor.analyzeCode("public class Test {}");
         cursor.generateCode("method test");
         
-        List<io.leavesfly.tinyai.agent.Message> history = cursor.getSessionHistory();
+        List<io.leavesfly.tinyai.agent.context.Message> history = cursor.getSessionHistory();
         
         assertNotNull("会话历史不应为空", history);
         assertTrue("应该记录操作历史", history.size() > 0);

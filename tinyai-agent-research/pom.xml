@@ -18,6 +18,7 @@
 
     <dependencies>
 
+        <!-- TinyAI 内部模块依赖 -->
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
             <artifactId>tinyai-agent-context</artifactId>
@@ -31,6 +32,27 @@
         <dependency>
             <groupId>io.leavesfly.tinyai</groupId>
             <artifactId>tinyai-agent-multi</artifactId>
+        </dependency>
+        
+        <!-- V2版本新增依赖 -->
+        <dependency>
+            <groupId>io.leavesfly.tinyai</groupId>
+            <artifactId>tinyai-agent-cursor</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>io.leavesfly.tinyai</groupId>
+            <artifactId>tinyai-agent-rag</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>io.leavesfly.tinyai</groupId>
+            <artifactId>tinyai-model-deepseek</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>io.leavesfly.tinyai</groupId>
+            <artifactId>tinyai-model-qwen</artifactId>
         </dependency>
 
         <!-- 测试依赖 -->

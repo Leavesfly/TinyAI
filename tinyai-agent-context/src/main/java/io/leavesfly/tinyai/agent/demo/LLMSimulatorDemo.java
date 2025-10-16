@@ -1,8 +1,8 @@
 package io.leavesfly.tinyai.agent.demo;
 
-import io.leavesfly.tinyai.agent.LLMSimulator;
-
 import java.util.*;
+
+import io.leavesfly.tinyai.agent.context.LLMSimulator;
 
 /**
  * LLMSimulator演示示例

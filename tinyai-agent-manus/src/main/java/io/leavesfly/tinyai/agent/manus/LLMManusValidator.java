@@ -1,7 +1,9 @@
 package io.leavesfly.tinyai.agent.manus;
 
-import io.leavesfly.tinyai.agent.Message;
 import java.util.Map;
+
+import io.leavesfly.tinyai.agent.context.Message;
+
 import java.util.HashMap;
 
 /**

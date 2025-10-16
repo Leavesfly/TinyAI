@@ -1,6 +1,13 @@
 package io.leavesfly.tinyai.agent.demo;
 
 import io.leavesfly.tinyai.agent.*;
+import io.leavesfly.tinyai.agent.context.AdvancedAgent;
+import io.leavesfly.tinyai.agent.context.LLMSimulator;
+import io.leavesfly.tinyai.agent.context.Memory;
+import io.leavesfly.tinyai.agent.context.MemoryManager;
+import io.leavesfly.tinyai.agent.context.RAGSystem;
+import io.leavesfly.tinyai.agent.context.RetrievalResult;
+import io.leavesfly.tinyai.agent.context.ToolCall;
 
 import java.util.*;
 

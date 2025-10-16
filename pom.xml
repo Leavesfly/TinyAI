@@ -112,6 +112,24 @@
                 <artifactId>tinyai-agent-pattern</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            
+            <dependency>
+                <groupId>io.leavesfly.tinyai</groupId>
+                <artifactId>tinyai-agent-cursor</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            
+            <dependency>
+                <groupId>io.leavesfly.tinyai</groupId>
+                <artifactId>tinyai-agent-rag</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            
+            <dependency>
+                <groupId>io.leavesfly.tinyai</groupId>
+                <artifactId>tinyai-model-qwen</artifactId>
+                <version>${project.version}</version>
+            </dependency>
 
             <!-- 外部依赖管理 -->
             <dependency>

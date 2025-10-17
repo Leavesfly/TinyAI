@@ -81,6 +81,55 @@ public class BehaviorCloningLearner implements VLALearningEngine {
         return totalReward / numEpisodes;
     }
     
+    /**
+     * 训练单个回合
+     * 
+     * @param agent VLA智能体
+     * @param env 训练环境
+     * @return 回合总奖励
+     */
+    public double trainEpisode(VLAAgent agent, RobotEnvironment env) {
+        VLAState state = env.reset();
+        double episodeReward = 0.0;
+        
+        while (true) {
+            VLAAction action = agent.predict(state);
+            RobotEnvironment.EnvironmentStep step = env.step(action);
+            
+            episodeReward += step.getReward();
+            
+            if (step.isDone()) {
+                break;
+            }
+            
+            state = step.getNextState();
+        }
+        
+        return episodeReward;
+    }
+    
+    /**
+     * 从演示数据预训练
+     * 
+     * @param agent VLA智能体
+     * @param demonstrations 演示数据列表
+     */
+    public void pretrainFromDemonstrations(VLAAgent agent, java.util.List<?> demonstrations) {
+        System.out.println("Pre-training from " + demonstrations.size() + " demonstrations...");
+        // TODO: 实现从演示数据预训练
+        // 这里简化处理，实际应该实现监督学习
+    }
+    
+    /**
+     * 衰减学习率
+     * 
+     * @param factor 衰减因子
+     */
+    public void decayLearningRate(double factor) {
+        // TODO: 实现学习率衰减
+        System.out.println("Learning rate decayed by factor: " + factor);
+    }
+    
     @Override
     public void saveCheckpoint(String path) {
         System.out.println("Saving checkpoint to: " + path);

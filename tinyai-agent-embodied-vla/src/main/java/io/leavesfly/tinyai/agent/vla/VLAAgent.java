@@ -180,4 +180,57 @@ public class VLAAgent {
         System.out.println("Estimated Parameters: " + getParameterCount());
         System.out.println("==========================================\n");
     }
+    
+    /**
+     * 批处理预测
+     * 
+     * @param states 状态列表
+     * @return 动作列表
+     */
+    public java.util.List<VLAAction> batchPredict(java.util.List<VLAState> states) {
+        java.util.List<VLAAction> actions = new java.util.ArrayList<>();
+        for (VLAState state : states) {
+            actions.add(predict(state));
+        }
+        return actions;
+    }
+    
+    /**
+     * 冻结编码器（微调时使用）
+     */
+    public void freezeEncoders() {
+        // TODO: 实现参数冻结
+        System.out.println("Encoders frozen (not fully implemented)");
+    }
+    
+    /**
+     * 解冻所有层
+     */
+    public void unfreezeAll() {
+        // TODO: 实现参数解冻
+        System.out.println("All layers unfrozen (not fully implemented)");
+    }
+    
+    /**
+     * 保存模型
+     * 
+     * @param filepath 文件路径
+     */
+    public void save(String filepath) {
+        System.out.println("Saving model to: " + filepath);
+        // TODO: 实现模型序列化
+    }
+    
+    /**
+     * 加载模型
+     * 
+     * @param filepath 文件路径
+     * @return 加载的智能体
+     */
+    public static VLAAgent load(String filepath) {
+        System.out.println("Loading model from: " + filepath);
+        // TODO: 实现模型反序列化
+        // 这里返回一个默认实例作为占位符
+        return new VLAAgent(768, 8, 6, 7);
+    }
 }

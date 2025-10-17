@@ -29,6 +29,12 @@ public class TaskConfig {
     /** 是否渲染 */
     private boolean render;
     
+    /** 步数惩罚 */
+    private double stepPenalty;
+    
+    /** 额外参数 */
+    private java.util.Map<String, Object> parameters;
+    
     /**
      * 默认构造函数
      */
@@ -36,8 +42,10 @@ public class TaskConfig {
         this.maxSteps = 100;
         this.successReward = 100.0;
         this.failurePenalty = -10.0;
+        this.stepPenalty = 0.0;
         this.randomSeed = System.currentTimeMillis();
         this.render = false;
+        this.parameters = new java.util.HashMap<>();
     }
     
     /**
@@ -109,6 +117,38 @@ public class TaskConfig {
     
     public void setRender(boolean render) {
         this.render = render;
+    }
+    
+    public double getStepPenalty() {
+        return stepPenalty;
+    }
+    
+    public void setStepPenalty(double stepPenalty) {
+        this.stepPenalty = stepPenalty;
+    }
+    
+    /**
+     * 添加自定义参数
+     */
+    public void addParameter(String key, Object value) {
+        if (parameters == null) {
+            parameters = new java.util.HashMap<>();
+        }
+        parameters.put(key, value);
+    }
+    
+    /**
+     * 获取自定义参数
+     */
+    public Object getParameter(String key) {
+        return parameters != null ? parameters.get(key) : null;
+    }
+    
+    /**
+     * 获取所有参数
+     */
+    public java.util.Map<String, Object> getParameters() {
+        return parameters;
     }
     
     @Override

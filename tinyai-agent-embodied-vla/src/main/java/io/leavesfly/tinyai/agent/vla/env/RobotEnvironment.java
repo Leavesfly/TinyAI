@@ -51,6 +51,16 @@ public interface RobotEnvironment {
     void close();
     
     /**
+     * 采样随机动作
+     * 
+     * @return 随机动作
+     */
+    default VLAAction sampleAction() {
+        // 默认实现：返回零动作
+        return new VLAAction();
+    }
+    
+    /**
      * 环境步骤返回值
      */
     class EnvironmentStep {

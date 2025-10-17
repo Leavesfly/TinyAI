@@ -112,11 +112,11 @@ public class StackBlocksTrainingExample {
         taskConfig.setTaskDescription(TaskScenario.STACK_BLOCKS.getDescription());
         taskConfig.setMaxSteps(100 + numBlocks * 20); // 更多方块需要更多步数
         taskConfig.setSuccessReward(100.0 * numBlocks); // 奖励随难度增加
-        taskConfig.setStepPenalty(-0.1);
+//        taskConfig.setStepPenalty(-0.1);
         taskConfig.setRender(false);
         
         // 设置特定参数
-        taskConfig.addParameter("num_blocks", numBlocks);
+//        taskConfig.addParameter("num_blocks", numBlocks);
         
         return new SimpleRobotEnv(taskConfig);
     }

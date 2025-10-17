@@ -37,6 +37,7 @@
         <module>tinyai-agent-research</module>
         <module>tinyai-agent-embodied</module>
         <module>tinyai-agent-embodied-robot</module>
+        <module>tinyai-agent-embodied-vla</module>
     </modules>
 
     <properties>

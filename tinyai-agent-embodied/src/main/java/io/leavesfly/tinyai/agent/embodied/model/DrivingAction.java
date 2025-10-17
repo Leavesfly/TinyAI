@@ -46,7 +46,8 @@ public class DrivingAction {
      * 转换为NdArray
      */
     public NdArray toArray() {
-        return NdArray.of(new float[]{(float)steering, (float)throttle, (float)brake});
+        return NdArray.of(new float[]{(float)steering, (float)throttle, (float)brake}, 
+                         Shape.of(3));
     }
 
     /**

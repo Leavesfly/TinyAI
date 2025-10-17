@@ -36,6 +36,7 @@
         <module>tinyai-agent-cursor</module>
         <module>tinyai-agent-research</module>
         <module>tinyai-agent-embodied</module>
+        <module>tinyai-agent-embodied-robot</module>
     </modules>
 
     <properties>

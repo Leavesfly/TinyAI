@@ -4,7 +4,7 @@ import io.leavesfly.tinyai.agent.vla.model.ActionType;
 import io.leavesfly.tinyai.agent.vla.model.VLAAction;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.nnet.block.Block;
+import io.leavesfly.tinyai.nnet.Block;
 import io.leavesfly.tinyai.nnet.layer.Linear;
 
 import java.util.ArrayList;

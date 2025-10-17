@@ -35,6 +35,7 @@
         <module>tinyai-agent-manus</module>
         <module>tinyai-agent-cursor</module>
         <module>tinyai-agent-research</module>
+        <module>tinyai-agent-embodied</module>
     </modules>
 
     <properties>

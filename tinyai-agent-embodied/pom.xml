@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- 父项目配置 -->
+    <parent>
+        <groupId>io.leavesfly.tinyai</groupId>
+        <artifactId>TinyAI</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>tinyai-agent-embodied</artifactId>
+    <packaging>jar</packaging>
+    <name>tinyai-agent-embodied</name>
+    <description>TinyAI 具身智能模块 - 自动驾驶场景的端到端学习</description>
+
+    <dependencies>
+        <!-- TinyAI 深度学习核心模块依赖 -->
+        <dependency>
+            <groupId>io.leavesfly.tinyai</groupId>
+            <artifactId>tinyai-deeplearning-ndarr</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.leavesfly.tinyai</groupId>
+            <artifactId>tinyai-deeplearning-func</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.leavesfly.tinyai</groupId>
+            <artifactId>tinyai-deeplearning-nnet</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.leavesfly.tinyai</groupId>
+            <artifactId>tinyai-deeplearning-ml</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.leavesfly.tinyai</groupId>
+            <artifactId>tinyai-deeplearning-rl</artifactId>
+        </dependency>
+
+        <!-- 测试依赖 -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+
+            <!-- Exec plugin for running main class -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

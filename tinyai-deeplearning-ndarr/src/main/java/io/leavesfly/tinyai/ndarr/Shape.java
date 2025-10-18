@@ -14,6 +14,12 @@ public interface Shape {
         return new ShapeCpu(_dimension);
     }
 
+    /**
+     * 获取形状数组
+     *
+     * @return
+     */
+    int[] getShape();
 
     /**
      * 获取行数（仅适用于二维形状）

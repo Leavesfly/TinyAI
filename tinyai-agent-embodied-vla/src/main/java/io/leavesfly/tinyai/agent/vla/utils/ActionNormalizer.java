@@ -37,17 +37,17 @@ public class ActionNormalizer {
      * @return 归一化后的动作
      */
     public NdArray normalize(NdArray action) {
-        double[] normalized = new double[actionDim];
+        float[] normalized = new float[actionDim];
         
         for (int i = 0; i < actionDim; i++) {
             double val = action.get(i);
-            normalized[i] = 2.0 * (val - actionLow[i]) / (actionHigh[i] - actionLow[i]) - 1.0;
+            normalized[i] = (float) (2.0 * (val - actionLow[i]) / (actionHigh[i] - actionLow[i]) - 1.0);
             
             // Clamp到 [-1, 1]
-            normalized[i] = Math.max(-1.0, Math.min(1.0, normalized[i]));
+            normalized[i] = (float) Math.max(-1.0, Math.min(1.0, normalized[i]));
         }
         
-        return new NdArray(normalized);
+        return  NdArray.of(normalized);
     }
     
     /**
@@ -67,7 +67,7 @@ public class ActionNormalizer {
             denormalized[i] = Math.max(actionLow[i], Math.min(actionHigh[i], denormalized[i]));
         }
         
-        return new NdArray(denormalized);
+        return  NdArray.of(denormalized);
     }
     
     /**

@@ -257,6 +257,11 @@ public class NdArrayTpu implements NdArray {
     }
 
     @Override
+    public float[] getArray() {
+        return new float[0];
+    }
+
+    @Override
     public float[][] getMatrix() {
         return new float[0][];
     }

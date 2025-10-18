@@ -214,4 +214,9 @@ public class ShapeCpu implements Serializable, Shape {
     public static ShapeCpu of(int... _dimension) {
         return new ShapeCpu(_dimension);
     }
+
+    @Override
+    public int[] getShape() {
+        return dimension;
+    }
 }

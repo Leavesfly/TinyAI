@@ -640,6 +640,14 @@ public interface NdArray {
      */
     void setShape(Shape shape);
 
+
+    /**
+     * 返回数组
+     *
+     * @return
+     */
+    float[] getArray();
+
     /**
      * 将数组转换为二维数组（矩阵）返回
      *

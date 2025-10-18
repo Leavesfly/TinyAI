@@ -1892,6 +1892,11 @@ public class NdArrayCpu implements NdArray, Serializable {
         this.shape = (ShapeCpu) shape;
     }
 
+    @Override
+    public float[] getArray() {
+        return buffer;
+    }
+
     /**
      * 将数组转换为二维数组（矩阵）返回
      *

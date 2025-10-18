@@ -96,7 +96,7 @@ public class VisionInput {
     @Override
     public String toString() {
         return "VisionInput{" +
-                "rgbImageShape=" + (rgbImage != null ? java.util.Arrays.toString(rgbImage.getShape()) : "null") +
+                "rgbImageShape=" + (rgbImage != null ? rgbImage.getShape() : "null") +
                 ", hasDepth=" + (depthImage != null) +
                 ", hasFeatures=" + (imageFeatures != null) +
                 ", hasMasks=" + (objectMasks != null) +

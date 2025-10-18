@@ -38,7 +38,7 @@ public class LanguageFeedbackGenerator {
         
         if (continuousAction != null) {
             sb.append("Parameters: ");
-            double[] params = continuousAction.toDoubleArray();
+            float[] params = continuousAction.getArray();
             for (int i = 0; i < Math.min(3, params.length); i++) {
                 sb.append(String.format("%.3f", params[i])).append(" ");
             }

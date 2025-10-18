@@ -8,6 +8,11 @@ import io.leavesfly.tinyai.ndarr.Shape;
  */
 public class ShapeGpu implements Shape {
     @Override
+    public int[] getShape() {
+        return new int[0];
+    }
+
+    @Override
     public int getRow() {
         return 0;
     }

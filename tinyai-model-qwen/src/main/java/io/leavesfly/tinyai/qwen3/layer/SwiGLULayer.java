@@ -5,6 +5,8 @@ import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Layer;
 
+import java.util.List;
+
 /**
  * SwiGLU激活函数层
  * 
@@ -216,5 +218,15 @@ public class SwiGLULayer extends Layer {
      */
     public int getOutputDim() {
         return outputDim;
+    }
+
+    @Override
+    public NdArray forward(NdArray... inputs) {
+        return null;
+    }
+
+    @Override
+    public List<NdArray> backward(NdArray yGrad) {
+        return null;
     }
 }

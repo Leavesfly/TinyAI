@@ -7,6 +7,7 @@ import io.leavesfly.tinyai.nnet.Parameter;
 import io.leavesfly.tinyai.nnet.RnnLayer;
 import io.leavesfly.tinyai.nnet.layer.activate.SigmoidLayer;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -268,5 +269,15 @@ public class LstmLayer extends RnnLayer {
         // 计算隐藏状态: h_t = o_t * tanh(C_t)
         state = oGate.mul(candidate.tanh());
         return state;
+    }
+
+    @Override
+    public NdArray forward(NdArray... inputs) {
+        return null;
+    }
+
+    @Override
+    public List<NdArray> backward(NdArray yGrad) {
+        return null;
     }
 }

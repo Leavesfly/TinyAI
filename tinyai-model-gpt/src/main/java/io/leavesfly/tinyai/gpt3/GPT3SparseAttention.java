@@ -6,6 +6,8 @@ import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Layer;
 import io.leavesfly.tinyai.nnet.layer.dnn.LinearLayer;
 
+import java.util.List;
+
 /**
  * GPT-3稀疏注意力机制实现
  * 
@@ -377,4 +379,14 @@ public class GPT3SparseAttention extends Layer {
     public boolean isSparseMode() { return sparseMode; }
     public int getLayerIndex() { return layerIndex; }
     public GPT3RotaryEmbedding getRotaryEmbedding() { return rotaryEmbedding; }
+
+    @Override
+    public NdArray forward(NdArray... inputs) {
+        return null;
+    }
+
+    @Override
+    public List<NdArray> backward(NdArray yGrad) {
+        return null;
+    }
 }

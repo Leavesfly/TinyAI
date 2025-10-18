@@ -6,6 +6,8 @@ import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Layer;
 import io.leavesfly.tinyai.nnet.Parameter;
 
+import java.util.List;
+
 
 /**
  * 仿射层（全连接层）
@@ -86,4 +88,13 @@ public class AffineLayer extends Layer {
         return x.linear(wParam, bParam);
     }
 
+    @Override
+    public NdArray forward(NdArray... inputs) {
+        return null;
+    }
+
+    @Override
+    public List<NdArray> backward(NdArray yGrad) {
+        return null;
+    }
 }

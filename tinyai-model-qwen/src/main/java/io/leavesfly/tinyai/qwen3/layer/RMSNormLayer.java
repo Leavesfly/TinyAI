@@ -6,6 +6,8 @@ import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Layer;
 import io.leavesfly.tinyai.nnet.Parameter;
 
+import java.util.List;
+
 /**
  * RMS归一化层
  * 
@@ -169,5 +171,15 @@ public class RMSNormLayer extends Layer {
      */
     public Parameter getWeight() {
         return weight;
+    }
+
+    @Override
+    public NdArray forward(NdArray... inputs) {
+        return null;
+    }
+
+    @Override
+    public List<NdArray> backward(NdArray yGrad) {
+        return null;
     }
 }

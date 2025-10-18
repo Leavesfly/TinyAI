@@ -56,11 +56,20 @@ public abstract class LayerAble extends Function {
     /**
      * 层的前向传播，是func的前向传播一种应用
      * inputs 不包含内部的参数部分
+     * <p>
+     * <p>
+     * 可以基于Variable inputs上操作，生成 Variable result
+     * 否则计算图断了。
+     *
+     * 如果重写了layerForward 就不需要实现
+     * backward和forward。
      *
      * @param inputs 输入变量数组
      * @return 前向传播结果变量
      */
-    public abstract Variable layerForward(Variable... inputs);
+    public Variable layerForward(Variable... inputs) {
+        return call(inputs);
+    }
 
 
     /**
@@ -129,16 +138,6 @@ public abstract class LayerAble extends Function {
     @Override
     public int requireInputNum() {
         return -1;
-    }
-
-    @Override
-    public NdArray forward(NdArray... inputs) {
-        return null;
-    }
-
-    @Override
-    public List<NdArray> backward(NdArray yGrad) {
-        return null;
     }
 
 }

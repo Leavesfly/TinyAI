@@ -7,6 +7,7 @@ import io.leavesfly.tinyai.nnet.Layer;
 import io.leavesfly.tinyai.nnet.Parameter;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -350,5 +351,15 @@ public class LoraLinearLayer extends Layer {
             getTotalParameterCount(),
             getParameterReduction() * 100
         );
+    }
+
+    @Override
+    public NdArray forward(NdArray... inputs) {
+        return null;
+    }
+
+    @Override
+    public List<NdArray> backward(NdArray yGrad) {
+        return null;
     }
 }

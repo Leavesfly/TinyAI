@@ -6,6 +6,8 @@ import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Layer;
 import io.leavesfly.tinyai.nnet.Parameter;
 
+import java.util.List;
+
 
 /**
  * 批量归一化层
@@ -189,5 +191,15 @@ public class BatchNorm extends Layer {
             Variable totalVar = squaredDiff.sum().div(new Variable(NdArray.of(shape.size())));
             return totalVar.broadcastTo(shape);
         }
+    }
+
+    @Override
+    public NdArray forward(NdArray... inputs) {
+        return null;
+    }
+
+    @Override
+    public List<NdArray> backward(NdArray yGrad) {
+        return null;
     }
 }

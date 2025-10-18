@@ -5,6 +5,8 @@ import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.Layer;
 
+import java.util.List;
+
 /**
  * 旋转位置编码 (RoPE) 层
  * 
@@ -252,5 +254,15 @@ public class RotaryPositionalEmbeddingLayer extends Layer {
      */
     public NdArray getInvFreq() {
         return invFreq;
+    }
+
+    @Override
+    public NdArray forward(NdArray... inputs) {
+        return null;
+    }
+
+    @Override
+    public List<NdArray> backward(NdArray yGrad) {
+        return null;
     }
 }

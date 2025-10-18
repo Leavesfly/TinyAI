@@ -2,6 +2,7 @@ package io.leavesfly.tinyai.nnet;
 
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 
 import java.util.ArrayList;
@@ -131,6 +132,17 @@ public abstract class Block extends LayerAble {
 //    public List<LayerAble> getLayers() {
 //        return layers;
 //    }
+
+
+    @Override
+    public NdArray forward(NdArray... inputs) {
+        return null;
+    }
+
+    @Override
+    public List<NdArray> backward(NdArray yGrad) {
+        return null;
+    }
 
 
 }

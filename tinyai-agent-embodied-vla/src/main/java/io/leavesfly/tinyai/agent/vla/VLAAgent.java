@@ -96,8 +96,8 @@ public class VLAAgent {
         );
         
         // 3. 跨模态融合
-        Variable fusedVar = transformerCore.fuse(new Variable(concatenatedFeatures, false));
-        NdArray fusedFeatures = fusedVar.getData();
+        Variable fusedVar = transformerCore.fuse(new Variable(concatenatedFeatures));
+        NdArray fusedFeatures = fusedVar.getValue();
         
         // 保存融合特征到状态
         state.setFusedFeatures(fusedFeatures);
@@ -119,15 +119,15 @@ public class VLAAgent {
      * 拼接多模态特征
      */
     private NdArray concatenateFeatures(NdArray vision, NdArray language, NdArray proprio) {
-        int visionLen = vision.getShape()[0];
-        int langLen = language.getShape()[0];
+        int visionLen = vision.getShape().getDimension(0);
+        int langLen = language.getShape().getDimension(0);
         int totalLen = visionLen + langLen;
         
         if (proprio != null) {
-            totalLen += proprio.getShape()[0];
+            totalLen += proprio.getShape().getDimension(0);
         }
         
-        double[][] concatenated = new double[totalLen][hiddenDim];
+        float[][] concatenated = new float[totalLen][hiddenDim];
         
         // 复制视觉特征
         for (int i = 0; i < visionLen; i++) {
@@ -145,7 +145,7 @@ public class VLAAgent {
         
         // 复制本体感知特征
         if (proprio != null) {
-            int proprioLen = proprio.getShape()[0];
+            int proprioLen = proprio.getShape().getDimension(0);
             for (int i = 0; i < proprioLen; i++) {
                 for (int j = 0; j < hiddenDim; j++) {
                     concatenated[visionLen + langLen + i][j] = proprio.get(i * hiddenDim + j);
@@ -153,7 +153,7 @@ public class VLAAgent {
             }
         }
         
-        return new NdArray(concatenated);
+        return NdArray.of(concatenated);
     }
     
     /**

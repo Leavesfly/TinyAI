@@ -5,7 +5,7 @@ import io.leavesfly.tinyai.agent.vla.model.VLAAction;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.nnet.Block;
-import io.leavesfly.tinyai.nnet.layer.Linear;
+import io.leavesfly.tinyai.nnet.layer.dnn.LinearLayer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,13 +23,13 @@ public class ActionDecoder extends Block {
     private final int discreteActionNum;
     
     // 连续动作头
-    private Linear continuousHead1;
-    private Linear continuousHead2;
-    private Linear continuousHead3;
+    private LinearLayer continuousHead1;
+    private LinearLayer continuousHead2;
+    private LinearLayer continuousHead3;
     
     // 离散动作头
-    private Linear discreteHead1;
-    private Linear discreteHead2;
+    private LinearLayer discreteHead1;
+    private LinearLayer discreteHead2;
     
     /**
      * 构造函数
@@ -39,18 +39,19 @@ public class ActionDecoder extends Block {
      * @param discreteActionNum 离散动作数量
      */
     public ActionDecoder(int hiddenDim, int continuousActionDim, int discreteActionNum) {
+        super("ActionDecoder", null);
         this.hiddenDim = hiddenDim;
         this.continuousActionDim = continuousActionDim;
         this.discreteActionNum = discreteActionNum;
         
         // 连续动作头：hiddenDim -> 512 -> 256 -> actionDim
-        this.continuousHead1 = new Linear(hiddenDim, 512, true);
-        this.continuousHead2 = new Linear(512, 256, true);
-        this.continuousHead3 = new Linear(256, continuousActionDim, true);
+        this.continuousHead1 = new LinearLayer("continuous1", hiddenDim, 512, true);
+        this.continuousHead2 = new LinearLayer("continuous2", 512, 256, true);
+        this.continuousHead3 = new LinearLayer("continuous3", 256, continuousActionDim, true);
         
         // 离散动作头：hiddenDim -> 256 -> discreteActionNum
-        this.discreteHead1 = new Linear(hiddenDim, 256, true);
-        this.discreteHead2 = new Linear(256, discreteActionNum, true);
+        this.discreteHead1 = new LinearLayer("discrete1", hiddenDim, 256, true);
+        this.discreteHead2 = new LinearLayer("discrete2", 256, discreteActionNum, true);
     }
     
     /**
@@ -61,33 +62,33 @@ public class ActionDecoder extends Block {
      */
     public VLAAction decode(NdArray fusedFeatures) {
         // 取最后一个token或做平均池化
-        int seqLen = fusedFeatures.getShape()[0];
+        int seqLen = fusedFeatures.getShape().getDimension(0);
         double[] lastToken = new double[hiddenDim];
         
         for (int i = 0; i < hiddenDim; i++) {
             lastToken[i] = fusedFeatures.get((seqLen - 1) * hiddenDim + i);
         }
         
-        NdArray aggregated = new NdArray(lastToken).reshape(1, hiddenDim);
-        Variable input = new Variable(aggregated, false);
+        NdArray aggregated = NdArray.of(lastToken).reshape(io.leavesfly.tinyai.ndarr.Shape.of(1, hiddenDim));
+        Variable input = new Variable(aggregated);
         
         // 解码连续动作
-        Variable cont1 = continuousHead1.forward(input);
+        Variable cont1 = continuousHead1.layerForward(input);
         Variable contRelu1 = cont1.relu();
-        Variable cont2 = continuousHead2.forward(contRelu1);
+        Variable cont2 = continuousHead2.layerForward(contRelu1);
         Variable contRelu2 = cont2.relu();
-        Variable cont3 = continuousHead3.forward(contRelu2);
+        Variable cont3 = continuousHead3.layerForward(contRelu2);
         
         // Tanh激活，归一化到[-1, 1]
-        NdArray continuousAction = tanh(cont3.getData());
+        NdArray continuousAction = tanh(cont3.getValue());
         
         // 解码离散动作
-        Variable disc1 = discreteHead1.forward(input);
+        Variable disc1 = discreteHead1.layerForward(input);
         Variable discRelu = disc1.relu();
-        Variable disc2 = discreteHead2.forward(discRelu);
+        Variable disc2 = discreteHead2.layerForward(discRelu);
         
         // Softmax得到概率分布
-        NdArray discreteProbs = softmax(disc2.getData());
+        NdArray discreteProbs = softmax(disc2.getValue());
         int discreteAction = argmax(discreteProbs);
         
         // 计算置信度
@@ -103,52 +104,63 @@ public class ActionDecoder extends Block {
      * Tanh激活函数
      */
     private NdArray tanh(NdArray input) {
-        double[] data = input.toDoubleArray();
-        double[] result = new double[data.length];
+        io.leavesfly.tinyai.ndarr.Shape shape = input.getShape();
+        float[][] matrix = input.getMatrix();
+        int rows = shape.getDimension(0);
+        int cols = shape.getDimNum() > 1 ? shape.getDimension(1) : 1;
         
-        for (int i = 0; i < data.length; i++) {
-            result[i] = Math.tanh(data[i]);
+        double[][] result = new double[rows][cols];
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                result[i][j] = Math.tanh(matrix[i][j]);
+            }
         }
         
-        return new NdArray(result).reshape(input.getShape());
+        return NdArray.of(result).reshape(input.getShape());
     }
     
     /**
      * Softmax函数
      */
     private NdArray softmax(NdArray input) {
-        double[] data = input.toDoubleArray();
-        double max = data[0];
-        for (double v : data) {
-            max = Math.max(max, v);
+        float[][] matrix = input.getMatrix();
+        int rows = matrix.length;
+        int cols = matrix[0].length;
+        
+        double max = matrix[0][0];
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                max = Math.max(max, matrix[i][j]);
+            }
         }
         
-        double[] exp = new double[data.length];
+        double[] exp = new double[cols];
         double sum = 0.0;
-        for (int i = 0; i < data.length; i++) {
-            exp[i] = Math.exp(data[i] - max);
-            sum += exp[i];
+        for (int j = 0; j < cols; j++) {
+            exp[j] = Math.exp(matrix[0][j] - max);
+            sum += exp[j];
         }
         
-        double[] result = new double[data.length];
-        for (int i = 0; i < data.length; i++) {
-            result[i] = exp[i] / sum;
+        float[] result = new float[cols];
+        for (int j = 0; j < cols; j++) {
+            result[j] = (float)(exp[j] / sum);
         }
         
-        return new NdArray(result);
+        return NdArray.of(result);
     }
     
     /**
      * Argmax函数
      */
     private int argmax(NdArray input) {
-        double[] data = input.toDoubleArray();
+        float[][] matrix = input.getMatrix();
         int maxIdx = 0;
-        double maxVal = data[0];
+        float maxVal = matrix[0][0];
         
-        for (int i = 1; i < data.length; i++) {
-            if (data[i] > maxVal) {
-                maxVal = data[i];
+        int cols = matrix[0].length;
+        for (int i = 0; i < cols; i++) {
+            if (matrix[0][i] > maxVal) {
+                maxVal = matrix[0][i];
                 maxIdx = i;
             }
         }
@@ -168,20 +180,14 @@ public class ActionDecoder extends Block {
     }
     
     @Override
-    public Variable forward(Variable input) {
+    public Variable layerForward(Variable... inputs) {
         // 简化接口
-        VLAAction action = decode(input.getData());
-        return new Variable(action.getContinuousAction(), false);
+        VLAAction action = decode(inputs[0].getValue());
+        return new Variable(action.getContinuousAction());
     }
     
     @Override
-    public List<Variable> parameters() {
-        List<Variable> params = new ArrayList<>();
-        params.addAll(continuousHead1.parameters());
-        params.addAll(continuousHead2.parameters());
-        params.addAll(continuousHead3.parameters());
-        params.addAll(discreteHead1.parameters());
-        params.addAll(discreteHead2.parameters());
-        return params;
+    public void init() {
+        // 初始化已在构造函数中完成
     }
 }

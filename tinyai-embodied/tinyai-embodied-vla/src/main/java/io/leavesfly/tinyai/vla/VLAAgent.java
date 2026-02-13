@@ -17,6 +17,73 @@ import io.leavesfly.tinyai.vla.model.VLAState;
  * VLA智能体核心
  * 集成视觉、语言、动作三种模态的端到端具身智能系统
  * 
+ * <p>这是VLA(Vision-Language-Action)架构的核心实现类。
+ * VLA将视觉感知、自然语言理解和动作生成统一在一个Transformer架构中。
+ * 
+ * <h2>架构设计</h2>
+ * <pre>
+ * 输入层:
+ *  ┌──────────┐  ┌──────────┐  ┌──────────────┐
+ *  │  Vision  │  │ Language │  │Proprioception│
+ *  │ (视觉)    │  │ (语言)   │  │  (本体感知)  │
+ *  └────┬─────┘  └────┬─────┘  └──────┬───────┘
+ *       │             │               │
+ *       ▼             ▼               ▼
+ * 编码器层:
+ *  ┌──────────┐  ┌──────────┐  ┌──────────────┐
+ *  │   CNN    │  │Transformer│  │     MLP      │
+ *  │ Encoder  │  │  Encoder │  │   Encoder    │
+ *  └────┬─────┘  └────┬─────┘  └──────┬───────┘
+ *       │             │               │
+ *       └─────────────┼───────────────┘
+ *                     ▼
+ *              ┌──────────────┐
+ *              │ Cross-Modal │
+ *              │  Attention   │
+ *              └──────┬───────┘
+ *                     ▼
+ *              ┌──────────────┐
+ *              │    Action    │
+ *              │   Decoder    │
+ *              └──────────────┘
+ * </pre>
+ * 
+ * <h2>核心特性</h2>
+ * <ul>
+ *   <li><b>多模态输入</b>: 同时处理视觉、语言和本体感知三种输入</li>
+ *   <li><b>跨模态融合</b>: 使用Cross-Modal Attention实现不同模态的对齐</li>
+ *   <li><b>零样本泛化</b>: 通过语言指令组合，可以执行未见过的新任务</li>
+ *   <li><b>端到端训练</b>: 从原始输入到动作输出的完整可微分化</li>
+ * </ul>
+ * 
+ * <h2>使用示例</h2>
+ * <pre>{@code
+ * // 1. 创建VLA智能体
+ * VLAAgent agent = new VLAAgent(768, 8, 6, 7);
+ * 
+ * // 2. 准备多模态输入
+ * VisionInput vision = new VisionInput(rgbImage);
+ * LanguageInput language = new LanguageInput("Pick up the red cube");
+ * ProprioceptionInput proprio = new ProprioceptionInput(joints, velocities);
+ * 
+ * VLAState state = new VLAState(vision, language, proprio);
+ * 
+ * // 3. 预测动作
+ * VLAAction action = agent.predict(state);
+ * 
+ * // 4. 执行动作
+ * RobotEnvironment env = new SimpleRobotEnv(config);
+ * VLAState nextState = env.step(action);
+ * }</pre>
+ * 
+ * <h2>学习要点</h2>
+ * <ul>
+ *   <li>理解为什么需要统一建模视觉、语言和动作</li>
+ *   <li>观察跨模态注意力如何实现不同模态的信息融合</li>
+ *   <li>思考零样本泛化的原理</li>
+ *   <li>比较VLA与传统强化学习方法的区别</li>
+ * </ul>
+ * 
  * @author TinyAI
  */
 public class VLAAgent {

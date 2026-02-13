@@ -504,17 +504,31 @@ public class REINFORCEAgent extends Agent {
     
     @Override
     public void saveModel(String filepath) {
-        System.out.println("REINFORCE模型已保存到: " + filepath);
+        // 保存策略网络模型
+        model.saveModel(filepath);
+        System.out.println("REINFORCE策略网络模型已保存到: " + filepath);
+
+        // 如果使用基线，同时保存基线网络模型
         if (useBaseline) {
-            System.out.println("基线模型已保存到: " + filepath + "_baseline");
+            String baselineFilepath = filepath.replace(".model", "_baseline.model");
+            baselineModel.saveModel(baselineFilepath);
+            System.out.println("REINFORCE基线网络模型已保存到: " + baselineFilepath);
         }
     }
-    
+
     @Override
     public void loadModel(String filepath) {
-        System.out.println("REINFORCE模型已从以下路径加载: " + filepath);
+        // 加载策略网络模型参数
+        Model loadedModel = io.leavesfly.tinyai.ml.model.ModelSerializer.loadModel(filepath);
+        this.model.getModule().loadStateDict(loadedModel.getModule().copyStateDict(), true);
+        System.out.println("REINFORCE策略网络模型已从以下路径加载: " + filepath);
+
+        // 如果使用基线，同时加载基线网络模型
         if (useBaseline) {
-            System.out.println("基线模型已从以下路径加载: " + filepath + "_baseline");
+            String baselineFilepath = filepath.replace(".model", "_baseline.model");
+            Model loadedBaselineModel = io.leavesfly.tinyai.ml.model.ModelSerializer.loadModel(baselineFilepath);
+            this.baselineModel.getModule().loadStateDict(loadedBaselineModel.getModule().copyStateDict(), true);
+            System.out.println("REINFORCE基线网络模型已从以下路径加载: " + baselineFilepath);
         }
     }
     

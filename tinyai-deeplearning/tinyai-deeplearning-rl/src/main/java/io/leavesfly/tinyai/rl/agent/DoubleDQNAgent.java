@@ -16,38 +16,37 @@ import io.leavesfly.tinyai.nnet.v2.container.Sequential;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
 import io.leavesfly.tinyai.nnet.v2.layer.activation.ReLU;
 
-import java.io.File;
 import java.util.Map;
 
 /**
- * Deep Q-Network (DQN) 智能体实现
+ * Double DQN (Double Deep Q-Network) 智能体实现
  *
  * @author leavesfly
  * @version 0.01
  * <p>
- * DQNAgent实现了深度Q网络算法，这是第一个成功将深度学习应用于强化学习的算法。
+ * DoubleDQNAgent实现了Double DQN算法，这是对标准DQN的重要改进。
  * 主要特点包括：
- * 1. 使用神经网络逼近Q函数
- * 2. 经验回放机制提高数据利用率
- * 3. 目标网络稳定训练过程
- * 4. ε-贪婪策略平衡探索与利用
+ * 1. 使用两个Q网络解耦动作选择和动作评估
+ * 2. 减少Q值过估计问题
+ * 3. 训练更稳定，收敛性更好
+ * 4. 继承自DQN，保持经验回放和目标网络
  */
-public class DQNAgent extends Agent {
+public class DoubleDQNAgent extends Agent {
 
-    // DQN特有参数
-    private final int batchSize;              // 批次大小
-    private final int targetUpdateFreq;       // 目标网络更新频率
-    private final ReplayBuffer replayBuffer;  // 经验回放缓冲区
-    private final Model targetModel;          // 目标网络
-    private final EpsilonGreedyPolicy policy; // ε-贪婪策略
-    private final Optimizer optimizer;        // 优化器
-    private final Loss lossFunction;          // 损失函数
+    // Double DQN特有参数
+    private final int batchSize;
+    private final int targetUpdateFreq;
+    private final ReplayBuffer replayBuffer;
+    private final Model targetModel;
+    private final EpsilonGreedyPolicy policy;
+    private final Optimizer optimizer;
+    private final Loss lossFunction;
 
     // 训练统计
-    private int updateCount;                  // 更新次数计数
-    private float averageLoss;                // 平均损失
-    private float totalLoss;                  // 总损失
-    private int lossCount;                    // 损失计算次数
+    private int updateCount;
+    private float averageLoss;
+    private float totalLoss;
+    private int lossCount;
 
     /**
      * 构造函数
@@ -63,9 +62,9 @@ public class DQNAgent extends Agent {
      * @param bufferSize       经验回放缓冲区大小
      * @param targetUpdateFreq 目标网络更新频率
      */
-    public DQNAgent(String name, int stateDim, int actionDim, int[] hiddenSizes,
-                    float learningRate, float epsilon, float gamma,
-                    int batchSize, int bufferSize, int targetUpdateFreq) {
+    public DoubleDQNAgent(String name, int stateDim, int actionDim, int[] hiddenSizes,
+                           float learningRate, float epsilon, float gamma,
+                           int batchSize, int bufferSize, int targetUpdateFreq) {
         super(name, stateDim, actionDim, learningRate, epsilon, gamma);
 
         this.batchSize = batchSize;
@@ -76,10 +75,10 @@ public class DQNAgent extends Agent {
         this.totalLoss = 0.0f;
         this.lossCount = 0;
 
-        // 创建Q网络
+        // 创建Q网络（在线网络）
         this.model = createQNetwork(stateDim, actionDim, hiddenSizes);
 
-        // 创建目标网络（复制主网络）
+        // 创建目标网络
         this.targetModel = createQNetwork(stateDim, actionDim, hiddenSizes);
         copyModelWeights(model, targetModel);
 
@@ -88,33 +87,24 @@ public class DQNAgent extends Agent {
                 state -> model.forward(state));
 
         // 创建优化器和损失函数
-        this.optimizer = new Adam(model, learningRate, 0.9f, 0.999f, 1e-3f); // 使用安全的epsilon值
+        this.optimizer = new Adam(model, learningRate, 0.9f, 0.999f, 1e-3f);
         this.lossFunction = new MeanSquaredLoss();
     }
 
     /**
      * 创建Q网络
-     *
-     * @param stateDim    状态维度
-     * @param actionDim   动作维度
-     * @param hiddenSizes 隐藏层尺寸
-     * @return Q网络模型
      */
     private Model createQNetwork(int stateDim, int actionDim, int[] hiddenSizes) {
-        // 使用Sequential构建MLP网络
         Sequential mlpModule = new Sequential(name + "_QNetwork");
-        
-        // 输入层
+
         int inputSize = stateDim;
-        
-        // 添加隐藏层
+
         for (int hiddenSize : hiddenSizes) {
             mlpModule.add(new Linear("fc", inputSize, hiddenSize, true));
             mlpModule.add(new ReLU("relu"));
             inputSize = hiddenSize;
         }
-        
-        // 输出层
+
         mlpModule.add(new Linear("fc_out", inputSize, actionDim, true));
 
         return new Model(name + "_QModel", mlpModule);
@@ -122,13 +112,9 @@ public class DQNAgent extends Agent {
 
     /**
      * 复制模型权重
-     *
-     * @param source 源模型
-     * @param target 目标模型
      */
     private void copyModelWeights(Model source, Model target) {
-        // 使用 stateDict 和 loadStateDict 实现权重复制
-        Map<String, io.leavesfly.tinyai.ndarr.NdArray> stateDict = source.getModule().copyStateDict();
+        Map<String, NdArray> stateDict = source.getModule().copyStateDict();
         target.getModule().loadStateDict(stateDict, true);
     }
 
@@ -137,17 +123,13 @@ public class DQNAgent extends Agent {
         if (training) {
             return policy.selectAction(state);
         } else {
-            // 测试模式：总是选择贪婪动作
             Variable qValues = model.forward(state);
             return selectGreedyAction(qValues);
         }
     }
 
     /**
-     * 选择贪婪动作（Q值最大的动作）
-     *
-     * @param qValues Q值向量
-     * @return 贪婪动作
+     * 选择贪婪动作
      */
     private Variable selectGreedyAction(Variable qValues) {
         NdArray qArray = qValues.getValue();
@@ -172,10 +154,8 @@ public class DQNAgent extends Agent {
 
     @Override
     public void learn(Experience experience) {
-        // 存储经验
         storeExperience(experience);
 
-        // 如果有足够的经验，进行学习
         if (replayBuffer.canSample(batchSize)) {
             Experience[] batch = replayBuffer.sample(batchSize);
             learnBatch(batch);
@@ -193,47 +173,35 @@ public class DQNAgent extends Agent {
         float[][] nextStates = new float[experiences.length][stateDim];
         boolean[] dones = new boolean[experiences.length];
 
-        // 提取批量数据
         for (int i = 0; i < experiences.length; i++) {
             Experience exp = experiences[i];
 
-            // 状态
             NdArray stateArray = exp.getState().getValue();
             for (int j = 0; j < stateDim; j++) {
                 states[i][j] = stateArray.get(0, j);
             }
 
-            // 动作
             actions[i][0] = exp.getAction().getValue().getNumber().floatValue();
-
-            // 奖励
             rewards[i][0] = exp.getReward();
 
-            // 下一状态
             NdArray nextStateArray = exp.getNextState().getValue();
             for (int j = 0; j < stateDim; j++) {
                 nextStates[i][j] = nextStateArray.get(0, j);
             }
 
-            // 是否结束
             dones[i] = exp.isDone();
         }
 
-        // 计算目标Q值
-        Variable targetQValues = computeTargetQValues(nextStates, rewards, dones);
-
-        // 计算当前Q值
+        // Double DQN: 使用在线网络选择动作，目标网络评估动作
+        Variable targetQValues = computeTargetQValuesDoubleDQN(nextStates, rewards, dones);
         Variable currentQValues = computeCurrentQValues(states, actions);
 
-        // 计算损失并更新网络
         Variable loss = lossFunction.loss(targetQValues, currentQValues);
 
-        // 反向传播
         model.clearGrads();
         loss.backward();
         optimizer.update();
 
-        // 更新统计
         updateLossStatistics(loss.getValue().getNumber().floatValue());
         incrementTrainingStep();
 
@@ -242,57 +210,65 @@ public class DQNAgent extends Agent {
             copyModelWeights(model, targetModel);
         }
 
-        // 衰减探索率
         policy.decayEpsilon(0.995f, 0.01f);
     }
 
     /**
-     * 计算目标Q值
-     *
-     * @param nextStates 下一状态批次
-     * @param rewards    奖励批次
-     * @param dones      结束标志批次
-     * @return 目标Q值
+     * Double DQN 目标Q值计算
+     * 使用在线网络选择动作，目标网络评估动作
      */
-    private Variable computeTargetQValues(float[][] nextStates, float[][] rewards, boolean[] dones) {
+    private Variable computeTargetQValuesDoubleDQN(float[][] nextStates, float[][] rewards, boolean[] dones) {
         int batchSize = nextStates.length;
-        
-        // 批量前向传播获取所有next state的Q值
-        Variable[] nextQValuesArray = new Variable[batchSize];
-        Variable[] maxNextQArray = new Variable[batchSize];
-        
+
+        Variable[] targetArray = new Variable[batchSize];
+
         for (int i = 0; i < batchSize; i++) {
             Variable nextState = new Variable(NdArray.of(nextStates[i], Shape.of(1, stateDim)));
-            nextQValuesArray[i] = targetModel.forward(nextState);
-            
+
             if (dones[i]) {
-                // 如果是终止状态，目标值就是奖励（使用Variable保持计算图）
-                maxNextQArray[i] = new Variable(NdArray.of(0.0f));
+                targetArray[i] = new Variable(NdArray.of(rewards[i][0]));
             } else {
-                // 使用Variable层面的max操作保持计算图连通性
-                maxNextQArray[i] = findMaxQValueVariable(nextQValuesArray[i]);
+                // Double DQN核心：在线网络选择动作
+                Variable onlineQValues = model.forward(nextState);
+                int bestAction = selectBestAction(onlineQValues);
+
+                // 目标网络评估动作
+                Variable targetQValues = targetModel.forward(nextState);
+                Variable indexVar = new Variable(NdArray.of(new float[]{bestAction}));
+                Variable targetQForBestAction = targetQValues.indexSelect(1, indexVar);
+
+                // 计算目标值: r + γ * Q_target(s', a_best_online)
+                Variable rewardVar = new Variable(NdArray.of(rewards[i][0]));
+                Variable gammaVar = new Variable(NdArray.of(gamma));
+                Variable discountedQ = targetQForBestAction.mul(gammaVar);
+                targetArray[i] = rewardVar.add(discountedQ);
             }
         }
-        
-        // 组装目标Q值：r + γ * max(Q(s', a'))
-        Variable[] targetArray = new Variable[batchSize];
-        for (int i = 0; i < batchSize; i++) {
-            Variable rewardVar = new Variable(NdArray.of(rewards[i][0]));
-            Variable gammaVar = new Variable(NdArray.of(gamma));
-            Variable discountedQ = maxNextQArray[i].mul(gammaVar);
-            targetArray[i] = rewardVar.add(discountedQ);
-        }
-        
-        // 合并成批次Variable
+
         return stackVariables(targetArray, batchSize);
     }
 
     /**
+     * 选择Q值最大的动作
+     */
+    private int selectBestAction(Variable qValues) {
+        NdArray qArray = qValues.getValue();
+        int bestAction = 0;
+        float maxQ = qArray.get(0, 0);
+
+        for (int i = 1; i < actionDim; i++) {
+            float q = qArray.get(0, i);
+            if (q > maxQ) {
+                maxQ = q;
+                bestAction = i;
+            }
+        }
+
+        return bestAction;
+    }
+
+    /**
      * 计算当前Q值
-     *
-     * @param states  状态批次
-     * @param actions 动作批次
-     * @return 当前Q值
      */
     private Variable computeCurrentQValues(float[][] states, float[][] actions) {
         int batchSize = states.length;
@@ -303,8 +279,6 @@ public class DQNAgent extends Agent {
             Variable qValues = model.forward(state);
 
             int actionIndex = (int) actions[i][0];
-            
-            // 使用indexSelect保持计算图连通性
             Variable indexVar = new Variable(NdArray.of(new float[]{actionIndex}));
             currentQArray[i] = qValues.indexSelect(1, indexVar);
         }
@@ -313,42 +287,7 @@ public class DQNAgent extends Agent {
     }
 
     /**
-     * 找到Q值向量中的最大值（保持计算图）
-     *
-     * @param qValues Q值向量
-     * @return 最大Q值Variable
-     */
-    private Variable findMaxQValueVariable(Variable qValues) {
-        // 使用Variable的max操作保持计算图连通性
-        return qValues.max(1, true);
-    }
-    
-    /**
-     * 找到Q值向量中的最大值（数值版本，用于非训练场景）
-     *
-     * @param qValues Q值向量
-     * @return 最大Q值
-     */
-    private float findMaxQValue(Variable qValues) {
-        NdArray qArray = qValues.getValue();
-        float maxQ = qArray.get(0, 0);
-
-        for (int i = 1; i < actionDim; i++) {
-            float q = qArray.get(0, i);
-            if (q > maxQ) {
-                maxQ = q;
-            }
-        }
-
-        return maxQ;
-    }
-    
-    /**
      * 将Variable数组堆叠成批次Variable
-     *
-     * @param variables Variable数组
-     * @param batchSize 批次大小
-     * @return 堆叠后的Variable
      */
     private Variable stackVariables(Variable[] variables, int batchSize) {
         float[] values = new float[batchSize];
@@ -360,8 +299,6 @@ public class DQNAgent extends Agent {
 
     /**
      * 更新损失统计
-     *
-     * @param loss 当前损失
      */
     private void updateLossStatistics(float loss) {
         totalLoss += loss;
@@ -369,76 +306,46 @@ public class DQNAgent extends Agent {
         averageLoss = totalLoss / lossCount;
     }
 
-    /**
-     * 获取平均损失
-     *
-     * @return 平均损失
-     */
     public float getAverageLoss() {
         return averageLoss;
     }
 
-    /**
-     * 获取经验回放缓冲区使用率
-     *
-     * @return 使用率
-     */
     public float getBufferUsage() {
         return replayBuffer.getUsageRate();
     }
 
-    /**
-     * 获取当前探索率
-     *
-     * @return 探索率
-     */
     public float getCurrentEpsilon() {
         return policy.getEpsilon();
     }
 
-    /**
-     * 设置探索率
-     *
-     * @param epsilon 新的探索率
-     */
     public void setEpsilon(float epsilon) {
         policy.setEpsilon(epsilon);
     }
 
     @Override
     public void saveModel(String filepath) {
-        // 保存主网络模型
         model.saveModel(filepath);
-        System.out.println("DQN主网络模型已保存到: " + filepath);
+        System.out.println("DoubleDQN在线网络模型已保存到: " + filepath);
 
-        // 同时保存目标网络模型
         String targetFilepath = filepath.replace(".model", "_target.model");
         targetModel.saveModel(targetFilepath);
-        System.out.println("DQN目标网络模型已保存到: " + targetFilepath);
+        System.out.println("DoubleDQN目标网络模型已保存到: " + targetFilepath);
     }
 
     @Override
     public void loadModel(String filepath) {
-        // 加载主网络模型参数
         Model loadedModel = io.leavesfly.tinyai.ml.model.ModelSerializer.loadModel(filepath);
-        // 使用 loadStateDict 更新当前模型的参数
         this.model.getModule().loadStateDict(loadedModel.getModule().copyStateDict(), true);
-        System.out.println("DQN主网络模型已从以下路径加载: " + filepath);
+        System.out.println("DoubleDQN在线网络模型已从以下路径加载: " + filepath);
 
-        // 同时加载目标网络模型参数
         String targetFilepath = filepath.replace(".model", "_target.model");
         Model loadedTargetModel = io.leavesfly.tinyai.ml.model.ModelSerializer.loadModel(targetFilepath);
         this.targetModel.getModule().loadStateDict(loadedTargetModel.getModule().copyStateDict(), true);
-        System.out.println("DQN目标网络模型已从以下路径加载: " + targetFilepath);
+        System.out.println("DoubleDQN目标网络模型已从以下路径加载: " + targetFilepath);
     }
 
-    /**
-     * 获取训练统计信息
-     *
-     * @return 统计信息映射
-     */
-    public java.util.Map<String, Object> getTrainingStats() {
-        java.util.Map<String, Object> stats = new java.util.HashMap<>();
+    public Map<String, Object> getTrainingStats() {
+        Map<String, Object> stats = new java.util.HashMap<>();
         stats.put("training_step", trainingStep);
         stats.put("average_loss", averageLoss);
         stats.put("epsilon", getCurrentEpsilon());
@@ -447,9 +354,6 @@ public class DQNAgent extends Agent {
         return stats;
     }
 
-    /**
-     * 重置训练统计
-     */
     public void resetTrainingStats() {
         totalLoss = 0.0f;
         lossCount = 0;

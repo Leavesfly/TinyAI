@@ -22,9 +22,7 @@
 
         <!--        模型层-->
         <module>tinyai-model/tinyai-model-deepseek</module>
-        <module>tinyai-model/tinyai-model-lora</module>
         <module>tinyai-model/tinyai-model-gpt</module>
-        <module>tinyai-model/tinyai-model-qwen</module>
         <module>tinyai-model/tinyai-model-minimind</module>
         <module>tinyai-model/tinyai-model-banana</module>
 
@@ -34,7 +32,6 @@
         <module>tinyai-agent/tinyai-agent-multi</module>
         <module>tinyai-agent/tinyai-agent-pattern</module>
         <module>tinyai-agent/tinyai-agent-evol</module>
-        <module>tinyai-agent/tinyai-agent-manus</module>
 
         <!--        具身智能-->
         <module>tinyai-embodied/tinyai-embodied-base</module>

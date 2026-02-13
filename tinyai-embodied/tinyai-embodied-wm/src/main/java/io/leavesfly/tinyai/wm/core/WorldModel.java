@@ -8,20 +8,79 @@ import io.leavesfly.tinyai.wm.model.*;
  * 世界模型（World Model）
  * 整合VAE编码器、MDN-RNN和控制器的完整世界模型
  * 
- * 核心思想：
- * 1. VAE：将高维观察压缩为低维潜在表示
- * 2. MDN-RNN：在潜在空间中预测动态演化
- * 3. Controller：基于潜在表示选择动作
+ * <p>世界模型是具身智能领域的重要技术，它让智能体能够"在想象中"学习和规划。
  * 
- * 工作流程：
- * - 训练阶段：
- *   1. 收集观察数据训练VAE
- *   2. 在潜在空间中收集序列数据训练MDN-RNN
- *   3. 在想象环境中训练Controller
- * - 推理阶段：
- *   1. VAE编码当前观察
- *   2. MDN-RNN预测未来状态
- *   3. Controller选择动作
+ * <h2>核心思想</h2>
+ * <pre>
+ * 真实世界:  观察(o) ──→ 动作(a) ──→ 奖励(r)
+ *                ↑         │
+ *                └─────────┘
+ *                
+ * 世界模型:  z = VAE(o)           (压缩观察)
+ *            p(z'|z,a) = MDN-RNN(z,a)  (预测未来)
+ *            a = Controller(z)         (选择动作)
+ * </pre>
+ * 
+ * <h2>V-M-C 架构</h2>
+ * <ul>
+ *   <li><b>V (Vision)</b>: VAE编码器，将高维观察压缩为低维潜在表示</li>
+ *   <li><b>M (Memory)</b>: MDN-RNN，在潜在空间中预测环境动态演化</li>
+ *   <li><b>C (Controller)</b>: 控制器，基于潜在表示选择动作</li>
+ * </ul>
+ * 
+ * <h2>工作流程</h2>
+ * <ol>
+ *   <li><b>训练阶段</b>:
+ *     <ul>
+ *       <li>1. 收集观察数据训练VAE</li>
+ *       <li>2. 在潜在空间中收集序列数据训练MDN-RNN</li>
+ *       <li>3. 在想象环境中训练Controller</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>推理阶段</b>:
+ *     <ul>
+ *       <li>1. VAE编码当前观察</li>
+ *       <li>2. MDN-RNN预测未来状态</li>
+ *       <li>3. Controller选择动作</li>
+ *     </ul>
+ *   </li>
+ * </ol>
+ * 
+ * <h2>样本效率优势</h2>
+ * <table>
+ * <tr><th>方法</th><th>真实交互</th><th>训练时间</th></tr>
+ * <tr><td>DQN</td><td>100,000步</td><td>10小时</td></tr>
+ * <tr><td>世界模型</td><td>1,000步</td><td>30分钟</td></tr>
+ * </table>
+ * 
+ * <h2>使用示例</h2>
+ * <pre>{@code
+ * // 1. 创建配置
+ * WorldModelConfig config = new WorldModelConfig(8, 32, 256, 3, 64, 5, false);
+ * 
+ * // 2. 创建世界模型
+ * WorldModel worldModel = new WorldModel(config);
+ * 
+ * // 3. 训练VAE
+ * worldModel.trainVAE(observations, 100);
+ * 
+ * // 4. 训练MDN-RNN
+ * worldModel.trainMDNRNN(sequences, 100);
+ * 
+ * // 5. 在想象中训练
+ * worldModel.trainInDream(controller, 1000);
+ * 
+ * // 6. 使用预测
+ * PredictionResult result = worldModel.predict(observation, action, hiddenState);
+ * }</pre>
+ * 
+ * <h2>学习要点</h2>
+ * <ul>
+ *   <li>理解为什么要压缩观察为潜在表示</li>
+ *   <li>观察MDN-RNN如何处理不确定性</li>
+ *   <li>思考想象训练与真实训练的区别</li>
+ *   <li>分析世界模型的局限性和适用场景</li>
+ * </ul>
  *
  * @author leavesfly
  * @since 2025-10-18

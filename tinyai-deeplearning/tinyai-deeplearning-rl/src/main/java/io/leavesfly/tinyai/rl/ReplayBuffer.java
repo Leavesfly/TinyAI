@@ -65,12 +65,49 @@ public class ReplayBuffer {
     }
     
     /**
-     * 随机采样一批经验
+     * 随机采样一批经验（使用Fisher-Yates洗牌算法，确保不重复采样）
      * 
      * @param batchSize 批次大小
      * @return 采样的经验数组
      */
     public Experience[] sample(int batchSize) {
+        if (batchSize > buffer.size()) {
+            throw new IllegalArgumentException(
+                String.format("批次大小 %d 大于缓冲区当前大小 %d", batchSize, buffer.size())
+            );
+        }
+        
+        // 创建索引数组并使用Fisher-Yates洗牌算法
+        int[] indices = new int[buffer.size()];
+        for (int i = 0; i < buffer.size(); i++) {
+            indices[i] = i;
+        }
+        
+        // Fisher-Yates洗牌：只洗前batchSize个元素
+        for (int i = 0; i < batchSize; i++) {
+            int j = i + random.nextInt(buffer.size() - i);
+            int temp = indices[i];
+            indices[i] = indices[j];
+            indices[j] = temp;
+        }
+        
+        // 采样前batchSize个元素
+        Experience[] batch = new Experience[batchSize];
+        for (int i = 0; i < batchSize; i++) {
+            batch[i] = buffer.get(indices[i]);
+        }
+        
+        return batch;
+    }
+    
+    /**
+     * 随机采样一批经验（允许重复采样，原始实现方式）
+     * 适用于需要独立同分布样本的场景
+     * 
+     * @param batchSize 批次大小
+     * @return 采样的经验数组
+     */
+    public Experience[] sampleWithReplacement(int batchSize) {
         if (batchSize > buffer.size()) {
             throw new IllegalArgumentException(
                 String.format("批次大小 %d 大于缓冲区当前大小 %d", batchSize, buffer.size())

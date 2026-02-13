@@ -1,8 +1,66 @@
 package io.leavesfly.tinyai.ndarr;
 
 import io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu;
-import io.leavesfly.tinyai.ndarr.cpu.operations.MathFunctions;
-
+/**
+ * N维数组接口 - TinyAI深度学习的核心数据结构
+ *
+ * <p><b>设计理念：</b>
+ * NdArray（N-dimensional Array）是深度学习中所有计算的基础数据结构。
+ * 无论是图像、文本还是音频，在计算机中都被表示为多维数组（张量）。
+ *
+ * <p><b>维度层次（从简单到复杂）：</b>
+ * <pre>
+ * 标量(0D) → 向量(1D) → 矩阵(2D) → 张量(3D+) → 高维张量
+ *   5.0        [1,2,3]    [[1,2],   [[[1,2],     ...
+ *                         [3,4]]    [[3,4]]]
+ * </pre>
+ *
+ * <p><b>Java vs Python 对比：</b>
+ * <table border="1">
+ *   <tr><th>操作</th><th>NumPy (Python)</th><th>TinyAI (Java)</th></tr>
+ *   <tr><td>创建全零数组</td><td>np.zeros((3,4))</td><td>NdArray.zeros(Shape.of(3,4))</td></tr>
+ *   <tr><td>创建随机数组</td><td>np.random.randn(3,4)</td><td>NdArray.randn(Shape.of(3,4))</td></tr>
+ *   <tr><td>矩阵乘法</td><td>a @ b 或 np.dot(a,b)</td><td>a.dot(b)</td></tr>
+ *   <tr><td>数组变形</td><td>a.reshape(2,6)</td><td>a.reshape(Shape.of(2,6))</td></tr>
+ *   <tr><td>沿轴求和</td><td>a.sum(axis=0)</td><td>a.sum(0)</td></tr>
+ * </table>
+ *
+ * <p><b>快速入门示例：</b>
+ * <pre>{@code
+ * // 1. 创建数组
+ * NdArray a = NdArray.of(new float[][]{{1, 2}, {3, 4}});
+ * NdArray b = NdArray.zeros(Shape.of(2, 3));
+ * NdArray c = NdArray.randn(Shape.of(3, 3));  // 标准正态分布随机数
+ *
+ * // 2. 基本运算
+ * NdArray d = a.add(c);        // 元素级加法
+ * NdArray e = a.dot(c);        // 矩阵乘法
+ * NdArray f = a.transpose();   // 转置
+ *
+ * // 3. 形状操作
+ * NdArray g = a.reshape(Shape.of(4, 1));  // 变形
+ * NdArray h = a.flatten();                // 展平
+ *
+ * // 4. 聚合操作
+ * NdArray sum = a.sum();       // 所有元素求和
+ * NdArray mean = a.mean(0);    // 沿第0轴求均值
+ * }</pre>
+ *
+ * <p><b>内存布局说明：</b>
+ * TinyAI采用<b>行优先（Row-Major）</b>存储，与C/C++、NumPy一致。
+ * 对于矩阵 [[1,2,3], [4,5,6]]，内存中的实际布局为：[1,2,3,4,5,6]
+ *
+ * <p><b>性能提示：</b>
+ * <ul>
+ *   <li>尽量使用批量操作而非循环遍历单个元素</li>
+ *   <li>频繁的reshape操作不会复制数据（视图操作）</li>
+ *   <li>矩阵乘法是大计算量操作，注意内存使用</li>
+ * </ul>
+ *
+ * @author TinyAI Team
+ * @see Shape
+ * @see NdArrayCpu
+ */
 public interface NdArray {
 
     // =============================================================================
@@ -10,9 +68,28 @@ public interface NdArray {
     // =============================================================================
 
     /**
-     * 从标量值创建NdArray
+     * 从标量值创建NdArray（0维张量）
      *
-     * @param number 标量值
+     * <p><b>数学概念：</b>标量（Scalar）是单个数值，是维度最低的张量。
+     * 在深度学习中，标量常用于表示损失值、学习率等单一数值。
+     *
+     * <p><b>使用示例：</b>
+     * <pre>{@code
+     * NdArray scalar = NdArray.of(3.14f);     // 创建浮点标量
+     * NdArray loss = NdArray.of(0.5);        // 表示损失值
+     * System.out.println(scalar.getNumber()); // 输出: 3.14
+     * }</pre>
+     *
+     * <p><b>对比参考：</b>
+     * <ul>
+     *   <li>NumPy: {@code np.array(3.14)} 或 {@code np.scalar(3.14)}</li>
+     *   <li>PyTorch: {@code torch.tensor(3.14)}</li>
+     * </ul>
+     *
+     * @param number 标量值，可以是 Integer、Float、Double 等 Number 子类
+     * @return 包含该标量值的0维NdArray
+     * @see #of(float[])
+     * @see #of(float[], Shape)
      */
     static NdArray of(Number number) {
         return new NdArrayCpu(number);
@@ -67,8 +144,39 @@ public interface NdArray {
     /**
      * 创建指定形状的全零数组
      *
-     * @param shape 数组形状
-     * @return 全零数组
+     * <p><b>数学概念：</b>零矩阵/零张量是所有元素都为0的数组。
+     * 在神经网络中常用于初始化偏置（bias）或作为占位符。
+     *
+     * <p><b>使用示例：</b>
+     * <pre>{@code
+     * // 创建2x3的零矩阵
+     * NdArray zeros2x3 = NdArray.zeros(Shape.of(2, 3));
+     * // 结果: [[0, 0, 0],
+     * //       [0, 0, 0]]
+     *
+     * // 创建3维零张量（常用于表示一批灰度图像）
+     * NdArray zerosImages = NdArray.zeros(Shape.of(32, 28, 28));
+     * // 形状: [批次大小, 高度, 宽度] = 32张28x28的图像
+     * }</pre>
+     *
+     * <p><b>应用场景：</b>
+     * <ul>
+     *   <li><b>偏置初始化：</b>神经网络层的偏置通常初始化为0</li>
+     *   <li><b>占位符：</b>预分配内存用于后续计算</li>
+     *   <li><b>掩码：</b>与1数组配合创建二进制掩码</li>
+     * </ul>
+     *
+     * <p><b>对比参考：</b>
+     * <ul>
+     *   <li>NumPy: {@code np.zeros((2, 3))}</li>
+     *   <li>PyTorch: {@code torch.zeros(2, 3)}</li>
+     * </ul>
+     *
+     * @param shape 数组形状，使用 {@link Shape#of(int...)} 创建
+     * @return 指定形状的全零数组
+     * @throws IllegalArgumentException 当形状维度为0或包含负数时抛出
+     * @see #ones(Shape)
+     * @see #likeRandomN(Shape)
      */
     static NdArray zeros(Shape shape) {
         return NdArrayCpu.zeros(shape);
@@ -176,8 +284,26 @@ public interface NdArray {
     /**
      * 创建标准正态分布随机数组
      *
+     * <p><b>数学概念：</b>标准正态分布 N(0,1) 是均值为0、标准差为1的正态分布。
+     * 在深度学习中，这是<b>最常用的权重初始化方法</b>之一。
+     *
+     * <p><b>概率密度函数：</b> f(x) = (1/√(2π)) * e^(-x²/2)
+     *
+     * <p><b>使用示例：</b>
+     * <pre>{@code
+     * // 创建神经网络权重（输入256，输出128）
+     * NdArray weights = NdArray.randn(Shape.of(256, 128));
+     * }</pre>
+     *
+     * <p><b>对比参考：</b>
+     * <ul>
+     *   <li>NumPy: {@code np.random.randn(3, 3)}</li>
+     *   <li>PyTorch: {@code torch.randn(3, 3)}</li>
+     * </ul>
+     *
      * @param shape 数组形状
-     * @return 标准正态分布随机数组
+     * @return 标准正态分布随机数组，约68%元素在[-1,1]，约95%在[-2,2]
+     * @see #likeRandom(float, float, Shape)
      */
     static NdArray randn(Shape shape) {
         return NdArrayCpu.likeRandomN(shape);
@@ -188,11 +314,48 @@ public interface NdArray {
     // =============================================================================
 
     /**
-     * 数组加法运算，对应元素相加
+     * 数组加法运算 - 元素级相加（Element-wise Addition）
      *
-     * @param other 另一个操作数数组
-     * @return 加法运算结果
-     * @throws IllegalArgumentException 当两个数组形状不一致时抛出
+     * <p><b>数学原理：</b>
+     * 给定两个相同形状的数组 A 和 B，元素级加法定义为：
+     * <pre>
+     * C[i][j] = A[i][j] + B[i][j]
+     * </pre>
+     *
+     * <p><b>直观理解：</b>
+     * 想象你有两张相同大小的透明胶片，每张上面都有数字。
+     * 将它们重叠，对应位置的数字相加，就得到了结果。
+     *
+     * <p><b>使用示例：</b>
+     * <pre>{@code
+     * NdArray a = NdArray.of(new float[][]{{1, 2}, {3, 4}});
+     * NdArray b = NdArray.of(new float[][]{{5, 6}, {7, 8}});
+     * NdArray c = a.add(b);
+     * // 结果: [[6, 8], [10, 12]]
+     *
+     * // 广播加法：数组 + 标量
+     * NdArray d = a.add(NdArray.of(10));
+     * // 结果: [[11, 12], [13, 14]]
+     * }</pre>
+     *
+     * <p><b>深度学习应用：</b>
+     * <ul>
+     *   <li><b>残差连接：</b>output = layer(input) + input（ResNet核心）</li>
+     *   <li><b>偏置相加：</b>output = weights · input + bias</li>
+     *   <li><b>梯度累加：</b>在反向传播中累加梯度</li>
+     * </ul>
+     *
+     * <p><b>对比参考：</b>
+     * <ul>
+     *   <li>NumPy: {@code a + b} 或 {@code np.add(a, b)}</li>
+     *   <li>PyTorch: {@code a + b} 或 {@code torch.add(a, b)}</li>
+     * </ul>
+     *
+     * @param other 另一个操作数数组，形状必须与当前数组兼容（相同或可广播）
+     * @return 加法运算结果，形状为广播后的形状
+     * @throws IllegalArgumentException 当两个数组形状不兼容时抛出
+     * @see #sub(NdArray)
+     * @see #mul(NdArray)
      */
     NdArray add(NdArray other);
 
@@ -351,11 +514,60 @@ public interface NdArray {
     NdArray tanh();
 
     /**
-     * Sigmoid函数运算，对数组每个元素进行sigmoid运算
+     * Sigmoid激活函数 - 将实数映射到(0,1)区间
      *
-     * <p>Sigmoid函数公式：f(x) = 1 / (1 + e^(-x))</p>
+     * <p><b>数学公式：</b>
+     * <pre>
+     * σ(x) = 1 / (1 + e^(-x))
+     * </pre>
      *
-     * @return Sigmoid运算结果数组
+     * <p><b>函数特性：</b>
+     * <ul>
+     *   <li>输出范围：(0, 1)</li>
+     *   <li>σ(0) = 0.5</li>
+     *   <li>当 x → +∞, σ(x) → 1</li>
+     *   <li>当 x → -∞, σ(x) → 0</li>
+     *   <li>导数：σ'(x) = σ(x) × (1 - σ(x))</li>
+     * </ul>
+     *
+     * <p><b>直观理解：</b>
+     * Sigmoid 像一个"概率转换器"，将任意实数转换为概率值。
+     * 例如：[-3, -1, 0, 1, 3] → [0.05, 0.27, 0.5, 0.73, 0.95]
+     *
+     * <p><b>使用示例：</b>
+     * <pre>{@code
+     * // 二分类问题的输出层
+     * NdArray logits = NdArray.of(new float[]{-2.0f, 0.5f, 3.0f});
+     * NdArray probs = logits.sigmoid();
+     * // 结果: [0.12, 0.62, 0.95] - 表示三个样本属于正类的概率
+     *
+     * // 门控机制（如LSTM中的遗忘门）
+     * NdArray gate = weightedSum.sigmoid();  // 输出接近0表示"遗忘"，接近1表示"保留"
+     * }</pre>
+     *
+     * <p><b>深度学习应用：</b>
+     * <ul>
+     *   <li><b>二分类输出层：</b>将输出转换为概率</li>
+     *   <li><b>门控机制：</b>LSTM/GRU中的各种门</li>
+     *   <li><b>注意力权重：</b>早期注意力机制中使用</li>
+     * </ul>
+     *
+     * <p><b>注意事项：</b>
+     * <ul>
+     *   <li><b>梯度消失：</b>当|x|较大时，梯度接近0，导致深层网络训练困难</li>
+     *   <li><b>非零中心化：</b>输出总是正数，影响梯度更新效率</li>
+     *   <li><b>替代方案：</b>隐藏层推荐使用 ReLU 或 Swish</li>
+     * </ul>
+     *
+     * <p><b>对比参考：</b>
+     * <ul>
+     *   <li>NumPy: {@code 1 / (1 + np.exp(-x))}</li>
+     *   <li>PyTorch: {@code torch.sigmoid(x)}</li>
+     * </ul>
+     *
+     * @return Sigmoid运算结果数组，每个元素在(0,1)范围内
+     * @see #tanh()
+     * @see #softMax()
      */
     NdArray sigmoid();
 
@@ -368,13 +580,62 @@ public interface NdArray {
     NdArray log();
 
     /**
-     * Softmax函数运算，按行计算概率分布
+     * Softmax函数 - 将任意实数向量转换为概率分布
      *
-     * <p>Softmax函数公式：softmax(x_i) = exp(x_i) / Σ(exp(x_j))</p>
-     * <p>使用数值稳定版本实现，避免指数运算溢出</p>
+     * <p><b>数学公式：</b>
+     * <pre>
+     * softmax(x_i) = exp(x_i) / Σ(exp(x_j))
+     * </pre>
      *
-     * @return Softmax运算结果数组
+     * <p><b>直观理解：</b>
+     * Softmax 像一个"竞争性归一化器"。
+     * 输入值越大，输出的概率越高，但所有概率之和为1。
+     * 想象一场竞赛：分数越高获奖概率越大，但所有人获奖概率加起来必须是100%。
+     *
+     * <p><b>数值稳定性：</b>
+     * 直接使用公式可能导致指数溢出（e^100 是巨大的数）。
+     * 实现采用稳定版本：先减去最大值，再计算指数。
+     * <pre>
+     * stable_softmax(x_i) = exp(x_i - max(x)) / Σ(exp(x_j - max(x)))
+     * </pre>
+     *
+     * <p><b>使用示例：</b>
+     * <pre>{@code
+     * // 多分类问题的输出层（3个类别）
+     * NdArray logits = NdArray.of(new float[][]{
+     *     {2.0f, 1.0f, 0.1f},   // 样本1：类别0得分最高
+     *     {0.5f, 2.5f, 0.3f}    // 样本2：类别1得分最高
+     * });
+     * NdArray probs = logits.softMax();
+     * // 结果: [[0.70, 0.24, 0.06],   <- 样本1预测为类别0的概率70%
+     * //        [0.12, 0.82, 0.06]]   <- 样本2预测为类别1的概率82%
+     * }</pre>
+     *
+     * <p><b>深度学习应用：</b>
+     * <ul>
+     *   <li><b>多分类输出层：</b>将网络输出转换为类别概率</li>
+     *   <li><b>注意力机制：</b>计算注意力权重（Transformer核心）</li>
+     *   <li><b>强化学习：</b>策略网络输出动作概率分布</li>
+     * </ul>
+     *
+     * <p><b>与Sigmoid的区别：</b>
+     * <table border="1">
+     *   <tr><th>特性</th><th>Sigmoid</th><th>Softmax</th></tr>
+     *   <tr><td>输出范围</td><td>(0, 1)</td><td>(0, 1)，且和为1</td></tr>
+     *   <tr><td>适用场景</td><td>二分类</td><td>多分类</td></tr>
+     *   <tr><td>关系</td><td>独立处理每个元素</td><td>元素间相互竞争</td></tr>
+     * </table>
+     *
+     * <p><b>对比参考：</b>
+     * <ul>
+     *   <li>NumPy: {@code np.exp(x) / np.sum(np.exp(x), axis=1, keepdims=True)}</li>
+     *   <li>PyTorch: {@code torch.softmax(x, dim=1)}</li>
+     * </ul>
+     *
+     * @return Softmax运算结果数组，每行是一个概率分布（和为1）
      * @throws IllegalArgumentException 当数组不是矩阵时抛出
+     * @see #softMax(int)
+     * @see #sigmoid()
      */
     NdArray softMax();
 
@@ -544,13 +805,63 @@ public interface NdArray {
     NdArray argMax(int axis);
 
     /**
-     * 矩阵内积运算（矩阵乘法）
+     * 矩阵内积运算（矩阵乘法）- 深度学习的核心操作
      *
-     * <p>执行标准的矩阵乘法运算，要求第一个矩阵的列数等于第二个矩阵的行数</p>
+     * <p><b>数学原理：</b>
+     * 给定矩阵 A(m×n) 和 B(n×p)，结果 C(m×p) 的计算公式：
+     * <pre>
+     * C[i][j] = Σ(A[i][k] × B[k][j])  for k=0 to n-1
+     * </pre>
      *
-     * @param other 另一个矩阵
-     * @return 矩阵乘法结果
-     * @throws IllegalArgumentException 当数组不是矩阵或维度不匹配时抛出
+     * <p><b>直观理解：</b>
+     * 矩阵乘法可以看作是"行与列的点积"。
+     * 结果矩阵的每个元素，都是第一个矩阵的行与第二个矩阵的列对应相乘再相加。
+     *
+     * <p><b>形状规则：</b>
+     * <pre>
+     * A: [m, n]  @  B: [n, p]  =  C: [m, p]
+     *      ↑_________↑
+     *       内维必须匹配
+     * </pre>
+     *
+     * <p><b>使用示例：</b>
+     * <pre>{@code
+     * // 简单的矩阵乘法
+     * NdArray a = NdArray.of(new float[][]{{1, 2}, {3, 4}, {5, 6}});  // 3x2
+     * NdArray b = NdArray.of(new float[][]{{7, 8, 9}, {10, 11, 12}}); // 2x3
+     * NdArray c = a.dot(b);  // 结果: 3x3
+     * // c = [[27, 30, 33],
+     * //      [61, 68, 75],
+     * //      [95, 106, 117]]
+     *
+     * // 神经网络中的线性变换: output = input · weights
+     * NdArray input = NdArray.randn(Shape.of(32, 784));     // 批次32，特征784
+     * NdArray weights = NdArray.randn(Shape.of(784, 256));  // 输入784，输出256
+     * NdArray output = input.dot(weights);                   // 结果: [32, 256]
+     * }</pre>
+     *
+     * <p><b>深度学习应用：</b>
+     * <ul>
+     *   <li><b>线性层：</b>全连接层的核心运算 y = xW + b</li>
+     *   <li><b>注意力机制：</b>Q·K^T 计算注意力分数</li>
+     *   <li><b>特征变换：</b>将数据从一种表示空间映射到另一种</li>
+     * </ul>
+     *
+     * <p><b>性能提示：</b>
+     * 矩阵乘法是计算密集型操作，时间复杂度为 O(m×n×p)。
+     * 对于大规模矩阵，这通常是训练中的性能瓶颈。
+     *
+     * <p><b>对比参考：</b>
+     * <ul>
+     *   <li>NumPy: {@code a @ b} 或 {@code np.dot(a, b)} 或 {@code np.matmul(a, b)}</li>
+     *   <li>PyTorch: {@code a @ b} 或 {@code torch.matmul(a, b)}</li>
+     * </ul>
+     *
+     * @param other 右乘矩阵，形状为 [..., n, p]
+     * @return 矩阵乘法结果，形状为 [..., m, p]
+     * @throws IllegalArgumentException 当内维不匹配时抛出（即A的列数 ≠ B的行数）
+     * @see #add(NdArray)
+     * @see #mul(NdArray)
      */
     NdArray dot(NdArray other);
 

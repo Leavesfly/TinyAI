@@ -94,6 +94,21 @@ mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.robot.SimpleDemo" \
     -pl tinyai-agent-embodied-robot
 ```
 
+### 交互式演示（推荐）
+
+```bash
+# 扫地机器人交互式演示 - 支持路径可视化和算法对比
+mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.robot.InteractiveRobotDemo" \
+    -pl tinyai-agent-embodied-robot
+```
+
+交互式演示功能：
+- 清扫过程可视化（ASCII地图）
+- 多种路径规划算法对比
+- 实时参数调整
+- 覆盖率统计
+- 核心概念学习
+
 ## 开发进度
 
 ### 已完成

@@ -75,6 +75,20 @@ mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.embodied.AgentDemo" \
               -pl tinyai-agent-embodied
 ```
 
+#### 交互式演示（推荐）
+```bash
+# 自动驾驶交互式演示 - 支持实时参数调整和可视化
+mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.embodied.InteractiveDrivingDemo" \
+              -pl tinyai-agent-embodied
+```
+
+交互式演示功能：
+- 多种驾驶场景选择（高速、城市、停车场）
+- 实时参数调整
+- 可视化驾驶过程
+- 多策略对比实验
+- 核心概念学习
+
 ### 4. 基础使用示例
 
 #### 示例1：简单环境交互

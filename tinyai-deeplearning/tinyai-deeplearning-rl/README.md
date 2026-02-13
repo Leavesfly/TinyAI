@@ -1,8 +1,8 @@
-# TinyAI Reinforcement Learning 强化学习模块 (tinyai-dl-rl)
+# TinyAI Reinforcement Learning 强化学习模块 (tinyai-deeplearning-rl)
 
 ## 模块概述
 
-`tinyai-dl-rl` 是 TinyAI 深度学习框架的强化学习核心模块，提供了完整的强化学习算法实现和环境管理功能。本模块实现了从经典的多臂老虎机问题到现代深度强化学习算法的全套解决方案，是构建智能决策系统的核心组件。
+`tinyai-deeplearning-rl` 是 TinyAI 深度学习框架的强化学习核心模块，提供了完整的强化学习算法实现和环境管理功能。本模块实现了从经典的多臂老虎机问题到现代深度强化学习算法的全套解决方案，是构建智能决策系统的核心组件。
 
 ## 核心架构
 
@@ -296,6 +296,8 @@ sequenceDiagram
 
 ### 演示代码清单
 
+#### 基础入门演示
+
 | 演示代码 | 难度 | 时长 | 说明 |
 |---------|------|------|------|
 | **QuickStartDemo** | ⭐ | 3分钟 | 最简单的入门示例,3分钟了解强化学习 |
@@ -303,6 +305,16 @@ sequenceDiagram
 | **BanditAlgorithmsDemo** | ⭐⭐ | 15分钟 | ε-贪心、UCB、汤普森采样算法对比 |
 | **DQNCartPoleDemo** | ⭐⭐⭐ | 20分钟 | DQN完整训练流程,解决CartPole问题 |
 | **CustomDevelopmentDemo** | ⭐⭐⭐⭐ | 30分钟 | 自定义环境和智能体,扩展框架 |
+
+#### 🎓 教育性增强演示 (新增)
+
+| 演示代码 | 难度 | 时长 | 说明 |
+|---------|------|------|------|
+| **AlgorithmVisualizationDemo** | ⭐⭐ | 15分钟 | 可视化展示DQN内部机制,Q值变化、损失曲线 |
+| **InteractiveLearningDemo** | ⭐⭐ | 20分钟 | 交互式实验,调整参数观察学习效果 |
+| **AlgorithmComparisonDemo** | ⭐⭐⭐ | 15分钟 | 并排对比多种算法,累积遗憾分析 |
+| **StepByStepDebugDemo** | ⭐⭐⭐ | 25分钟 | 逐步调试DQN算法,理解每一步计算 |
+| **LearningAnimationDemo** | ⭐⭐ | 10分钟 | 动画展示智能体学习过程 |
 
 ### 快速开始
 
@@ -326,6 +338,27 @@ mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.DQNCartPoleDemo" \
 # 5. 自定义开发
 mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.CustomDevelopmentDemo" \
   -pl tinyai-deeplearning-rl
+
+# 🎓 教育性增强演示
+# 6. 算法可视化 (展示DQN内部机制)
+mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.AlgorithmVisualizationDemo" \
+  -pl tinyai-deeplearning-rl
+
+# 7. 交互式学习 (调整参数观察效果)
+mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.InteractiveLearningDemo" \
+  -pl tinyai-deeplearning-rl
+
+# 8. 算法对比分析 (并排对比多种算法)
+mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.AlgorithmComparisonDemo" \
+  -pl tinyai-deeplearning-rl
+
+# 9. 逐步调试 (理解每一步计算)
+mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.StepByStepDebugDemo" \
+  -pl tinyai-deeplearning-rl
+
+# 10. 学习动画 (动画展示学习过程)
+mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.LearningAnimationDemo" \
+  -pl tinyai-deeplearning-rl
 ```
 
 ### 学习路径
@@ -341,6 +374,13 @@ mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.CustomDevelopmentDem
 2. DQNCartPoleDemo → DQN深入学习
 3. CustomDevelopmentDemo → 自定义开发
 4. 参考 `tinyai-deeplearning-case` 中的完整案例
+
+**深入学习用户 (约2小时):**
+1. AlgorithmVisualizationDemo → 可视化理解DQN内部机制
+2. InteractiveLearningDemo → 交互式实验探索参数影响
+3. AlgorithmComparisonDemo → 系统对比多种算法
+4. StepByStepDebugDemo → 深入理解算法每一步计算
+5. LearningAnimationDemo → 直观感受学习过程
 
 **开发者:**
 - 直接查看 CustomDevelopmentDemo 了解扩展方法
@@ -530,7 +570,7 @@ public class CustomEnvironment extends Environment {
 ```bash
 cd /Users/yefei.yf/Qoder/TinyAI
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home
-mvn test -pl tinyai-dl-rl
+mvn test -pl tinyai-deeplearning-rl
 ```
 
 ## 模块特色

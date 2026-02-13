@@ -16,11 +16,76 @@ import java.io.Serializable;
 import java.util.*;
 
 /**
- * 数学中的变量的抽象表示
- * <p>
- * 在TinyDL深度学习框架中，Variable类是对数学变量的抽象表示。
- * 它不仅包含变量的值(NdArray)，还包含变量的梯度、生成该变量的函数等信息。
- * Variable是自动微分系统的核心组件，负责构建和维护计算图。
+ * Variable - 自动微分系统的核心，构建计算图的基本单元
+ *
+ * <p><b>核心概念：</b>
+ * Variable（变量）是深度学习框架中最基础的概念之一。它不仅仅是一个数值，
+ * 而是封装了<b>值</b>、<b>梯度</b>和<b>计算历史</b>的完整对象。
+ * 这种设计使得自动微分（Automatic Differentiation）成为可能。
+ *
+ * <p><b>Variable vs NdArray：</b>
+ * <table border="1">
+ *   <tr><th>特性</th><th>NdArray</th><th>Variable</th></tr>
+ *   <tr><td>存储内容</td><td>纯数值</td><td>数值 + 梯度 + 计算历史</td></tr>
+ *   <tr><td>是否可微</td><td>否</td><td>是</td></tr>
+ *   <tr><td>使用场景</td><td>数据存储、数值计算</td><td>模型参数、中间结果</td></tr>
+ *   <tr><td>类比</td><td>float[] / numpy.array</td><td>torch.Tensor / tf.Variable</td></tr>
+ * </table>
+ *
+ * <p><b>计算图（Computational Graph）：</b>
+ * <pre>
+ *     x ──┐
+ *         ├──→ [乘法] ──→ z ──┐
+ *     y ──┘                   ├──→ [加法] ──→ loss
+ *                         w ──┘
+ * </pre>
+ * 每个 Variable 记录了它是如何被计算出来的（creator函数），
+ * 这形成了一个有向无环图（DAG），反向传播时沿着这个图计算梯度。
+ *
+ * <p><b>快速入门示例：</b>
+ * <pre>{@code
+ * // 1. 创建变量（需要梯度的参数）
+ * Variable x = new Variable(NdArray.of(2.0f));  // x = 2
+ * Variable y = new Variable(NdArray.of(3.0f));  // y = 3
+ *
+ * // 2. 构建计算图
+ * Variable z = x.mul(y);      // z = x * y = 6
+ * Variable w = z.add(x);      // w = z + x = 8
+ *
+ * // 3. 反向传播
+ * w.backward();               // 计算所有梯度
+ *
+ * // 4. 查看梯度
+ * System.out.println(x.getGrad());  // ∂w/∂x = y + 1 = 4
+ * System.out.println(y.getGrad());  // ∂w/∂y = x = 2
+ * }</pre>
+ *
+ * <p><b>自动微分原理：</b>
+ * <ol>
+ *   <li><b>前向传播：</b>计算输出值，同时记录计算图</li>
+ *   <li><b>反向传播：</b>从输出开始，沿着计算图反向传播梯度</li *   <li><b>链式法则：</b>复合函数的导数 = 外层导数 × 内层导数</li>
+ * </ol>
+ *
+ * <p><b>关键术语：</b>
+ * <ul>
+ *   <li><b>RequireGrad：</b>是否需要计算该变量的梯度（模型参数设为true，输入数据设为false）</li>
+ *   <li><b>Creator：</b>生成该变量的函数，用于反向传播时找到上游节点</li>
+ *   <li><b>Leaf Node：</b>叶子节点，通常是用户直接创建的变量（如模型参数）</li>
+ * </ul>
+ *
+ * <p><b>Java vs PyTorch 对比：</b>
+ * <table border="1">
+ *   <tr><th>操作</th><th>PyTorch</th><th>TinyAI (Java)</th></tr>
+ *   <tr><td>创建变量</td><td>{@code x = torch.tensor(2.0, requires_grad=True)}</td><td>{@code new Variable(NdArray.of(2.0f))}</td></tr>
+ *   <tr><td>查看值</td><td>{@code x.item()}</td><td>{@code x.getValue()}</td></tr>
+ *   <tr><td>查看梯度</td><td>{@code x.grad}</td><td>{@code x.getGrad()}</td></tr>
+ *   <tr><td>反向传播</td><td>{@code loss.backward()}</td><td>{@code loss.backward()}</td></tr>
+ *   <tr><td>清零梯度</td><td>{@code x.grad.zero_()}</td><td>{@code x.zeroGrad()}</td></tr>
+ * </table>
+ *
+ * @author TinyAI Team
+ * @see Function
+ * @see NdArray
  */
 public class Variable implements Serializable {
 
@@ -91,12 +156,26 @@ public class Variable implements Serializable {
     protected boolean requireGrad = true;
 
     /**
-     * 构造函数
-     * <p>
-     * 使用指定的NdArray值创建Variable实例
+     * 构造函数 - 创建一个新的Variable实例
      *
-     * @param _value 变量的值，不能为null
+     * <p><b>使用场景：</b>
+     * 这是创建Variable的最常用方式，适用于模型参数、输入数据等。
+     *
+     * <p><b>示例：</b>
+     * <pre>{@code
+     * // 创建模型权重参数
+     * Variable weights = new Variable(NdArray.randn(Shape.of(784, 256)));
+     * weights.setName("layer1_weights");
+     *
+     * // 创建输入数据（不需要梯度）
+     * Variable input = new Variable(NdArray.of(data));
+     * input.setRequireGrad(false);  // 输入数据不需要计算梯度
+     * }</pre>
+     *
+     * @param _value 变量的值，使用NdArray存储，不能为null
      * @throws RuntimeException 当_value为null时抛出异常
+     * @see #Variable(NdArray, String)
+     * @see #Variable(NdArray, String, boolean)
      */
     public Variable(NdArray _value) {
         if (Objects.isNull(_value)) {
@@ -244,12 +323,66 @@ public class Variable implements Serializable {
     }
     
     /**
-     * 变量的反向传播（递归实现）
-     * <p>
-     * 根据正向传播时构建的计算图，从当前变量开始反向传播计算每个变量的梯度。
-     * 如果变量不需要计算梯度，则直接返回。
-     * 如果梯度未初始化，则初始化为全1的数组。
-     * 然后递归地调用生成该变量的函数的backward方法计算输入变量的梯度。
+     * 反向传播 - 自动计算所有相关变量的梯度
+     *
+     * <p><b>核心原理 - 链式法则（Chain Rule）：</b>
+     * 如果 y = f(g(x))，那么 ∂y/∂x = ∂y/∂g × ∂g/∂x
+     * <pre>
+     * 计算图示例：
+     *     x ──┐
+     *         ├──→ [*] ──→ z ──┐
+     *     y ──┘                ├──→ [+] ──→ loss
+     *                        w ──┘
+     *
+     * 反向传播过程：
+     * 1. 从 loss 开始，初始化 grad = 1
+     * 2. 传播到 [+] 节点：∂loss/∂z = 1, ∂loss/∂w = 1
+     * 3. 传播到 [*] 节点：∂loss/∂x = ∂loss/∂z × y = y
+     *                     ∂loss/∂y = ∂loss/∂z × x = x
+     * </pre>
+     *
+     * <p><b>使用步骤：</b>
+     * <ol>
+     *   <li>构建计算图（前向传播）</li>
+     *   <li>调用 loss.backward() 触发反向传播</li>
+     *   <li>使用 var.getGrad() 获取各变量的梯度</li>
+     *   <li>使用 optimizer.step() 更新参数</li>
+     *   <li>调用 zeroGrad() 清零梯度（准备下一轮）</li>
+     * </ol>
+     *
+     * <p><b>完整示例：</b>
+     * <pre>{@code
+     * // 1. 创建变量
+     * Variable x = new Variable(NdArray.of(2.0f));
+     * Variable y = new Variable(NdArray.of(3.0f));
+     *
+     * // 2. 前向传播
+     * Variable z = x.mul(y).add(x.square());  // z = x*y + x²
+     *
+     * // 3. 反向传播
+     * z.backward();
+     *
+     * // 4. 查看梯度
+     * System.out.println("∂z/∂x = " + x.getGrad());  // y + 2x = 3 + 4 = 7
+     * System.out.println("∂z/∂y = " + y.getGrad());  // x = 2
+     * }</pre>
+     *
+     * <p><b>注意事项：</b>
+     * <ul>
+     *   <li><b>梯度累积：</b>默认会累加梯度，每次迭代前需要调用 zeroGrad()</li>
+     *   <li><b>内存管理：</b>计算图在backward后会被释放，如需保留请设置retain_graph</li>
+     *   <li><b>叶子节点：</b>只有叶子节点（直接创建的Variable）的梯度会被保留</li>
+     * </ul>
+     *
+     * <p><b>对比参考：</b>
+     * <ul>
+     *   <li>PyTorch: {@code loss.backward()}</li>
+     *   <li>TensorFlow: {@code tape.gradient(loss, variables)}</li>
+     * </ul>
+     *
+     * @see #zeroGrad()
+     * @see #getGrad()
+     * @see #setRequireGrad(boolean)
      */
     public void backward() {
         // 重置访问记录，避免内存泄漏

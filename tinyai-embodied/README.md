@@ -251,21 +251,30 @@ PredictionResult result = worldModel.predict(observation, action, hiddenState);
 
 ### 初级：理解具身智能基础
 
-1. 学习 [tinyai-embodied-base](tinyai-embodied-base/README.md) - 理解感知-决策-执行闭环
-2. 掌握传感器模拟、环境建模、动作控制等核心概念
-3. 完成简单的自动驾驶任务
+1. 运行 InteractiveDrivingDemo 交互式演示 - 直观体验自动驾驶
+2. 学习 [tinyai-embodied-base](tinyai-embodied-base/README.md) - 理解感知-决策-执行闭环
+3. 掌握传感器模拟、环境建模、动作控制等核心概念
+4. 完成简单的自动驾驶任务
 
 ### 中级：机器人应用开发
 
-1. 学习 [tinyai-embodied-robot](tinyai-embodied-robot/README.md) - 掌握机器人控制
-2. 理解路径规划、SLAM、状态机等算法
-3. 实现扫地机器人完整功能
+1. 运行 InteractiveRobotDemo 交互式演示 - 可视化路径规划
+2. 学习 [tinyai-embodied-robot](tinyai-embodied-robot/README.md) - 掌握机器人控制
+3. 理解路径规划、SLAM、状态机等算法
+4. 实现扫地机器人完整功能
 
 ### 高级：前沿技术探索
 
 1. 学习 [tinyai-embodied-vla](tinyai-embodied-vla/README.md) - 掌握VLA架构
 2. 学习 [tinyai-embodied-wm](tinyai-embodied-wm/README.md) - 理解世界模型
 3. 构建支持零样本学习和想象训练的智能体
+
+### 学习建议
+
+- **推荐从交互式演示开始**：通过 InteractiveDrivingDemo 和 InteractiveRobotDemo 获得直观体验
+- **理论与实践结合**：每学习一个模块后，运行对应的演示程序验证理解
+- **动手修改参数**：尝试修改演示中的参数，观察不同效果
+- **对比学习**：使用演示中的对比功能，比较不同算法的效果
 
 ## 📖 演示程序
 
@@ -276,18 +285,44 @@ PredictionResult result = worldModel.predict(observation, action, hiddenState);
 mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.embodied.AgentDemo" \
   -pl tinyai-embodied-base
 
+# 具身智能（自动驾驶）交互式演示（推荐）
+mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.embodied.InteractiveDrivingDemo" \
+  -pl tinyai-embodied-base
+
 # 扫地机器人演示
 mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.robot.SimpleDemo" \
+  -pl tinyai-embodied-robot
+
+# 扫地机器人交互式演示（推荐）
+mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.robot.InteractiveRobotDemo" \
   -pl tinyai-embodied-robot
 
 # VLA智能体演示
 mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.vla.VLADemo" \
   -pl tinyai-embodied-vla
 
+# VLA智能体交互式演示（推荐）
+mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.vla.InteractiveVLADemo" \
+  -pl tinyai-embodied-vla
+
 # 世界模型演示
 mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.wm.WorldModelDemo" \
   -pl tinyai-embodied-wm
+
+# 世界模型交互式演示（推荐）
+mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.wm.InteractiveWorldModelDemo" \
+  -pl tinyai-embodied-wm
 ```
+
+### 交互式演示功能
+
+交互式演示提供增强的学习体验：
+
+- **实时参数调整**：运行时修改环境参数
+- **可视化展示**：ASCII艺术可视化驾驶/清扫过程
+- **多算法对比**：对比不同策略的效果
+- **学习曲线**：展示训练过程和性能变化
+- **概念解释**：内置核心概念讲解
 
 ## 🔬 技术特性
 

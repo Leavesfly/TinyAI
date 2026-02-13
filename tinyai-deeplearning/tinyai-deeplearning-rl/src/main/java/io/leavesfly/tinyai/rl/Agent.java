@@ -145,6 +145,31 @@ public abstract class Agent {
     }
     
     /**
+     * 设置评估模式（禁用探索，使用确定性策略）
+     * 等同于 setTraining(false)
+     */
+    public void eval() {
+        this.training = false;
+    }
+    
+    /**
+     * 设置训练模式（启用探索）
+     * 等同于 setTraining(true)
+     */
+    public void train() {
+        this.training = true;
+    }
+    
+    /**
+     * 检查是否处于训练模式
+     * 
+     * @return 是否为训练模式
+     */
+    public boolean isTraining() {
+        return training;
+    }
+    
+    /**
      * 获取当前探索率
      * 
      * @return 当前探索率

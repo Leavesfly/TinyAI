@@ -141,7 +141,7 @@ public class DeepSeekR1Posttrain {
             NdArray targetIds = batch.getTargetIds();
             
             Variable inputVar = new Variable(inputIds);
-            DeepSeekR1Model.ReasoningOutput result = model.performReasoning(inputVar);
+            DeepSeekR1Model.ReasoningResult result = model.performReasoning(inputVar);
             
             // SoftmaxCE只支持2D输入，需要reshape
             int[] logitsShape = result.logits.getValue().getShape().getShapeDims();
@@ -154,10 +154,10 @@ public class DeepSeekR1Posttrain {
             Variable loss = lossFunction.loss(targetVar, logits2D);
             
             float lossValue = loss.getValue().getNumber().floatValue();
-            float qualityScore = (float) result.qualityScore.getOverallScore();
+            float moeLoss = (float) result.moeLoss;  // 使用 MoE 损失
             
             trainLossHistory.add(lossValue);
-            qualityScoreHistory.add(qualityScore);
+            qualityScoreHistory.add(moeLoss);
             
             model.clearGrads();
             loss.backward();
@@ -172,8 +172,8 @@ public class DeepSeekR1Posttrain {
             globalStep++;
             
             if (globalStep % logInterval == 0) {
-                System.out.printf("Epoch %d | Step %d | Loss: %.4f | Quality: %.4f%n",
-                    currentEpoch + 1, globalStep, lossValue, qualityScore);
+                System.out.printf("Epoch %d | Step %d | Loss: %.4f | MoE Loss: %.4f%n",
+                    currentEpoch + 1, globalStep, lossValue, moeLoss);
             }
         }
         
@@ -192,7 +192,7 @@ public class DeepSeekR1Posttrain {
             DeepSeekR1Dataset.Batch batch = valDataset.nextBatch();
             
             Variable inputVar = new Variable(batch.getInputIds());
-            DeepSeekR1Model.ReasoningOutput result = model.performReasoning(inputVar);
+            DeepSeekR1Model.ReasoningResult result = model.performReasoning(inputVar);
             
             // SoftmaxCE只支持2D输入，需要reshape
             int[] logitsShape = result.logits.getValue().getShape().getShapeDims();

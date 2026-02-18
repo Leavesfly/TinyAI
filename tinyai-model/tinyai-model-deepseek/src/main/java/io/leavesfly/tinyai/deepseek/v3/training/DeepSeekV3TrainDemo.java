@@ -1,8 +1,8 @@
 package io.leavesfly.tinyai.deepseek.v3.training;
 
+import io.leavesfly.tinyai.deepseek.base.TaskType;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Config;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Model;
-import io.leavesfly.tinyai.deepseek.v3.TaskType;
 
 /**
  * DeepSeek-V3训练完整演示

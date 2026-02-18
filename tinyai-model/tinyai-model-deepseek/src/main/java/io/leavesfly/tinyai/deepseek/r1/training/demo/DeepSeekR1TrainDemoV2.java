@@ -119,22 +119,26 @@ public class DeepSeekR1TrainDemoV2 {
         System.out.println("  ✓ 完整词汇表大小: " + vocabSize);
         System.out.println("  ✓ 词汇表已冻结,后续不再增加新词");
         
-        // 3. 创建DeepSeek-R1模型
+        // 3. 创建DeepSeek-R1模型（使用 MoE 架构）
         System.out.println("\n📝 创建DeepSeek-R1模型...");
         DeepSeekR1Config config = DeepSeekR1Config.createTinyConfig();
         config.setVocabSize(vocabSize);
-        config.setMaxReasoningSteps(2);  // 小规模演示使用较少推理步骤
         config.setNLayer(2);  // 减少层数加速训练
         
-        DeepSeekR1Model model = new DeepSeekR1Model("deepseek-rx-pretrain-v2", config);
+        // MoE 配置（R1 使用与 V3 相同的 MoE 架构）
+        config.setNumExperts(4);  // 小规模演示使用较少专家
+        config.setTopK(2);
+        
+        DeepSeekR1Model model = new DeepSeekR1Model("deepseek-r1-pretrain-v2", config);
         
         System.out.println("  ✓ 模型配置: Tiny (教学专用)");
         System.out.println("  ✓ 词汇表大小: " + config.getVocabSize());
         System.out.println("  ✓ 隐藏维度: " + config.getNEmbd());
         System.out.println("  ✓ 层数: " + config.getNLayer());
         System.out.println("  ✓ 注意力头数: " + config.getNHead());
-        System.out.println("  ✓ 最大推理步骤: " + config.getMaxReasoningSteps());
-        System.out.println("  ✓ 质量评分维度: " + config.getQualityScoreDim());
+        System.out.println("  ✓ 专家数量: " + config.getNumExperts());
+        System.out.println("  ✓ Top-K选择: " + config.getTopK());
+        System.out.println("  ✓ 架构: Pre-LayerNorm + MoE");
         
         // 4. 准备数据集
         System.out.println("\n📝 准备训练数据集...");

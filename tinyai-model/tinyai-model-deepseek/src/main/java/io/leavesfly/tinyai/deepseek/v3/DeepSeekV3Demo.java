@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.deepseek.v3;
 
+import io.leavesfly.tinyai.deepseek.base.TaskType;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
@@ -79,15 +80,7 @@ public class DeepSeekV3Demo {
         DeepSeekV3Model.CodeGenerationResult result = model.generateCode(inputVar);
         
         System.out.println("\n代码生成结果:");
-        System.out.println("  - 检测语言: " + result.detectedLanguage);
-        if (result.qualityScore != null) {
-            System.out.println("  - 代码质量:");
-            System.out.println("    * 语法正确性: " + String.format("%.2f", result.qualityScore.syntaxScore));
-            System.out.println("    * 代码结构: " + String.format("%.2f", result.qualityScore.structureScore));
-            System.out.println("    * 可读性: " + String.format("%.2f", result.qualityScore.readabilityScore));
-            System.out.println("    * 性能: " + String.format("%.2f", result.qualityScore.performanceScore));
-            System.out.println("    * 总体得分: " + String.format("%.2f", result.qualityScore.getOverallScore()));
-        }
+        System.out.println("  - 任务类型: " + result.taskType.getDescription());
         System.out.println("  - MoE负载均衡损失: " + String.format("%.6f", result.moeLoss));
         System.out.println("  - 输出形状: " + result.logits.getValue().getShape());
         
@@ -118,9 +111,9 @@ public class DeepSeekV3Demo {
         DeepSeekV3Model.ReasoningResult result = model.performReasoning(inputVar);
         
         System.out.println("\n推理结果:");
-        System.out.println("  - 置信度: " + String.format("%.4f", result.confidence));
         System.out.println("  - 检测任务类型: " + 
             (result.taskType != null ? result.taskType.getDescription() : "未知"));
+        System.out.println("  - MoE负载均衡损失: " + String.format("%.6f", result.moeLoss));
         System.out.println("  - MoE负载均衡损失: " + String.format("%.6f", result.moeLoss));
         System.out.println("  - 输出形状: " + result.logits.getValue().getShape());
         
@@ -151,7 +144,7 @@ public class DeepSeekV3Demo {
         DeepSeekV3Model.MathResult result = model.solveMath(inputVar);
         
         System.out.println("\n数学计算结果:");
-        System.out.println("  - 置信度: " + String.format("%.4f", result.confidence));
+        System.out.println("  - 任务类型: " + result.taskType.getDescription());
         System.out.println("  - MoE负载均衡损失: " + String.format("%.6f", result.moeLoss));
         System.out.println("  - 输出形状: " + result.logits.getValue().getShape());
         
@@ -195,9 +188,8 @@ public class DeepSeekV3Demo {
             model.predictWithDetails(inputVar, TaskType.GENERAL);
         
         System.out.println("\n执行结果:");
-        System.out.println("  - 检测任务类型: " + result.reasoningResult.taskType.getDescription());
+        System.out.println("  - 检测任务类型: " + result.taskType.getDescription());
         System.out.println("  - 平均MoE损失: " + String.format("%.6f", result.avgMoELoss));
-        System.out.println("  - 推理置信度: " + String.format("%.4f", result.reasoningResult.confidence));
         
         // 参数效率分析
         System.out.println("\n参数效率分析:");

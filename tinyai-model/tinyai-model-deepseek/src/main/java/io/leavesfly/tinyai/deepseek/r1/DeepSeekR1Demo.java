@@ -120,7 +120,7 @@ public class DeepSeekR1Demo {
         NdArray tokenIds = NdArray.of(inputData);
         
         // 执行带详细信息的推理
-        DeepSeekR1Model.ReasoningOutput result = model.performReasoning(new Variable(tokenIds));
+        DeepSeekR1Model.ReasoningResult result = model.performReasoning(new Variable(tokenIds));
         
         // 打印推理结果
         System.out.println("\n推理结果详情:");
@@ -187,7 +187,7 @@ public class DeepSeekR1Demo {
         System.out.println("示例5: 自定义配置模型");
         System.out.println("=".repeat(80));
         
-        // 创建自定义配置
+        // 创建自定义配置（使用 MoE 架构）
         DeepSeekR1Config config = new DeepSeekR1Config();
         config.setVocabSize(5000);
         config.setNEmbd(128);
@@ -195,13 +195,17 @@ public class DeepSeekR1Demo {
         config.setNHead(4);
         config.setNInner(512);
         config.setNPositions(256);
-        config.setMaxReasoningSteps(3);
-        config.setReasoningHiddenDim(256);
-        config.setReflectionHiddenDim(256);
-        config.setConfidenceThreshold(0.75);
         
-        // 验证配置
-        config.validate();
+        // MoE 配置（R1 使用与 V3 相同的 MoE 架构）
+        config.setNumExperts(8);
+        config.setTopK(2);
+        config.setExpertHiddenDim(512);
+        
+        // RL 训练配置（R1 特有）
+        config.setRlExplorationRate(0.1);
+        config.setRlDiscountFactor(0.99);
+        
+        // 配置已自动验证（在 BaseConfig 中）
         
         // 创建模型
         DeepSeekR1Model model = new DeepSeekR1Model("DeepSeek-R1-Custom", config);
@@ -246,7 +250,7 @@ public class DeepSeekR1Demo {
             config.getNLayer(),
             config.getNEmbd(),
             config.getNHead(),
-            config.getMaxReasoningSteps()
+            config.getNumExperts()  // 显示专家数量而不是推理步骤
         );
     }
     

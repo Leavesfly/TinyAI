@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.deepseek.v3;
 
+import io.leavesfly.tinyai.deepseek.base.TaskType;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
@@ -12,18 +13,20 @@ import java.util.List;
 /**
  * DeepSeek-V3主体块(DeepSeekV3Block)
  * 
- * 整合所有DeepSeek-V3组件，构建完整的模型架构：
+ * ⚠️ 重要架构说明（根据论文 arXiv:2410.xxxxx）：
+ * DeepSeek-V3 使用纯 MoE 架构，推理和代码生成能力通过 MoE 专家网络自然涌现，
+ * 而不是通过显式的推理/代码模块实现。
+ * 
+ * 核心组件：
  * 1. Token嵌入层 - 将token ID转换为向量表示
- * 2. Transformer层堆叠（集成MoE） - 进行序列建模
- * 3. 推理模块 - 执行任务感知推理
- * 4. 代码生成模块 - 代码专门优化
- * 5. 输出投影层 - 生成最终logits
+ * 2. Transformer层堆叠（集成MoE） - 进行序列建模，包含任务感知路由
+ * 3. 输出投影层 - 生成最终logits
  * 
  * 数据流：
- * token_ids → embedding → transformer_layers(MoE) → reasoning → code_analysis → output
+ * token_ids → embedding → transformer_layers(MoE) → output
  * 
  * @author leavesfly
- * @version 1.0
+ * @version 2.0
  */
 public class DeepSeekV3Block extends Module {
     
@@ -32,8 +35,6 @@ public class DeepSeekV3Block extends Module {
     // 核心组件
     private DeepSeekV3TokenEmbedding tokenEmbedding;
     private List<DeepSeekV3TransformerBlock> transformerBlocks;
-    private DeepSeekV3ReasoningBlock reasoningBlock;
-    private DeepSeekV3CodeBlock codeBlock;
     private LayerNorm finalLayerNorm;
     private Linear outputProjection;
     
@@ -66,15 +67,7 @@ public class DeepSeekV3Block extends Module {
             registerModule("transformer_" + i, block);
         }
         
-        // 3. 初始化推理模块
-        reasoningBlock = new DeepSeekV3ReasoningBlock(name + "_reasoning", config);
-        registerModule("reasoning", reasoningBlock);
-        
-        // 4. 初始化代码生成模块
-        codeBlock = new DeepSeekV3CodeBlock(name + "_code", config);
-        registerModule("code", codeBlock);
-        
-        // 5. 初始化最终LayerNorm
+        // 3. 初始化最终LayerNorm
         finalLayerNorm = new LayerNorm(
             name + "_final_ln",
             config.getNEmbd(),
@@ -82,7 +75,7 @@ public class DeepSeekV3Block extends Module {
         );
         registerModule("final_ln", finalLayerNorm);
         
-        // 6. 初始化输出投影层
+        // 4. 初始化输出投影层
         outputProjection = new Linear(
             name + "_output_proj",
             config.getNEmbd(),
@@ -93,7 +86,7 @@ public class DeepSeekV3Block extends Module {
     }
     
     /**
-     * 前向传播
+     * 前向传播（纯MoE架构）
      * 
      * @param inputs inputs[0]为token ID序列 [batch_size, seq_len]
      * @return logits输出 [batch_size, seq_len, vocab_size]
@@ -110,28 +103,22 @@ public class DeepSeekV3Block extends Module {
         // 1. Token嵌入
         Variable x = tokenEmbedding.forward(tokenIds);
         
-        // 2. Transformer层堆叠（带MoE）
+        // 2. Transformer层堆叠（带MoE，推理和代码能力自然涌现）
         for (DeepSeekV3TransformerBlock block : transformerBlocks) {
             x = block.forward(x);
         }
         
-        // 3. 推理模块
-        Variable reasoningOutput = reasoningBlock.forward(x);
+        // 3. 最终LayerNorm
+        Variable normalized = finalLayerNorm.forward(x);
         
-        // 4. 代码模块（不改变维度）
-        Variable codeOutput = codeBlock.forward(reasoningOutput);
-        
-        // 5. 最终LayerNorm
-        Variable normalized = finalLayerNorm.forward(codeOutput);
-        
-        // 6. 输出投影
+        // 4. 输出投影
         Variable logits = outputProjection.forward(normalized);
         
         return logits;
     }
     
     /**
-     * 带详细输出的前向传播（包含所有中间结果）
+     * 带详细输出的前向传播（包含MoE损失和任务类型）
      * 
      * @param tokenIds token ID序列 [batch_size, seq_len]
      * @param taskType 任务类型（可选）
@@ -153,27 +140,16 @@ public class DeepSeekV3Block extends Module {
         }
         double avgMoELoss = totalMoELoss / transformerBlocks.size();
         
-        // 3. 推理模块（获取详细结果）
-        DeepSeekV3ReasoningBlock.ReasoningResult reasoningResult = 
-            reasoningBlock.performReasoning(x, taskType);
+        // 3. 最终LayerNorm
+        Variable normalized = finalLayerNorm.forward(x);
         
-        // 4. 代码分析（如果是代码任务）
-        DeepSeekV3CodeBlock.CodeAnalysisResult codeResult = null;
-        if (taskType == TaskType.CODING || reasoningResult.taskType == TaskType.CODING) {
-            codeResult = codeBlock.analyzeCode(reasoningResult.reasoningOutput);
-        }
-        
-        // 5. 最终LayerNorm
-        Variable normalized = finalLayerNorm.forward(reasoningResult.reasoningOutput);
-        
-        // 6. 输出投影
+        // 4. 输出投影
         Variable logits = outputProjection.forward(normalized);
         
         return new DetailedForwardResult(
             logits, 
-            reasoningResult,
-            codeResult,
-            avgMoELoss
+            avgMoELoss,
+            taskType != null ? taskType : TaskType.GENERAL
         );
     }
     
@@ -224,11 +200,7 @@ public class DeepSeekV3Block extends Module {
         System.out.printf("Transformer块数量: %d (每块集成MoE)\n", transformerBlocks.size());
         System.out.printf("专家数量: %d专家, Top-%d选择\n", 
             config.getNumExperts(), config.getTopK());
-        System.out.printf("推理模块: %s (任务感知)\n", 
-            reasoningBlock.getClass().getSimpleName());
-        System.out.printf("代码模块: %s (支持%d种语言)\n", 
-            codeBlock.getClass().getSimpleName(), config.getNumProgrammingLanguages());
-        System.out.printf("架构模式: Pre-LayerNorm + MoE\n");
+        System.out.printf("架构模式: Pre-LayerNorm + 纯MoE (推理和代码能力自然涌现)\n");
         System.out.printf("估算总参数: %s\n", formatParamCount(getParameterCount()));
         System.out.printf("激活参数: %s (%.2f%%)\n", 
             formatParamCount(getActiveParameterCount()),
@@ -250,38 +222,26 @@ public class DeepSeekV3Block extends Module {
     }
     
     /**
-     * 详细前向传播结果类
+     * 详细前向传播结果类（简化版，仅包含MoE信息）
      */
     public static class DetailedForwardResult {
         /** 最终logits输出 */
         public final Variable logits;
-        /** 推理结果 */
-        public final DeepSeekV3ReasoningBlock.ReasoningResult reasoningResult;
-        /** 代码分析结果（仅代码任务） */
-        public final DeepSeekV3CodeBlock.CodeAnalysisResult codeResult;
         /** 平均MoE负载均衡损失 */
         public final double avgMoELoss;
+        /** 任务类型 */
+        public final TaskType taskType;
         
-        public DetailedForwardResult(Variable logits,
-                                    DeepSeekV3ReasoningBlock.ReasoningResult reasoningResult,
-                                    DeepSeekV3CodeBlock.CodeAnalysisResult codeResult,
-                                    double avgMoELoss) {
+        public DetailedForwardResult(Variable logits, double avgMoELoss, TaskType taskType) {
             this.logits = logits;
-            this.reasoningResult = reasoningResult;
-            this.codeResult = codeResult;
             this.avgMoELoss = avgMoELoss;
+            this.taskType = taskType;
         }
         
         @Override
         public String toString() {
-            StringBuilder sb = new StringBuilder("DetailedForwardResult{\n");
-            sb.append("  ").append(reasoningResult).append("\n");
-            if (codeResult != null) {
-                sb.append("  ").append(codeResult).append("\n");
-            }
-            sb.append(String.format("  MoE损失: %.6f\n", avgMoELoss));
-            sb.append("}");
-            return sb.toString();
+            return String.format("DetailedForwardResult{taskType=%s, MoE损失=%.6f}", 
+                taskType, avgMoELoss);
         }
     }
     

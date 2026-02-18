@@ -1,9 +1,10 @@
-package io.leavesfly.tinyai.deepseek.v3;
+package io.leavesfly.tinyai.deepseek.base;
 
 /**
  * 任务类型枚举
  * 
- * 定义DeepSeek-V3支持的5种任务类型，用于任务感知路由和专家选择。
+ * 定义DeepSeek系列模型支持的5种任务类型，用于任务感知路由和专家选择。
+ * R1和V3共享相同的任务类型定义。
  * 
  * @author leavesfly
  * @version 1.0

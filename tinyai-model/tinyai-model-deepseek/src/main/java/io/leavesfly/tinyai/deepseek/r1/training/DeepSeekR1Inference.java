@@ -42,7 +42,7 @@ public class DeepSeekR1Inference {
             Variable inputVar = new Variable(inputArray);
             
             // 执行推理
-            DeepSeekR1Model.ReasoningOutput result = model.performReasoning(inputVar);
+            DeepSeekR1Model.ReasoningResult result = model.performReasoning(inputVar);
             NdArray logits = result.logits.getValue();
             
             int lastPos = currentSeq.length - 1;
@@ -56,9 +56,9 @@ public class DeepSeekR1Inference {
             // 记录推理步骤
             reasoningSteps.add(new ReasoningStep(
                 i,
-                result.numSteps,
-                result.averageConfidence,
-                result.qualityScore.getOverallScore()
+                0,  // numSteps 不再可用（RL训练自然涌现）
+                0.0,  // averageConfidence 不再可用
+                result.moeLoss  // 使用 MoE 损失作为质量指标
             ));
         }
         
@@ -81,7 +81,7 @@ public class DeepSeekR1Inference {
             int[] currentSeq = toArray(generated);
             Variable inputVar = new Variable(createInputArray(currentSeq));
             
-            DeepSeekR1Model.ReasoningOutput result = model.performReasoning(inputVar);
+            DeepSeekR1Model.ReasoningResult result = model.performReasoning(inputVar);
             NdArray logits = result.logits.getValue();
             
             int lastPos = currentSeq.length - 1;
@@ -117,8 +117,8 @@ public class DeepSeekR1Inference {
             generated.add(nextToken);
             
             reasoningSteps.add(new ReasoningStep(
-                i, result.numSteps, result.averageConfidence,
-                result.qualityScore.getOverallScore()
+                i, 0, 0.0,  // numSteps和confidence不再可用
+                result.moeLoss  // 使用 MoE 损失作为质量指标
             ));
         }
         

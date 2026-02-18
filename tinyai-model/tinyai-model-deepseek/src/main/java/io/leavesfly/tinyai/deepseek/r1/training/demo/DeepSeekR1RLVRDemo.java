@@ -177,7 +177,8 @@ public class DeepSeekR1RLVRDemo {
         System.out.println("✓ 模型已创建");
         System.out.println("  参数量: " + config.estimateParameterCount());
         System.out.println("  嵌入维度: " + config.getNEmbd());
-        System.out.println("  推理步数: " + config.getMaxReasoningSteps());
+        System.out.println("  专家数量: " + config.getNumExperts());
+        System.out.println("  Top-K选择: " + config.getTopK());
         
         // 2. 准备RLVR数据集
         System.out.println("\n准备RLVR训练数据...");

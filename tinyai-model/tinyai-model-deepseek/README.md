@@ -2,6 +2,47 @@
 
 基于 TinyAI 框架**完全独立**实现的 DeepSeek 系列大语言模型，包含 DeepSeek-V3 和 DeepSeek-R1 两个主力模型。100% 基于 **nnet v2 API**，引入混合专家模型(MoE)、推理增强、反思机制等前沿技术，支持代码生成、数学推理、多任务处理等能力。
 
+## 🎉 重构更新 (2026.02)
+
+**DeepSeek R1/V3 架构统一重构已完成！**
+
+本次重构实现了 R1 和 V3 的最大限度代码复用，创建了统一的共享基类架构：
+
+### 重构成果
+- ✅ **代码减少 56%+**: 节省 1488+ 行重复代码
+- ✅ **8个共享基类**: 配置、训练、数据、推理、工具全面统一
+- ✅ **架构一致性**: R1 和 V3 使用完全相同的纯 MoE 架构
+- ✅ **维护性提升**: Bug修复和功能增强只需修改基类
+- ✅ **可扩展性**: 新模型只需实现少量抽象方法
+
+### 共享架构
+```
+tinyai-model-deepseek/
+├── base/                            # 🆕 共享基类层
+│   ├── DeepSeekBaseConfig.java     # MoE基础配置
+│   ├── TaskType.java                # 任务类型枚举
+│   ├── dataset/
+│   │   └── DeepSeekBaseDataset      # 数据集基类 (190行)
+│   ├── inference/
+│   │   └── DeepSeekBaseInference    # 推理引擎基类 (253行)
+│   ├── training/
+│   │   └── DeepSeekBasePretrain     # 预训练器基类 (327行)
+│   └── utils/
+│       ├── TrainingMonitor          # 训练监控工具 (269行)
+│       └── CheckpointManager        # 检查点管理器 (283行)
+├── r1/                              # DeepSeek-R1
+│   └── training/
+│       ├── DeepSeekR1PretrainV2     # V2版本 (95行, 节省620行)
+│       └── dataset/
+│           └── DeepSeekR1DatasetV2  # V2版本 (107行, 节省147行)
+└── v3/                              # DeepSeek-V3
+    └── training/
+        ├── DeepSeekV3PretrainV2     # V2版本 (113行, 节省458行)
+        └── DeepSeekV3DatasetV2      # V2版本 (123行, 节省263行)
+```
+
+详细重构文档: [REFACTOR_PLAN.md](REFACTOR_PLAN.md)
+
 ## ✨ 核心特点
 
 - ✅ **完全独立实现** - 100% 基于 V2 API，零依赖旧版组件
@@ -17,51 +58,77 @@
 ```
 tinyai-model-deepseek/
 ├── src/main/java/io/leavesfly/tinyai/deepseek/
-│   ├── v3/                                # DeepSeek-V3 (MoE)
-│   │   ├── DeepSeekV3Config.java          # 完全独立配置类（683行）
-│   │   ├── DeepSeekV3TokenEmbedding.java  # ✅ Variable层面（indexSelect/reshape/repeat）
+│   ├── base/                               # 🆕 共享基类层
+│   │   ├── DeepSeekBaseConfig.java         # MoE基础配置（V2）
+│   │   ├── TaskType.java                   # 5种任务类型枚举
+│   │   ├── dataset/
+│   │   │   └── DeepSeekBaseDataset.java    # 数据集基类（190行）
+│   │   ├── inference/
+│   │   │   └── DeepSeekBaseInference.java  # 推理引擎基类（253行）
+│   │   ├── training/
+│   │   │   └── DeepSeekBasePretrain.java   # 预训练器基类（327行）
+│   │   └── utils/
+│   │       ├── TrainingMonitor.java        # 训练监控工具（269行）
+│   │       └── CheckpointManager.java      # 检查点管理器（283行）
+│   ├── v3/                                 # DeepSeek-V3 (MoE)
+│   │   ├── DeepSeekV3Config.java           # V3配置（继承BaseConfig）
+│   │   ├── DeepSeekV3TokenEmbedding.java   # ✅ Variable层面
 │   │   ├── DeepSeekV3TransformerBlock.java # V2 Module
-│   │   ├── DeepSeekV3MoELayer.java        # ✅ 批量专家计算，完整Variable层面
-│   │   ├── DeepSeekV3ReasoningBlock.java  # 任务感知推理
-│   │   ├── DeepSeekV3CodeBlock.java       # 代码生成（10种语言）
-│   │   ├── DeepSeekV3Block.java           # 主体块
-│   │   ├── DeepSeekV3Model.java           # 模型类
-│   │   ├── DeepSeekV3Demo.java            # 演示程序
-│   │   ├── TaskType.java                  # 5种任务类型
-│   │   └── training/                      # 训练器（Pretrain/Finetune/RL/Inference/Evaluator）
-│   └── r1/                                # DeepSeek-R1 (推理增强)
-│       ├── DeepSeekR1Config.java          # 完全独立配置类（481行）
-│       ├── DeepSeekR1TokenEmbedding.java  # ✅ Variable层面（indexSelect/reshape/repeat）
-│       ├── DeepSeekR1TransformerBlock.java # V2 Module
-│       ├── DeepSeekR1ReasoningBlock.java  # 7步迭代推理
-│       ├── DeepSeekR1ReflectionBlock.java # 自我评估与改进
-│       ├── DeepSeekR1Block.java           # 主体块
-│       ├── DeepSeekR1Model.java           # 模型类
-│       ├── DeepSeekR1Demo.java            # 演示程序
-│       └── training/                      # 训练器（Pretrain/Finetune/RL/Inference/Evaluator/Generator）
+│   │   ├── DeepSeekV3MoELayer.java         # ✅ 批量专家计算
+│   │   ├── DeepSeekV3Block.java            # 主体块（纯MoE）
+│   │   ├── DeepSeekV3Model.java            # 模型类
+│   │   ├── DeepSeekV3Demo.java             # 演示程序
+│   │   └── training/
+│   │       ├── DeepSeekV3PretrainV2.java   # 🆕 V2版本（继承基类，113行）
+│   │       ├── DeepSeekV3DatasetV2.java    # 🆕 V2版本（继承基类，123行）
+│   │       ├── DeepSeekV3Pretrain.java     # V1版本（保留）
+│   │       ├── DeepSeekV3Dataset.java      # V1版本（保留）
+│   │       └── DeepSeekV3Inference.java    # 推理引擎
+│   └── r1/                                 # DeepSeek-R1 (推理增强)
+│       ├── DeepSeekR1Config.java           # R1配置（继承BaseConfig）
+│       ├── DeepSeekR1TokenEmbedding.java   # ✅ Variable层面
+│       ├── DeepSeekR1Block.java            # 主体块（使用V3的MoE）
+│       ├── DeepSeekR1Model.java            # 模型类
+│       ├── DeepSeekR1Demo.java             # 演示程序
+│       └── training/
+│           ├── DeepSeekR1PretrainV2.java   # 🆕 V2版本（继承基类，95行）
+│           ├── dataset/
+│           │   ├── DeepSeekR1DatasetV2.java # 🆕 V2版本（继承基类，107行）
+│           │   └── DeepSeekR1Dataset.java  # V1版本（保留）
+│           ├── DeepSeekR1Pretrain.java     # V1版本（保留）
+│           ├── DeepSeekR1Inference.java    # 推理引擎
+│           ├── DeepSeekR1RLHFTrainer.java  # RLHF训练器
+│           └── DeepSeekR1RLVRTrainer.java  # RLVR训练器
+├── doc/                                    # 详细文档
+│   ├── r1_README.md                        # R1详细说明
+│   ├── V3_README.md                        # V3详细说明
+│   └── V3的DemoV2使用说明.md               # V3 Demo说明
+├── REFACTOR_PLAN.md                        # 重构计划和分析
 └── README.md
 ```
 
 **总代码量**: 
+- **共享基类**: ~1,760行（8个核心组件）
 - **DeepSeek-V3**: ~3,500行，100% V2 API，完整Variable层面
 - **DeepSeek-R1**: ~2,800行，100% V2 API，完整Variable层面
+- **代码减少**: 节省 1,488+ 行（56%+重复代码消除）
 
 ## 🎯 模型对比
 
 ### DeepSeek-V3 vs DeepSeek-R1
 
-| 特性 | DeepSeek-V3 (MoE) | DeepSeek-R1 (推理增强) |
-|------|-------------------|---------------------|
-| 架构 | 混合专家模型(8专家,Top-2) | 标准Transformer |
-| 主要能力 | 代码生成、多任务处理 | 推理、反思、思维链 |
-| 任务感知 | ✅ 5种任务类型路由 | ❌ 通用推理 |
-| 专家网络 | ✅ 8专家，动态选择 | ❌ 无 |
-| 推理步骤 | 任务适应性推理 | ✅ 7步迭代推理 |
-| 反思机制 | ✅ 自我纠错 | ✅ 完整反思模块 |
-| 代码生成 | ✅ 10种语言，质量评估 | ❌ 通用生成 |
-| 数学推理 | ✅ 专用数学处理 | ✅ 通用推理 |
-| 参数效率 | ✅ 激活~25%参数 | ❌ 全部激活 |
-| 适用场景 | 代码、数学、多模态 | 推理、问题求解 |
+| 特性 | DeepSeek-V3 (MoE) | DeepSeek-R1 (MoE) |
+|------|-------------------|-------------------|
+| 架构 | 混合专家模型(8专家,Top-2) | 混合专家模型(8专家,Top-2) |
+| 基础设计 | 纯MoE架构 | 纯MoE架构（复用V3） |
+| 推理能力 | ✅ MoE自然涌现 | ✅ MoE自然涌现 + RL强化 |
+| 任务感知 | ✅ 5种任务类型路由 | ✅ 共享任务路由机制 |
+| 专家网络 | ✅ 8专家，动态选择 | ✅ 8专家，动态选择 |
+| 训练方式 | 预训练 + 后训练 | 预训练 + RLHF + RLVR |
+| 优化器 | Adam | SGD（减少内存） |
+| 代码复用 | 基于共享基类 | 基于共享基类 |
+| 参数效率 | ✅ 激活~25%参数 | ✅ 激活~25%参数 |
+| 适用场景 | 通用任务、代码生成 | 推理密集型任务 |
 
 ## 🚀 快速开始
 

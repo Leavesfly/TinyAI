@@ -1,6 +1,5 @@
 package io.leavesfly.tinyai.deepseek.r1.training;
 
-import io.leavesfly.tinyai.deepseek.r1.DeepSeekR1ReflectionBlock;
 import io.leavesfly.tinyai.deepseek.r1.training.dataset.DeepSeekR1RLVRDataset;
 import io.leavesfly.tinyai.deepseek.r1.training.verifier.*;
 import io.leavesfly.tinyai.deepseek.r1.DeepSeekR1Model;
@@ -177,7 +176,7 @@ public class DeepSeekR1RLVRTrainer {
             
             // 前向传播获取推理结果
             Variable inputVar = new Variable(batch.getInputIds());
-            DeepSeekR1Model.ReasoningOutput result = model.performReasoning(inputVar);
+            DeepSeekR1Model.ReasoningResult result = model.performReasoning(inputVar);
             
             // 计算可验证奖励
             float batchCorrectness = 0.0f;
@@ -205,12 +204,11 @@ public class DeepSeekR1RLVRTrainer {
             // 平均正确性奖励
             float avgCorrectness = batchCorrectness / batch.getBatchSize();
             
-            // 推理质量评分
-            DeepSeekR1ReflectionBlock.QualityScore qualityScore = result.qualityScore;
-            float qualityReward = (float) qualityScore.getOverallScore();
+            // 推理质量评分（基于MoE损失）
+            float qualityReward = (float) (1.0 - result.moeLoss);  // MoE损失越小，质量越高
             
-            // 验证完整性评分（基于推理步数）
-            float verificationScore = Math.min(1.0f, result.numSteps / 7.0f);
+            // 验证完整性评分（简化，不再依赖推理步数）
+            float verificationScore = avgCorrectness;  // 直接使用正确性作为验证分数
             
             // 综合奖励（用于监控）
             float totalReward = correctnessWeight * avgCorrectness +

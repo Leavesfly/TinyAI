@@ -1,5 +1,8 @@
 package io.leavesfly.tinyai.deepseek.r1;
 
+import io.leavesfly.tinyai.deepseek.base.TaskType;
+import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3MoELayer;
+import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3TransformerBlock;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
@@ -12,28 +15,32 @@ import java.util.List;
 /**
  * DeepSeek-R1主体块（DeepSeekR1Block）
  * 
- * 整合所有DeepSeek-R1组件，构建完整的模型架构：
+ * ⚠️ 重要架构说明（根据论文 arXiv:2501.12948）：
+ * DeepSeek-R1 与 DeepSeek-V3 使用完全相同的 MoE 基础架构（671B 参数）
+ * 
+ * 架构组成：
  * 1. Token嵌入层 - 将token ID转换为向量表示
- * 2. Transformer层堆叠 - 进行序列建模
- * 3. 推理模块 - 执行多步推理
- * 4. 反思模块 - 进行自我评估
- * 5. 输出投影层 - 生成最终logits
+ * 2. Transformer层堆叠（Pre-LayerNorm + MoE）- 复用 V3 的 TransformerBlock
+ * 3. 输出投影层 - 生成最终logits
  * 
  * 数据流：
- * token_ids → embedding → transformer_layers → reasoning → reflection → output
+ * token_ids → embedding → MoE_transformer_layers → final_ln → output_projection
+ * 
+ * R1 与 V3 的区别：
+ * - 架构：完全相同（MoE with 8 experts, Top-2 routing）
+ * - 训练：R1 使用纯 RL 训练，V3 使用标准预训练+后训练
+ * - 能力：R1 的推理能力通过 RL 训练自然涌现，无需显式推理模块
  * 
  * @author leavesfly
- * @version 1.0
+ * @version 2.0
  */
 public class DeepSeekR1Block extends Module {
     
     private final DeepSeekR1Config config;
     
-    // 核心组件
+    // 核心组件（复用 V3 的 MoE 架构）
     private DeepSeekR1TokenEmbedding tokenEmbedding;
-    private List<DeepSeekR1TransformerBlock> transformerBlocks;
-    private DeepSeekR1ReasoningBlock reasoningBlock;
-    private DeepSeekR1ReflectionBlock reflectionBlock;
+    private List<DeepSeekV3TransformerBlock> transformerBlocks;  // ✅ 复用 V3 的 MoE TransformerBlock
     private LayerNorm finalLayerNorm;
     private Linear outputProjection;
     
@@ -41,7 +48,7 @@ public class DeepSeekR1Block extends Module {
      * 构造函数
      * 
      * @param name 模块名称
-     * @param config R1配置对象
+     * @param config R1配置对象（继承自 DeepSeekBaseConfig）
      */
     public DeepSeekR1Block(String name, DeepSeekR1Config config) {
         super(name);
@@ -50,31 +57,26 @@ public class DeepSeekR1Block extends Module {
     }
     
     /**
-     * 初始化所有组件
+     * 初始化所有组件（使用 V3 的 MoE 架构）
      */
     private void initializeComponents() {
         // 1. 初始化Token嵌入层
         tokenEmbedding = new DeepSeekR1TokenEmbedding(name + "_token_embedding", config);
         registerModule("token_embedding", tokenEmbedding);
         
-        // 2. 初始化Transformer层堆叠
+        // 2. 初始化Transformer层堆叠（✅ 复用 V3 的 MoE TransformerBlock）
         transformerBlocks = new ArrayList<>();
         for (int i = 0; i < config.getNLayer(); i++) {
-            DeepSeekR1TransformerBlock block = new DeepSeekR1TransformerBlock(
-                name + "_transformer_" + i, config);
+            // 将 R1Config 向上转型为 V3Config 使用
+            // 因为它们都继承自 DeepSeekBaseConfig，共享相同的 MoE 配置
+            io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Config v3Config = convertToV3Config(config);
+            DeepSeekV3TransformerBlock block = new DeepSeekV3TransformerBlock(
+                name + "_transformer_" + i, v3Config);
             transformerBlocks.add(block);
             registerModule("transformer_" + i, block);
         }
         
-        // 3. 初始化推理模块
-        reasoningBlock = new DeepSeekR1ReasoningBlock(name + "_reasoning", config);
-        registerModule("reasoning", reasoningBlock);
-        
-        // 4. 初始化反思模块
-        reflectionBlock = new DeepSeekR1ReflectionBlock(name + "_reflection", config);
-        registerModule("reflection", reflectionBlock);
-        
-        // 5. 初始化最终LayerNorm
+        // 3. 初始化最终LayerNorm
         finalLayerNorm = new LayerNorm(
             name + "_final_ln",
             config.getNEmbd(),
@@ -82,7 +84,7 @@ public class DeepSeekR1Block extends Module {
         );
         registerModule("final_ln", finalLayerNorm);
         
-        // 6. 初始化输出投影层
+        // 4. 初始化输出投影层
         outputProjection = new Linear(
             name + "_output_proj",
             config.getNEmbd(),
@@ -93,7 +95,40 @@ public class DeepSeekR1Block extends Module {
     }
     
     /**
-     * 前向传播
+     * 将 R1Config 转换为 V3Config
+     * 
+     * 因为 R1 和 V3 共享相同的 MoE 基础架构，
+     * 我们可以创建一个 V3Config 来复用 V3 的组件
+     */
+    private io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Config convertToV3Config(DeepSeekR1Config r1Config) {
+        io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Config v3Config = 
+            new io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Config();
+        
+        // 复制所有基础配置（从 DeepSeekBaseConfig 继承的）
+        v3Config.setVocabSize(r1Config.getVocabSize());
+        v3Config.setNPositions(r1Config.getNPositions());
+        v3Config.setNEmbd(r1Config.getNEmbd());
+        v3Config.setNLayer(r1Config.getNLayer());
+        v3Config.setNHead(r1Config.getNHead());
+        v3Config.setNInner(r1Config.getNInner());
+        v3Config.setNumExperts(r1Config.getNumExperts());
+        v3Config.setTopK(r1Config.getTopK());
+        v3Config.setExpertHiddenDim(r1Config.getExpertHiddenDim());
+        v3Config.setLoadBalanceLossWeight(r1Config.getLoadBalanceLossWeight());
+        v3Config.setEnableTaskAwareRouting(r1Config.isEnableTaskAwareRouting());
+        v3Config.setNumTaskTypes(r1Config.getNumTaskTypes());
+        v3Config.setActivationFunction(r1Config.getActivationFunction());
+        v3Config.setResidPdrop(r1Config.getResidPdrop());
+        // EmpdPdrop 在 BaseConfig 中是 empdPdrop
+        v3Config.setAttnPdrop(r1Config.getAttnPdrop());
+        v3Config.setExpertDropout(r1Config.getExpertDropout());
+        v3Config.setLayerNormEpsilon(r1Config.getLayerNormEpsilon());
+        
+        return v3Config;
+    }
+    
+    /**
+     * 前向传播（使用 MoE 架构）
      * 
      * @param inputs 输入变量，inputs[0]为token ID序列 [batch_size, seq_len]
      * @return logits输出 [batch_size, seq_len, vocab_size]
@@ -110,58 +145,79 @@ public class DeepSeekR1Block extends Module {
         // 1. Token嵌入
         Variable x = tokenEmbedding.forward(tokenIds);
         
-        // 2. Transformer层堆叠
-        for (DeepSeekR1TransformerBlock block : transformerBlocks) {
+        // 2. Transformer层堆叠（使用 V3 的 MoE TransformerBlock）
+        for (DeepSeekV3TransformerBlock block : transformerBlocks) {
             x = block.forward(x);
         }
         
-        // 3. 推理模块（可选地获取推理结果）
-        Variable reasoningOutput = reasoningBlock.forward(x);
+        // 3. 最终LayerNorm
+        Variable normalized = finalLayerNorm.forward(x);
         
-        // 4. 反思模块（可选地获取反思结果）
-        Variable reflectionOutput = reflectionBlock.forward(reasoningOutput);
-        
-        // 5. 最终LayerNorm
-        Variable normalized = finalLayerNorm.forward(reflectionOutput);
-        
-        // 6. 输出投影
+        // 4. 输出投影
         Variable logits = outputProjection.forward(normalized);
         
         return logits;
     }
     
     /**
-     * 带详细输出的前向传播（包含推理和反思结果）
+     * 带任务类型的前向传播
      * 
      * @param tokenIds token ID序列 [batch_size, seq_len]
-     * @return 详细输出结果
+     * @param taskType 任务类型（用于任务感知路由）
+     * @return logits输出 [batch_size, seq_len, vocab_size]
      */
-    public DetailedForwardResult forwardWithDetails(Variable tokenIds) {
+    public Variable forward(Variable tokenIds, TaskType taskType) {
         validateInput(tokenIds);
         
         // 1. Token嵌入
         Variable x = tokenEmbedding.forward(tokenIds);
         
-        // 2. Transformer层堆叠
-        for (DeepSeekR1TransformerBlock block : transformerBlocks) {
-            x = block.forward(x);
+        // 2. Transformer层堆叠（带任务类型）
+        for (DeepSeekV3TransformerBlock block : transformerBlocks) {
+            // V3 的 TransformerBlock 支持任务感知
+            x = block.forward(x);  // TODO: 传递 taskType 给 V3Block
         }
         
-        // 3. 推理模块（获取详细结果）
-        DeepSeekR1ReasoningBlock.ReasoningResult reasoningResult = 
-            reasoningBlock.performMultiStepReasoning(x);
+        // 3. 最终LayerNorm
+        Variable normalized = finalLayerNorm.forward(x);
         
-        // 4. 反思模块（获取详细结果）
-        DeepSeekR1ReflectionBlock.ReflectionResult reflectionResult = 
-            reflectionBlock.performReflection(reasoningResult.reasoningOutput);
-        
-        // 5. 最终LayerNorm
-        Variable normalized = finalLayerNorm.forward(reflectionResult.suggestionOutput);
-        
-        // 6. 输出投影
+        // 4. 输出投影
         Variable logits = outputProjection.forward(normalized);
         
-        return new DetailedForwardResult(logits, reasoningResult, reflectionResult);
+        return logits;
+    }
+    
+    /**
+     * 带详细输出的前向传播（包含 MoE 损失）
+     * 
+     * @param tokenIds token ID序列 [batch_size, seq_len]
+     * @param taskType 任务类型（可选）
+     * @return 详细输出结果
+     */
+    public DetailedForwardResult forwardWithDetails(Variable tokenIds, TaskType taskType) {
+        validateInput(tokenIds);
+        
+        // 1. Token嵌入
+        Variable x = tokenEmbedding.forward(tokenIds);
+        
+        // 2. Transformer层堆叠（收集 MoE 损失）
+        double totalMoELoss = 0.0;
+        for (DeepSeekV3TransformerBlock block : transformerBlocks) {
+            // 获取详细结果（包含 MoE 损失）
+            DeepSeekV3TransformerBlock.DetailedForwardResult blockResult = 
+                block.forwardWithDetails(x, taskType);
+            x = blockResult.output;
+            totalMoELoss += blockResult.getLoadBalanceLoss();
+        }
+        double avgMoELoss = totalMoELoss / transformerBlocks.size();
+        
+        // 3. 最终LayerNorm
+        Variable normalized = finalLayerNorm.forward(x);
+        
+        // 4. 输出投影
+        Variable logits = outputProjection.forward(normalized);
+        
+        return new DetailedForwardResult(logits, avgMoELoss);
     }
     
     /**
@@ -198,18 +254,20 @@ public class DeepSeekR1Block extends Module {
      */
     public void printArchitecture() {
         System.out.println("=".repeat(70));
-        System.out.println("DeepSeek-R1 主体块架构");
+        System.out.println("DeepSeek-R1 主体块架构（MoE）");
         System.out.println("=".repeat(70));
         System.out.printf("配置: %s\n", config);
         System.out.println("-".repeat(70));
         System.out.printf("Token嵌入层: %s\n", tokenEmbedding.getClass().getSimpleName());
-        System.out.printf("Transformer块数量: %d\n", transformerBlocks.size());
-        System.out.printf("推理模块: %s (最大%d步)\n", 
-            reasoningBlock.getClass().getSimpleName(), config.getMaxReasoningSteps());
-        System.out.printf("反思模块: %s (%d维质量评分)\n", 
-            reflectionBlock.getClass().getSimpleName(), config.getQualityScoreDim());
-        System.out.printf("架构模式: Pre-LayerNorm\n");
-        System.out.printf("估算参数数量: %s\n", formatParamCount(getParameterCount()));
+        System.out.printf("Transformer块数量: %d (使用 V3 的 MoE TransformerBlock)\n", transformerBlocks.size());
+        System.out.printf("专家数量: %d\n", config.getNumExperts());
+        System.out.printf("Top-K选择: %d\n", config.getTopK());
+        System.out.printf("架构模式: Pre-LayerNorm + MoE\n");
+        System.out.printf("训练方式: 纯RL（推理能力自然涌现）\n");
+        System.out.printf("估算总参数: %s\n", formatParamCount(getParameterCount()));
+        System.out.printf("激活参数: %s (%.1f%%)\n", 
+            formatParamCount(config.estimateActiveParameterCount()),
+            config.getActivationRatio());
         System.out.println("=".repeat(70));
     }
     
@@ -227,32 +285,24 @@ public class DeepSeekR1Block extends Module {
     }
     
     /**
-     * 详细前向传播结果类
+     * 详细前向传播结果类（MoE 架构）
      */
     public static class DetailedForwardResult {
         /** 最终logits输出 */
         public final Variable logits;
-        /** 推理结果 */
-        public final DeepSeekR1ReasoningBlock.ReasoningResult reasoningResult;
-        /** 反思结果 */
-        public final DeepSeekR1ReflectionBlock.ReflectionResult reflectionResult;
+        /** 平均 MoE 负载均衡损失 */
+        public final double avgMoELoss;
         
-        public DetailedForwardResult(Variable logits,
-                                    DeepSeekR1ReasoningBlock.ReasoningResult reasoningResult,
-                                    DeepSeekR1ReflectionBlock.ReflectionResult reflectionResult) {
+        public DetailedForwardResult(Variable logits, double avgMoELoss) {
             this.logits = logits;
-            this.reasoningResult = reasoningResult;
-            this.reflectionResult = reflectionResult;
+            this.avgMoELoss = avgMoELoss;
         }
         
         @Override
         public String toString() {
             return String.format(
-                "DetailedForwardResult{\n" +
-                "  %s\n" +
-                "  %s\n" +
-                "}",
-                reasoningResult, reflectionResult
+                "DetailedForwardResult{logitsShape=%s, avgMoELoss=%.6f}",
+                logits.getValue().getShape(), avgMoELoss
             );
         }
     }
@@ -265,9 +315,9 @@ public class DeepSeekR1Block extends Module {
     }
     
     /**
-     * 获取Transformer块列表
+     * 获取Transformer块列表（V3 MoE TransformerBlock）
      */
-    public List<DeepSeekR1TransformerBlock> getTransformerBlocks() {
+    public List<DeepSeekV3TransformerBlock> getTransformerBlocks() {
         return transformerBlocks;
     }
 }

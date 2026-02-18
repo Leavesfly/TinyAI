@@ -1,6 +1,6 @@
 package io.leavesfly.tinyai.deepseek.v3.training;
 
-import io.leavesfly.tinyai.deepseek.v3.TaskType;
+import io.leavesfly.tinyai.deepseek.base.TaskType;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
 import java.util.ArrayList;

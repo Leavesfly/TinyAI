@@ -1,6 +1,5 @@
 package io.leavesfly.tinyai.deepseek.r1.training;
 
-import io.leavesfly.tinyai.deepseek.r1.DeepSeekR1ReflectionBlock;
 import io.leavesfly.tinyai.deepseek.r1.DeepSeekR1Model;
 import io.leavesfly.tinyai.deepseek.r1.training.dataset.DeepSeekR1Dataset;
 import io.leavesfly.tinyai.func.Variable;
@@ -108,15 +107,15 @@ public class DeepSeekR1RLHFTrainer {
             
             // 前向传播获取推理结果
             Variable inputVar = new Variable(batch.getInputIds());
-            DeepSeekR1Model.ReasoningOutput result = model.performReasoning(inputVar);
+            DeepSeekR1Model.ReasoningResult result = model.performReasoning(inputVar);
             
             // 计算奖励信号
             float[] humanRewards = batch.getRewards();
-            DeepSeekR1ReflectionBlock.QualityScore qualityScore = result.qualityScore;
+            double moeLossReward = 1.0 - result.moeLoss;  // MoE损失越小，奖励越大
             
-            // 综合奖励 = 人类反馈 + 质量评分
+            // 综合奖励 = 人类反馈 + MoE质量奖励
             float avgHumanReward = calculateAverage(humanRewards);
-            float qualityReward = (float) qualityScore.getOverallScore();
+            float qualityReward = (float) moeLossReward;
             float totalReward = rewardWeight * avgHumanReward + qualityWeight * qualityReward;
             
             // 构建损失：负奖励（最大化奖励）

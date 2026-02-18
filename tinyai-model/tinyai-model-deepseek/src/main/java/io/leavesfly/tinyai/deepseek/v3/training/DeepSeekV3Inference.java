@@ -1,7 +1,7 @@
 package io.leavesfly.tinyai.deepseek.v3.training;
 
+import io.leavesfly.tinyai.deepseek.base.TaskType;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Model;
-import io.leavesfly.tinyai.deepseek.v3.TaskType;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
@@ -83,7 +83,7 @@ public class DeepSeekV3Inference {
             // 记录推理步骤
             reasoningSteps.add(new ReasoningStep(
                 i,
-                result.reasoningResult.confidence,
+                0.0,  // confidence不再可用（MoE自然涌现）
                 result.avgMoELoss
             ));
         }
@@ -142,7 +142,7 @@ public class DeepSeekV3Inference {
             
             reasoningSteps.add(new ReasoningStep(
                 i,
-                result.reasoningResult.confidence,
+                0.0,  // confidence不再可用（MoE自然涌现）
                 result.avgMoELoss
             ));
         }
@@ -208,7 +208,7 @@ public class DeepSeekV3Inference {
             
             reasoningSteps.add(new ReasoningStep(
                 i,
-                result.reasoningResult.confidence,
+                0.0,  // confidence不再可用（MoE自然涌现）
                 result.avgMoELoss
             ));
         }
@@ -294,7 +294,7 @@ public class DeepSeekV3Inference {
             
             reasoningSteps.add(new ReasoningStep(
                 i,
-                result.reasoningResult.confidence,
+                0.0,  // confidence不再可用（MoE自然涌现）
                 result.avgMoELoss
             ));
         }

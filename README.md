@@ -339,7 +339,7 @@ model.save("model.bin");
 
 ```java
 import io.leavesfly.tinyai.gpt2.GPT2Model;
-import io.leavesfly.tinyai.deepseek.rx.DeepSeekR1Model;
+import io.leavesfly.tinyai.deepseek.r1.DeepSeekR1Model;
 
 // GPT-2 文本生成
 GPT2Model gpt2=GPT2Model.createSmallModel("gpt2-small");

@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.deepseek.v3;
 
+import io.leavesfly.tinyai.deepseek.base.TaskType;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;

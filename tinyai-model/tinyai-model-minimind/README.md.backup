@@ -30,13 +30,13 @@
 
 ### 整体架构
 
-MiniMind 采用经典的 Transformer Decoder-Only 架构，类似 GPT 系列:
+MiniMind 采用经典的 Transformer Decoder-Only 架构,类似 GPT 系列:
 
 ```mermaid
 graph TB
     subgraph Input["输入层"]
         TokenIds["Token IDs<br/>[batch, seq_len]"]
-        TokenEmb["Token Embedding<br/>维度：512"]
+        TokenEmb["Token Embedding<br/>维度: 512"]
     end
     
     subgraph Transformer["Transformer 层 x 8"]
@@ -56,8 +56,6 @@ graph TB
     
     TokenIds --> TokenEmb
     TokenEmb --> Layer1
-    Layer1 --> Layer2
-    Layer2 -.-> LayerN
     LayerN --> FinalNorm
     FinalNorm --> LMHead
     LMHead --> Logits
@@ -68,16 +66,16 @@ graph TB
 ```mermaid
 graph TB
     subgraph "TinyAI 核心框架"
-        NdArray["tinyai-deeplearning-ndarr<br/>多维数组"]
-        Func["tinyai-deeplearning-func<br/>自动微分"]
-        NNet["tinyai-deeplearning-nnet<br/>神经网络层"]
-        ML["tinyai-deeplearning-ml<br/>Model/Trainer"]
+        NdArray["tinyai-ndarr<br/>多维数组"]
+        Func["tinyai-func<br/>自动微分"]
+        NNet["tinyai-nnet<br/>神经网络层"]
+        ML["tinyai-ml<br/>Model/Trainer"]
     end
     
     subgraph "MiniMind 实现"
         MiniMindModel["MiniMindModel<br/>模型接口"]
         MiniMindBlock["MiniMindBlock<br/>模型主体"]
-        TransformerLayer["TransformerLayer<br/>Transformer 层"]
+        TransformerLayer["TransformerLayer<br/>Transformer层"]
         Attention["MultiHeadAttention<br/>注意力机制"]
         Embedding["TokenEmbedding<br/>词嵌入"]
         Tokenizer["MiniMindTokenizer<br/>分词器"]
@@ -121,35 +119,33 @@ graph TB
 | **层数** | 8 | 16 | 8 |
 | **隐藏维度** | 512 | 768 | 512 |
 | **注意力头数** | 16 | 16 | 16 |
-| **FFN 维度** | 1,024 | 1,536 | 1,024 |
+| **FFN维度** | 1,024 | 1,536 | 1,024 |
 | **专家数量** | - | - | 4 (Top-2) |
 | **推理内存** | ~100MB | ~430MB | ~580MB |
 | **训练显存** | 2-4GB | 8-12GB | 10-16GB |
 
 ### 核心组件说明
 
-| 组件类别 | 组件名称 | 包路径 | 实现状态 | 说明 |
-|---------|---------|--------|---------|------|
-| **配置管理** | MiniMindConfig | `model` | ✅ 完成 | Small/Medium/MoE 三种预设 |
-| **词嵌入层** | TokenEmbedding | `model.embedding` | ✅ 完成 | 词汇表 → 隐藏向量映射 |
-| **位置编码** | RotaryPositionEmbedding | `model.embedding` | ✅ 完成 | RoPE 旋转位置编码 |
-| **注意力机制** | MultiHeadAttention | `model.attention` | ✅ 完成 | 16 头注意力 + KV-Cache |
-| **KV 缓存** | KVCache | `model.attention` | ✅ 完成 | 推理加速缓存管理 |
-| **Transformer 层** | MiniMindTransformerLayer | `model.transformer` | ✅ 完成 | Pre-LN + 残差连接 |
-| **模型主体** | MiniMindBlock | `model` | ✅ 完成 | 8 层 Transformer 堆叠 |
-| **模型接口** | MiniMindModel | `model` | ✅ 完成 | 继承 Model，统一接口 |
-| **分词器** | MiniMindTokenizer | `tokenizer` | ✅ 完成 | 字符级 + BPE 训练支持 |
-| **词汇表** | Vocabulary | `tokenizer` | ✅ 完成 | Token 管理与映射 |
-| **BPE 训练器** | BPETrainer | `tokenizer` | ✅ 完成 | BPE 合并规则学习 |
-| **MoE 架构** | MiniMindMoEModel | `model.moe` | ✅ 完成 | 4 专家 + 负载均衡 |
-| **推理引擎** | generate() | `model` | ✅ 完成 | Greedy/TopK/TopP/Temp |
-| **预训练** | PretrainTrainer | `training` | ✅ 完成 | 支持训练循环与检查点 |
-| **监督微调** | SFTTrainer | `training` | ✅ 完成 | 指令微调训练器 |
-| **LoRA 微调** | LoRAAdapter | `training.lora` | ✅ 完成 | 低秩适配器 |
-| **DPO 训练** | DPOTrainer | `training.dpo` | ✅ 完成 | 直接偏好优化 |
-| **RLAIF 训练** | PPO/GRPO/SPO | `training.rl` | ✅ 完成 | 强化学习训练器 |
-| **CLI 工具** | MiniMindCLI | `cli` | ✅ 完成 | train/generate/chat 等命令 |
-| **API 服务** | MiniMindAPIServer | `api` | ✅ 完成 | OpenAI 兼容 REST API |
+| 组件类别 | 组件名称 | 实现状态 | 说明 |
+|---------|---------|---------|------|
+| **配置管理** | MiniMindConfig | ✅ 完成 | Small/Medium/MoE 三种预设 |
+| **词嵌入层** | TokenEmbedding | ✅ 完成 | 词汇表 → 隐藏向量映射 |
+| **位置编码** | RotaryPositionEmbedding | ✅ 完成 | RoPE 旋转位置编码 |
+| **注意力机制** | MultiHeadAttention | ✅ 完成 | 16头注意力 + KV-Cache |
+| **Transformer层** | MiniMindTransformerLayer | ✅ 完成 | Pre-LN + 残差连接 |
+| **模型主体** | MiniMindBlock | ✅ 完成 | 8层Transformer堆叠 |
+| **模型接口** | MiniMindModel | ✅ 完成 | 继承 Model,统一接口 |
+| **分词器** | MiniMindTokenizer | ✅ 完成 | 字符级 + BPE 训练支持 |
+| **MoE架构** | MiniMindMoEModel | ✅ 完成 | 4专家 + 负载均衡 |
+| **推理引擎** | generate() | ✅ 完成 | Greedy/TopK/TopP/Temp |
+| **预训练** | PretrainTrainer | ✅ 完成 | 支持训练循环与检查点 |
+| **监督微调** | SFTTrainer | ✅ 完成 | 指令微调训练器 |
+| **LoRA微调** | LoRAAdapter | ✅ 完成 | 低秩适配器 |
+| **DPO训练** | DPOTrainer | ✅ 完成 | 直接偏好优化 |
+| **RLAIF训练** | PPO/GRPO/SPO | ✅ 完成 | 强化学习训练器 |
+| **训练演示** | MiniMindTrainDemo | ✅ 完成 | 三阶段完整训练流程 |
+| **CLI工具** | train/generate/chat | ✅ 完成 | 命令行工具套件 |
+| **API服务** | CompletionHandler | ✅ 完成 | OpenAI兼容API |
 
 ## 🚀 快速开始
 
@@ -174,7 +170,7 @@ mvn clean install -DskipTests
 cd tinyai-model/tinyai-model-minimind
 ```
 
-### 5 分钟上手示例
+### 5分钟上手示例
 
 #### 示例 1: 创建模型并生成文本
 
@@ -217,7 +213,7 @@ public class QuickStart {
             Arrays.stream(output).boxed().collect(Collectors.toList())
         );
         
-        System.out.println("✨ 生成结果：" + result);
+        System.out.println("✨ 生成结果: " + result);
     }
 }
 ```
@@ -228,13 +224,13 @@ public class QuickStart {
 📊 MiniMind Language Model - small with 26M parameters
 
 🔮 开始生成...
-✨ 生成结果：Hello, world! ...
+✨ 生成结果: Hello, world! ...
 ```
 
 #### 示例 2: 使用不同采样策略
 
 ```java
-// 贪婪采样 (确定性，最高质量)
+// 贪婪采样 (确定性,最高质量)
 int[] greedy = model.generate(tokenArray, 50, 0.0f, 0, 0.0f);
 
 // 温度采样 (温和随机)
@@ -254,8 +250,8 @@ int[] combined = model.generate(tokenArray, 50, 0.8f, 40, 0.9f);
 
 | 任务类型 | Temperature | Top-K | Top-P | 说明 |
 |---------|-------------|-------|-------|------|
-| **事实问答** | 0.0 | 0 | 0.0 | 贪婪采样，高准确性 |
-| **代码生成** | 0.2 | 0 | 0.95 | 低温度，准确性优先 |
+| **事实问答** | 0.0 | 0 | 0.0 | 贪婪采样,高准确性 |
+| **代码生成** | 0.2 | 0 | 0.95 | 低温度,准确性优先 |
 | **对话聊天** | 0.7 | 0 | 0.9 | 平衡质量和多样性 |
 | **创意写作** | 0.9 | 0 | 0.95 | 高多样性 |
 | **翻译** | 0.0 | 0 | 0.0 | 贪婪采样 |
@@ -268,11 +264,11 @@ int[] combined = model.generate(tokenArray, 50, 0.8f, 40, 0.9f);
 |----------|------|----------|-----------|-----------|
 | **Small** | 8 | 512 | 16 | ~26M |
 | **Medium** | 16 | 768 | 16 | ~108M |
-| **MoE** | 8 (4 专家) | 512 | 16 | ~145M |
+| **MoE** | 8 (4专家) | 512 | 16 | ~145M |
 
 ### 内存需求
 
-| 模型 | FP32 内存 | FP16 内存 | 训练显存 (估算) | 推理显存 (估算) |
+| 模型 | FP32 内存 | FP16 内存 | 训练显存(估算) | 推理显存(估算) |
 |------|----------|----------|---------------|---------------|
 | Small | 104MB | 52MB | 2-4GB | 0.5-1GB |
 | Medium | 432MB | 216MB | 8-12GB | 2-3GB |
@@ -285,7 +281,7 @@ int[] combined = model.generate(tokenArray, 50, 0.8f, 40, 0.9f);
 | 功能模块 | 原版 MiniMind | TinyAI 实现 | 还原度 |
 |---------|---------------|------------|-------|
 | Tokenizer (BPE) | ✓ | ✅ 已完成 | 100% |
-| 模型架构 (Transformer Decoder-Only) | ✓ | ✅ 已完成 | 100% |
+| 模型架构 (Transformer Decoder) | ✓ | ✅ 已完成 | 100% |
 | RoPE 位置编码 | ✓ | ✅ 已完成 | 100% |
 | 多头注意力 | ✓ | ✅ 已完成 | 100% |
 | KV-Cache | ✓ | ✅ 已完成 | 100% |
@@ -328,7 +324,9 @@ import io.leavesfly.tinyai.nnet.v2.layer.norm.Dropout;
 
 ```java
 // ❌ 禁止使用
+
 import io.leavesfly.tinyai.nnet.layer.dnn.AffineLayer;
+
 ```
 
 ### 自行实现的组件
@@ -348,15 +346,15 @@ import io.leavesfly.tinyai.nnet.layer.dnn.AffineLayer;
 **核心功能** (100% 完成):
 - ✅ 模块基础结构搭建
 - ✅ Maven 配置和依赖管理
-- ✅ MiniMindConfig 配置类 (三种预设)
+- ✅ MiniMindConfig 配置类(三种预设)
 - ✅ TokenEmbedding 嵌入层
 - ✅ RotaryPositionEmbedding (RoPE)
 - ✅ MultiHeadAttention 多头注意力
 - ✅ KVCache 缓存管理
 - ✅ MiniMindTransformerLayer Transformer 层
 - ✅ MiniMindBlock / MiniMindModel 模型主体
-- ✅ MiniMindTokenizer 分词器 (字符级 + BPE 训练)
-- ✅ 推理引擎 (多种采样策略)
+- ✅ MiniMindTokenizer 分词器(字符级 + BPE训练)
+- ✅ 推理引擎(多种采样策略)
 - ✅ MoE 完整架构实现
 - ✅ MiniMindMoEModel MoE 模型
 - ✅ 专家路由和负载均衡
@@ -364,14 +362,14 @@ import io.leavesfly.tinyai.nnet.layer.dnn.AffineLayer;
 **训练组件** (100% 完成):
 - ✅ PretrainTrainer 预训练训练器
 - ✅ SFTTrainer 监督微调训练器
-- ✅ LoRAAdapter LoRA 适配器
-- ✅ DPOTrainer DPO 训练器
+- ✅ LoRAAdapter LoRA适配器
+- ✅ DPOTrainer DPO训练器
 - ✅ PPO/GRPO/SPO 强化学习训练器
 - ✅ MiniMindTrainDemo 完整训练演示
 
 **工具与服务** (100% 完成):
-- ✅ CLI 命令行工具 (train/generate/chat 等)
-- ✅ API 服务 (OpenAI 兼容)
+- ✅ CLI 命令行工具(train/generate/chat等)
+- ✅ API 服务(OpenAI兼容)
 - ✅ 数据处理工具
 
 **当前进度**: 100%
@@ -383,7 +381,7 @@ import io.leavesfly.tinyai.nnet.layer.dnn.AffineLayer;
 
 ## ❓ 常见问题 FAQ
 
-### Q1: 编译失败，提示找不到依赖？
+### Q1: 编译失败,提示找不到依赖?
 
 **A:** 确保先编译 TinyAI 核心模块:
 
@@ -395,7 +393,7 @@ cd tinyai-model/tinyai-model-minimind
 mvn compile
 ```
 
-### Q2: 运行时内存不足？
+### Q2: 运行时内存不足?
 
 **A:** 增加 JVM 堆内存:
 
@@ -405,23 +403,23 @@ export MAVEN_OPTS="-Xmx4g"
 java -Xmx4g -cp ... YourClass
 ```
 
-### Q3: 生成结果是乱码？
+### Q3: 生成结果是乱码?
 
 **A:** 检查以下几点:
 1. Tokenizer 是否正确初始化
 2. 词汇表大小是否匹配
 3. 模型是否处于推理模式 (`model.setTraining(false)`)
 
-### Q4: 如何评估模型效果？
+### Q4: 如何评估模型效果?
 
 **A:** 使用困惑度 (Perplexity):
 
 ```java
 float perplexity = evaluator.calculatePerplexity(model, validDataset);
-System.out.println("困惑度：" + perplexity);
+System.out.println("困惑度: " + perplexity);
 ```
 
-### Q5: 如何部署 API 服务？
+### Q5: 如何部署 API 服务?
 
 **A:** 使用内置的 API 服务器:
 
@@ -439,7 +437,7 @@ curl -X POST http://localhost:8080/v1/chat/completions \
   }'
 ```
 
-详见：[API 服务指南](./doc/API-GUIDE.md)
+详见: [API服务指南](./doc/API-GUIDE.md)
 
 ---
 
@@ -448,7 +446,7 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 ### 训练建议
 
 **学习率设置**:
-- 预训练：`3e-4`
+- 预训练: `3e-4`
 - SFT: `5e-5`
 - LoRA: `1e-4`
 - DPO: `5e-6`
@@ -466,9 +464,9 @@ lr = base_lr × min(step / warmup_steps, 1.0)
 ### 推理建议
 
 **采样参数推荐**:
-- 对话：`temperature=0.7, top_p=0.9`
-- 代码：`temperature=0.2, top_p=0.95`
-- 创意：`temperature=0.9, top_p=0.95`
+- 对话: `temperature=0.7, top_p=0.9`
+- 代码: `temperature=0.2, top_p=0.95`
+- 创意: `temperature=0.9, top_p=0.95`
 
 **批量大小**:
 ```
@@ -481,7 +479,7 @@ max_batch_size = GPU_memory / (model_size + seq_len × hidden_size)
 
 ## 👥 贡献指南
 
-欢迎贡献！请遵循以下规范:
+欢迎贡献! 请遵循以下规范:
 
 1. **代码规范**: 遵循 TinyAI 项目规范
 2. **V2 优先**: 强制使用 `nnet.v2.*` 组件
@@ -495,26 +493,25 @@ max_batch_size = GPU_memory / (model_size + seq_len × hidden_size)
 
 ### 技术文档
 
-- [MiniMind 模型设计](./doc/MiniMind 模型设计.md) - 架构深入解析
-- [API 参考文档](./doc/API 参考.md) - 完整的 API 说明
-- [CLI 工具指南](./doc/CLI-GUIDE.md) - 命令行工具使用
-- [API 服务指南](./doc/API-GUIDE.md) - REST API 部署
+- [MiniMind模型设计](./doc/MiniMind模型设计.md) - 架构深入解析
+- [API参考文档](./doc/API参考.md) - 完整的 API 说明
+- [CLI工具指南](./doc/CLI-GUIDE.md) - 命令行工具使用
+- [API服务指南](./doc/API-GUIDE.md) - REST API 部署
 - [快速开始指南](./doc/快速开始指南.md) - 详细上手教程
 
 ### 示例代码
 
 位于 `src/main/java/io/leavesfly/tinyai/minimind/examples/`:
-- `Example01_ModelCreationAndInference.java` - 模型创建与推理
-- `Example02_BPETokenizerTraining.java` - BPE 分词器训练
-- `Example03_SFTFineTuning.java` - SFT 微调
-- `Example04_LoRAFineTuning.java` - LoRA 微调
+- `Example01_BasicUsage.java` - 基础使用演示
+- `Example02_TextGeneration.java` - 文本生成
+- `Example03_SFTFineTuning.java` - SFT微调
+- `Example04_LoRAFineTuning.java` - LoRA微调
 - `Example05_PreTraining.java` - 预训练
-- `Example06_TextGenerationStrategies.java` - 文本生成策略
-- `Example07_ModelEvaluation.java` - 模型评估
-- `Example08_CompleteTrainingPipeline.java` - 完整训练流程
-- `MiniMindMoEExample.java` - MoE 模型使用
-- `Example09_APIServer.java` - API 服务部署
-- `Example10_CLITools.java` - CLI 工具使用
+- `Example06_DPOTraining.java` - DPO训练
+- `Example07_RLAIFTraining.java` - RLAIF训练
+- `Example08_MoEModel.java` - MoE模型使用
+- `Example09_APIServer.java` - API服务部署
+- `Example10_CLITools.java` - CLI工具使用
 
 ### 完整训练演示
 
@@ -523,7 +520,7 @@ max_batch_size = GPU_memory / (model_size + seq_len × hidden_size)
 mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.minimind.training.MiniMindTrainDemo"
 ```
 
-详见：[MiniMindTrainDemo 使用说明](./doc/MiniMindTrainDemo 使用说明.md)
+详见: [MiniMindTrainDemo使用说明](./doc/MiniMindTrainDemo使用说明.md)
 
 ### 参考链接
 
@@ -535,6 +532,8 @@ mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.minimind.training.MiniMindTr
 - **DPO 论文**: [Direct Preference Optimization](https://arxiv.org/abs/2305.18290)
 
 ---
+
+
 
 ## 📄 许可证
 

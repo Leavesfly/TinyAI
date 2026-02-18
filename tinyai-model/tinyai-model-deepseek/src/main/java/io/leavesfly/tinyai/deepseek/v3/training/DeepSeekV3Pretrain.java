@@ -1,9 +1,9 @@
 package io.leavesfly.tinyai.deepseek.v3.training;
 
+import io.leavesfly.tinyai.deepseek.base.TaskType;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Block;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Config;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Model;
-import io.leavesfly.tinyai.deepseek.v3.TaskType;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
 import io.leavesfly.tinyai.ml.optimize.Adam;
@@ -261,7 +261,6 @@ public class DeepSeekV3Pretrain {
         
         float lmLossValue = lmLoss.getValue().getNumber().floatValue();
         float moeLossValue = (float) result.avgMoELoss;
-        float confidence = (float) result.reasoningResult.confidence;
         
         // 总损失 = 语言模型损失 + MoE负载均衡损失
         Variable totalLoss = lmLoss;
@@ -287,7 +286,7 @@ public class DeepSeekV3Pretrain {
         // 断开计算图
         totalLoss.unChainBackward();
         
-        return new StepResult(lmLossValue, moeLossValue, confidence);
+        return new StepResult(lmLossValue, moeLossValue, 0.0f);
     }
     
     /**

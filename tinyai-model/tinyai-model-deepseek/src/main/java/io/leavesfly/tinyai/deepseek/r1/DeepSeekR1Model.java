@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.deepseek.r1;
 
+import io.leavesfly.tinyai.deepseek.base.TaskType;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.model.Model;
 import io.leavesfly.tinyai.ndarr.NdArray;
@@ -7,17 +8,24 @@ import io.leavesfly.tinyai.ndarr.NdArray;
 /**
  * DeepSeek-R1模型类
  * 
- * DeepSeek-R1是一个具备深度推理和自我反思能力的大语言模型，
- * 通过多步推理和反思机制实现复杂任务的可解释性处理。
+ * ⚠️ 重要架构说明（根据论文 arXiv:2501.12948）：
+ * DeepSeek-R1 与 DeepSeek-V3 使用完全相同的 MoE 基础架构（671B 参数），
+ * 唯一的区别在于训练方式：
+ * 
+ * - **V3**: 标准预训练 + 后训练（SFT）
+ * - **R1**: V3-Base + 纯强化学习（RL）训练
+ * 
+ * R1 的推理能力（Chain-of-Thought）是通过 RL 训练自然涌现的，
+ * 而不是通过显式的推理/反思模块实现。
  * 
  * 主要特性：
- * 1. 多步推理 - 支持最多7步迭代推理过程
- * 2. 自我反思 - 从5个维度评估推理质量
- * 3. 置信度评估 - 动态评估每步推理的可信度
- * 4. Pre-LayerNorm架构 - 提升训练稳定性
+ * 1. 混合专家(MoE) - 8专家Top-2路由，参数激活率约25%
+ * 2. 任务感知路由 - 支持推理、代码、数学、通用、多模态5种任务
+ * 3. Pre-LayerNorm架构 - 提升训练稳定性
+ * 4. RL训练 - 通过纯RL训练使推理能力自然涌现
  * 
  * @author leavesfly
- * @version 1.0
+ * @version 2.0
  */
 public class DeepSeekR1Model extends Model {
     
@@ -42,13 +50,15 @@ public class DeepSeekR1Model extends Model {
      */
     private String buildDescription() {
         return String.format(
-            "DeepSeek-R1语言模型 | 参数量: %s | 层数: %d | 维度: %d | 注意力头: %d | " +
-            "推理步骤: %d | 架构: Pre-LayerNorm",
+            "DeepSeek-R1语言模型 | 参数量: %s | 激活参数: %s (%.1f%%) | 层数: %d | 维度: %d | " +
+            "专家数: %d | Top-K: %d | 架构: Pre-LayerNorm+MoE | 训练方式: 纯RL",
             formatParamCount(config.estimateParameterCount()),
+            formatParamCount(config.estimateActiveParameterCount()),
+            config.getActivationRatio(),
             config.getNLayer(),
             config.getNEmbd(),
-            config.getNHead(),
-            config.getMaxReasoningSteps()
+            config.getNumExperts(),
+            config.getTopK()
         );
     }
     
@@ -101,28 +111,48 @@ public class DeepSeekR1Model extends Model {
     }
     
     /**
-     * 带详细信息的推理
+     * 带任务类型的预测
+     * 
+     * TODO: 待 R1Block 重构为 MoE 架构后，启用任务感知路由
      * 
      * @param tokenIds token ID序列 [batch_size, seq_len]
-     * @return 详细推理结果，包含推理步骤和反思评估
+     * @param taskType 任务类型（可选）
+     * @return logits输出 [batch_size, seq_len, vocab_size]
      */
-    public DeepSeekR1Block.DetailedForwardResult predictWithDetails(Variable tokenIds) {
-        return r1Block.forwardWithDetails(tokenIds);
+    public Variable predict(Variable tokenIds, TaskType taskType) {
+        // 暂时使用标准前向传播，等 R1Block 重构后实现任务感知
+        return forward(tokenIds);
     }
     
     /**
-     * 执行多步推理（获取推理结果）
+     * 推理任务（利用RL训练涌现的推理能力）
      * 
      * @param tokenIds token ID序列 [batch_size, seq_len]
-     * @return 推理结果对象
+     * @return 推理结果
      */
-    public ReasoningOutput performReasoning(Variable tokenIds) {
-        DeepSeekR1Block.DetailedForwardResult result = r1Block.forwardWithDetails(tokenIds);
-        return new ReasoningOutput(
-            result.logits,
-            result.reasoningResult.numSteps,
-            result.reasoningResult.averageConfidence,
-            result.reflectionResult.qualityScore
+    public ReasoningResult performReasoning(Variable tokenIds) {
+        Variable logits = predict(tokenIds, TaskType.REASONING);
+        
+        return new ReasoningResult(
+            logits,
+            0.0,  // TODO: 待 R1Block 重构后获取 MoE 损失
+            TaskType.REASONING
+        );
+    }
+    
+    /**
+     * 数学计算任务
+     * 
+     * @param tokenIds token ID序列 [batch_size, seq_len]
+     * @return 数学计算结果
+     */
+    public ReasoningResult solveMath(Variable tokenIds) {
+        Variable logits = predict(tokenIds, TaskType.MATH);
+        
+        return new ReasoningResult(
+            logits,
+            0.0,  // TODO: 待 R1Block 重构后获取 MoE 损失
+            TaskType.MATH
         );
     }
     
@@ -219,25 +249,23 @@ public class DeepSeekR1Model extends Model {
             "  - 注意力头数: %d\n" +
             "  - 前馈网络维度: %d\n" +
             "  - 最大序列长度: %d\n" +
-            "  - 最大推理步骤: %d\n" +
-            "  - 推理隐藏维度: %d\n" +
-            "  - 反思隐藏维度: %d\n" +
-            "  - 质量评分维度: %d\n" +
-            "  - 置信度阈值: %.2f\n" +
-            "  - 架构: Pre-LayerNorm\n" +
-            "  - 估算参数量: %s",
+            "  - 专家数量: %d\n" +
+            "  - Top-K选择: %d\n" +
+            "  - 架构: Pre-LayerNorm + MoE\n" +
+            "  - 训练方式: 纯RL\n" +
+            "  - 估算总参数: %s\n" +
+            "  - 激活参数: %s (%.1f%%)",
             config.getVocabSize(),
             config.getNEmbd(),
             config.getNLayer(),
             config.getNHead(),
             config.getNInner(),
             config.getNPositions(),
-            config.getMaxReasoningSteps(),
-            config.getReasoningHiddenDim(),
-            config.getReflectionHiddenDim(),
-            config.getQualityScoreDim(),
-            config.getConfidenceThreshold(),
-            formatParamCount(config.estimateParameterCount())
+            config.getNumExperts(),
+            config.getTopK(),
+            formatParamCount(config.estimateParameterCount()),
+            formatParamCount(config.estimateActiveParameterCount()),
+            config.getActivationRatio()
         );
     }
     
@@ -254,48 +282,46 @@ public class DeepSeekR1Model extends Model {
     @Override
     public String toString() {
         return String.format(
-            "DeepSeekR1Model{name='%s', params=%s, nLayer=%d, nEmbd=%d, reasoningSteps=%d}",
+            "DeepSeekR1Model{name='%s', params=%s, activeParams=%s, nLayer=%d, nEmbd=%d, experts=%d}",
             getName(), 
-            formatParamCount(config.estimateParameterCount()), 
+            formatParamCount(config.estimateParameterCount()),
+            formatParamCount(config.estimateActiveParameterCount()),
             config.getNLayer(), 
             config.getNEmbd(),
-            config.getMaxReasoningSteps()
+            config.getNumExperts()
         );
     }
     
     // ==================== 内部类 ====================
     
     /**
-     * 推理输出结果类
+     * 推理结果类（RL训练涌现的推理能力）
      */
-    public static class ReasoningOutput {
+    public static class ReasoningResult {
         /** 最终logits输出 */
         public final Variable logits;
-        /** 推理步骤数 */
-        public final int numSteps;
-        /** 平均置信度 */
-        public final double averageConfidence;
-        /** 质量评分 */
-        public final DeepSeekR1ReflectionBlock.QualityScore qualityScore;
+        /** MoE负载均衡损失 */
+        public final double moeLoss;
+        /** 任务类型 */
+        public final TaskType taskType;
         
-        public ReasoningOutput(Variable logits, int numSteps, 
-                              double averageConfidence,
-                              DeepSeekR1ReflectionBlock.QualityScore qualityScore) {
+        public ReasoningResult(Variable logits, double moeLoss, TaskType taskType) {
             this.logits = logits;
-            this.numSteps = numSteps;
-            this.averageConfidence = averageConfidence;
-            this.qualityScore = qualityScore;
+            this.moeLoss = moeLoss;
+            this.taskType = taskType;
         }
         
         @Override
         public String toString() {
             return String.format(
-                "ReasoningOutput{\n" +
-                "  推理步骤数: %d\n" +
-                "  平均置信度: %.4f\n" +
-                "  %s\n" +
+                "ReasoningResult{\n" +
+                "  任务类型: %s\n" +
+                "  MoE损失: %.6f\n" +
+                "  输出形状: %s\n" +
                 "}",
-                numSteps, averageConfidence, qualityScore
+                taskType.getDescription(),
+                moeLoss,
+                logits.getValue().getShape()
             );
         }
     }

@@ -208,8 +208,9 @@ public class DeepSeekR1Pretrain {
         System.out.println("  - 嵌入维度: " + config.getNEmbd());
         System.out.println("  - Transformer层数: " + config.getNLayer());
         System.out.println("  - 注意力头数: " + config.getNHead());
-        System.out.println("  - 最大推理步骤: " + config.getMaxReasoningSteps());
-        System.out.println("  - 质量评分维度: " + config.getQualityScoreDim());
+        System.out.println("  - 专家数量: " + config.getNumExperts());
+        System.out.println("  - Top-K选择: " + config.getTopK());
+        System.out.println("  - 架构: Pre-LayerNorm + MoE");
         System.out.println("训练配置:");
         System.out.println("  - 训练样本: " + dataset.getSampleCount());
         System.out.println("  - 批次数量: " + dataset.getBatchCount());
@@ -367,7 +368,7 @@ public class DeepSeekR1Pretrain {
                         NdArray targetIds = batch.getTargetIds();
                         Variable inputVar = new Variable(inputIds);
                         
-                        DeepSeekR1Model.ReasoningOutput result = modelCopy.performReasoning(inputVar);
+                        DeepSeekR1Model.ReasoningResult result = modelCopy.performReasoning(inputVar);
                         Variable logits = result.logits;
                         
                         // 计算损失
@@ -381,7 +382,7 @@ public class DeepSeekR1Pretrain {
                         Variable loss = lossFunction.loss(targetVar, logits2D);
                         
                         float lossValue = loss.getValue().getNumber().floatValue();
-                        float confidence = (float) result.averageConfidence;
+                        float moeLoss = (float) result.moeLoss;  // 使用 MoE 损失
                         
                         // 反向传播（在副本上）
                         modelCopy.clearGrads();
@@ -401,7 +402,7 @@ public class DeepSeekR1Pretrain {
                         logits.unChainBackward();
                         inputVar.unChainBackward();
                         
-                        return new BatchResult(true, lossValue, confidence, gradients);
+                        return new BatchResult(true, lossValue, moeLoss, gradients);
                     } catch (Exception e) {
                         System.err.println("⚠️ 并行批次处理失败: " + e.getMessage());
                         e.printStackTrace();
@@ -514,7 +515,7 @@ public class DeepSeekR1Pretrain {
         
         // 前向传播(带推理和反思)
         long forwardStart = System.currentTimeMillis();
-        DeepSeekR1Model.ReasoningOutput result = model.performReasoning(inputVar);
+        DeepSeekR1Model.ReasoningResult result = model.performReasoning(inputVar);
         Variable logits = result.logits;
         long forwardTime = System.currentTimeMillis() - forwardStart;
         
@@ -531,7 +532,7 @@ public class DeepSeekR1Pretrain {
         Variable loss = lossFunction.loss(targetVar, logits2D);
         
         float lossValue = loss.getValue().getNumber().floatValue();
-        float confidence = (float) result.averageConfidence;
+        float moeLoss = (float) result.moeLoss;  // 使用 MoE 损失
         
         // 清空梯度
         model.clearGrads();
@@ -559,7 +560,7 @@ public class DeepSeekR1Pretrain {
                 globalStep, lossValue, forwardTime, backwardTime, stepTime);
         }
         
-        return new StepResult(lossValue, confidence);
+        return new StepResult(lossValue, moeLoss);
     }
     
     /**

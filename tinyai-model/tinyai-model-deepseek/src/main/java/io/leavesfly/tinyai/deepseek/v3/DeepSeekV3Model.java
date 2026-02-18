@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.deepseek.v3;
 
+import io.leavesfly.tinyai.deepseek.base.TaskType;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.model.Model;
 import io.leavesfly.tinyai.ndarr.NdArray;
@@ -125,14 +126,13 @@ public class DeepSeekV3Model extends Model {
         
         return new CodeGenerationResult(
             result.logits,
-            result.codeResult != null ? result.codeResult.detectedLanguage : "Unknown",
-            result.codeResult != null ? result.codeResult.qualityScore : null,
+            result.taskType,
             result.avgMoELoss
         );
     }
     
     /**
-     * 推理任务（任务感知）
+     * 推理任务（MoE自然涌现推理能力）
      * 
      * @param tokenIds token ID序列 [batch_size, seq_len]
      * @return 推理结果
@@ -143,14 +143,13 @@ public class DeepSeekV3Model extends Model {
         
         return new ReasoningResult(
             result.logits,
-            result.reasoningResult.confidence,
-            result.reasoningResult.taskType,
+            result.taskType,
             result.avgMoELoss
         );
     }
     
     /**
-     * 数学计算任务
+     * 数学计算任务（MoE自然涌现数学能力）
      * 
      * @param tokenIds token ID序列 [batch_size, seq_len]
      * @return 数学计算结果
@@ -161,7 +160,7 @@ public class DeepSeekV3Model extends Model {
         
         return new MathResult(
             result.logits,
-            result.reasoningResult.confidence,
+            result.taskType,
             result.avgMoELoss
         );
     }
@@ -316,26 +315,20 @@ public class DeepSeekV3Model extends Model {
      */
     public static class CodeGenerationResult {
         public final Variable logits;
-        public final String detectedLanguage;
-        public final DeepSeekV3CodeBlock.CodeQualityScore qualityScore;
+        public final TaskType taskType;
         public final double moeLoss;
         
-        public CodeGenerationResult(Variable logits, String detectedLanguage,
-                                   DeepSeekV3CodeBlock.CodeQualityScore qualityScore,
-                                   double moeLoss) {
+        public CodeGenerationResult(Variable logits, TaskType taskType, double moeLoss) {
             this.logits = logits;
-            this.detectedLanguage = detectedLanguage;
-            this.qualityScore = qualityScore;
+            this.taskType = taskType;
             this.moeLoss = moeLoss;
         }
         
         @Override
         public String toString() {
             return String.format(
-                "CodeGenerationResult{language='%s', quality=%s, moeLoss=%.6f}",
-                detectedLanguage,
-                qualityScore != null ? String.format("%.2f", qualityScore.getOverallScore()) : "N/A",
-                moeLoss
+                "CodeGenerationResult{taskType=%s, moeLoss=%.6f}",
+                taskType, moeLoss
             );
         }
     }
@@ -345,14 +338,11 @@ public class DeepSeekV3Model extends Model {
      */
     public static class ReasoningResult {
         public final Variable logits;
-        public final double confidence;
         public final TaskType taskType;
         public final double moeLoss;
         
-        public ReasoningResult(Variable logits, double confidence, 
-                              TaskType taskType, double moeLoss) {
+        public ReasoningResult(Variable logits, TaskType taskType, double moeLoss) {
             this.logits = logits;
-            this.confidence = confidence;
             this.taskType = taskType;
             this.moeLoss = moeLoss;
         }
@@ -360,8 +350,7 @@ public class DeepSeekV3Model extends Model {
         @Override
         public String toString() {
             return String.format(
-                "ReasoningResult{confidence=%.4f, taskType=%s, moeLoss=%.6f}",
-                confidence,
+                "ReasoningResult{taskType=%s, moeLoss=%.6f}",
                 taskType != null ? taskType.getDescription() : "未知",
                 moeLoss
             );
@@ -369,24 +358,24 @@ public class DeepSeekV3Model extends Model {
     }
     
     /**
-     * 数学计算结果类
+     * 数学计算结果（简化版）
      */
     public static class MathResult {
         public final Variable logits;
-        public final double confidence;
+        public final TaskType taskType;
         public final double moeLoss;
-        
-        public MathResult(Variable logits, double confidence, double moeLoss) {
+            
+        public MathResult(Variable logits, TaskType taskType, double moeLoss) {
             this.logits = logits;
-            this.confidence = confidence;
+            this.taskType = taskType;
             this.moeLoss = moeLoss;
         }
-        
+            
         @Override
         public String toString() {
             return String.format(
-                "MathResult{confidence=%.4f, moeLoss=%.6f}",
-                confidence, moeLoss
+                "MathResult{taskType=%s, moeLoss=%.6f}",
+                taskType, moeLoss
             );
         }
     }

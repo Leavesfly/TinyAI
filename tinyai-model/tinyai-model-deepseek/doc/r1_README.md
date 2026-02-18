@@ -1,690 +1,496 @@
-# DeepSeek-Rx 技术文档
+<div align="center">
 
-## ⚠️ 重要说明
+# 🧠 DeepSeek-R1 推理增强模型
 
-**本实现是受 DeepSeek-R1 启发的教育性推理模型,而非官方架构的完整复现。**
+**基于 MoE 架构 + 强化学习驱动推理能力涌现**
 
-本项目通过显式设计的推理和反思模块,帮助学习者直观理解推理机制的核心概念。与官方 DeepSeek-R1 的技术架构存在本质差异,详见[架构差异对比](#-与官方架构的差异)部分。
+[![Java](https://img.shields.io/badge/Java-17+-orange.svg)](https://openjdk.java.net/)
+[![TinyAI](https://img.shields.io/badge/TinyAI-Framework-blue.svg)](../../README.md)
+[![DeepSeek](https://img.shields.io/badge/DeepSeek-R1-green.svg)](https://arxiv.org/abs/2501.12948)
 
-## 📋 模型概述
+</div>
 
-DeepSeek-R1 是一个具备**深度推理和自我反思能力**的大语言模型,通过多步推理和反思机制实现复杂任务的可解释性处理。该模型采用 Pre-LayerNorm 架构,完全基于 TinyAI 框架的 **V2 API** 实现。
+## 📋 目录
+
+- [概述](#-概述)
+- [架构设计](#-架构设计)
+- [核心组件](#-核心组件)
+- [使用示例](#-使用示例)
+- [训练流程](#-训练流程)
+- [测试验证](#-测试验证)
+- [与官方架构的差异](#-与官方架构的差异)
+- [参考资料](#-参考资料)
+
+## 🎯 概述
+
+DeepSeek-R1 是 TinyAI 框架中的**推理增强语言模型**实现，基于 [DeepSeek-R1 论文 (arXiv:2501.12948)](https://arxiv.org/abs/2501.12948)。
+
+根据官方论文，R1 与 V3 共享相同的 MoE 基础架构（671B 参数，8 专家，Top-2 路由），核心区别在于**训练方式**：V3 采用标准预训练 + SFT，而 R1 在 V3-Base 之上通过**纯强化学习（RL）**驱动推理能力的自然涌现。
+
+本实现忠实复现了这一设计理念：**R1 复用 V3 的 MoE TransformerBlock**，仅扩展 RL 训练配置。
 
 ### 核心特性
 
-- 🧠 **多步推理** - 支持最多7步迭代推理过程，逐步逼近最优答案
-- 🔄 **自我反思** - 从5个维度评估推理质量，提供改进建议
-- 📊 **置信度评估** - 动态评估每步推理的可信度
-- 💡 **思维链生成** - 输出完整的推理过程，增强可解释性
-- ✅ **完整Variable层面** - 所有计算在Variable层面，梯度完整回传
+| 特性 | 说明 |
+|------|------|
+| **MoE 架构** | 复用 V3 的 MoE TransformerBlock，支持多专家路由 |
+| **RL 驱动推理** | 通过 RLHF/RLVR 训练器优化推理能力 |
+| **任务感知** | 支持 REASONING、MATH 等多种任务类型 |
+| **序列生成** | 贪婪解码的自回归文本生成 |
+| **Variable 完整性** | 所有计算在 Variable 层面完成，梯度正确回传 |
+| **多阶段训练** | 预训练 → 后训练(SFT) → 强化学习(RL) 完整流程 |
 
-### 技术亮点
+### 模型规格
 
-1. **迭代推理机制**：支持7步渐进式推理，每步评估置信度
-2. **多维度反思**：从准确性、逻辑性、完整性、创新性、可行性5个维度评估
-3. **Variable层面计算**：Token嵌入使用`indexSelect`、`reshape`、`repeat`算子
-4. **自适应阈值**：根据任务复杂度动态调整置信度阈值
+| 配置 | 嵌入维度 | 层数 | 注意力头 | 专家数 | Top-K | 序列长度 |
+|------|---------|------|---------|--------|-------|---------|
+| **Tiny** | 256 | 6 | 8 | 4 | 2 | 512 |
+| **Small** | 512 | 8 | 8 | 8 | 2 | 1024 |
+| **Standard** | 768 | 12 | 12 | 8 | 2 | 2048 |
 
 ## 🏗️ 架构设计
 
-### 整体架构图
+### 整体架构
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                    DeepSeekR1Model                           │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │              DeepSeekR1Block (主体块)                   │ │
-│  │  ┌───────────────────────────────────────────────────┐  │ │
-│  │  │  DeepSeekR1TokenEmbedding (✅ Variable层面)       │  │ │
-│  │  │  - indexSelect选择Token嵌入                       │  │ │
-│  │  │  - reshape + repeat扩展Position嵌入                │  │ │
-│  │  └───────────────────────────────────────────────────┘  │ │
-│  │  ┌───────────────────────────────────────────────────┐  │ │
-│  │  │  N × [DeepSeekR1TransformerBlock]                 │  │ │
-│  │  │  - MultiHeadAttention (V2)                        │  │ │
-│  │  │  - LayerNorm (V2)                                 │  │ │
-│  │  │  - Linear (V2)                                    │  │ │
-│  │  │  - GELU (V2)                                      │  │ │
-│  │  │  - Dropout (V2)                                   │  │ │
-│  │  └───────────────────────────────────────────────────┘  │ │
-│  │  ┌───────────────────────────────────────────────────┐  │ │
-│  │  │  DeepSeekR1ReasoningBlock (多步推理)              │  │ │
-│  │  │  ┌──────────────────────────────────────────────┐ │  │ │
-│  │  │  │  第1步推理 → 置信度评估                      │ │  │ │
-│  │  │  │  第2步推理 → 置信度评估                      │ │  │ │
-│  │  │  │  ...                                         │ │  │ │
-│  │  │  │  第7步推理 → 置信度评估                      │ │  │ │
-│  │  │  └──────────────────────────────────────────────┘ │  │ │
-│  │  │  - 最多7步迭代推理                                │  │ │
-│  │  │  - 每步动态置信度评估                             │  │ │
-│  │  │  - 推理结果验证                                   │  │ │
-│  │  └───────────────────────────────────────────────────┘  │ │
-│  │  ┌───────────────────────────────────────────────────┐  │ │
-│  │  │  DeepSeekR1ReflectionBlock (自我反思)             │  │ │
-│  │  │  ┌──────────────────────────────────────────────┐ │  │ │
-│  │  │  │  质量评估 (5个维度)                          │ │  │ │
-│  │  │  │  1. 准确性评估                               │ │  │ │
-│  │  │  │  2. 逻辑性评估                               │ │  │ │
-│  │  │  │  3. 完整性评估                               │ │  │ │
-│  │  │  │  4. 创新性评估                               │ │  │ │
-│  │  │  │  5. 可行性评估                               │ │  │ │
-│  │  │  └──────────────────────────────────────────────┘ │  │ │
-│  │  │  - 综合质量评分                                   │  │ │
-│  │  │  - 改进建议生成                                   │  │ │
-│  │  │  - 是否需要重新推理                               │  │ │
-│  │  └───────────────────────────────────────────────────┘  │ │
-│  │  │  LayerNorm (V2) + Linear (V2)                        │  │ │
-│  │  └───────────────────────────────────────────────────┘  │ │
-│  └─────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────┘
+DeepSeek-R1 模型架构（MoE）
+├── DeepSeekR1Model (extends Model)
+│   └── DeepSeekR1Block (extends Module)
+│       ├── DeepSeekR1TokenEmbedding
+│       │   ├── Token 嵌入 [vocabSize, nEmbd]
+│       │   ├── 位置嵌入 [nPositions, nEmbd]
+│       │   └── Dropout 正则化
+│       ├── DeepSeekV3TransformerBlock × N 层（✅ 复用 V3 的 MoE 组件）
+│       │   ├── Pre-LayerNorm
+│       │   ├── 多头自注意力 (MHA)
+│       │   ├── 残差连接
+│       │   ├── Pre-LayerNorm
+│       │   ├── MoE 前馈网络（多专家 + Top-K 路由）
+│       │   └── 残差连接
+│       ├── Final LayerNorm
+│       └── 输出投影层 Linear [nEmbd → vocabSize]
+└── DeepSeekR1Config (extends DeepSeekBaseConfig)
+    ├── 基础 MoE 架构配置（继承自 V3）
+    └── RL 训练配置（R1 特有）
 ```
 
-### 核心组件
+### R1 与 V3 的关系
 
-#### 1. DeepSeekR1Config（完全独立配置类，481行）
+```
+DeepSeekBaseConfig（共享基础配置）
+    ├── DeepSeekV3Config（V3 特有：代码生成、MTP 等）
+    └── DeepSeekR1Config（R1 特有：RL 训练参数）
 
-**基础配置**：
-- `vocabSize`: 词汇表大小（默认50257）
-- `nPositions`: 最大序列长度（默认2048）
-- `nEmbd`: 嵌入维度（默认512）
-- `nLayer`: Transformer层数（默认12）
-- `nHead`: 注意力头数（默认8）
-- `nInner`: 前馈网络维度（默认2048）
+关键设计：R1Block 内部将 R1Config 转换为 V3Config，
+         直接复用 DeepSeekV3TransformerBlock 组件
+```
 
-**推理配置**：
-- `maxReasoningSteps`: 最大推理步骤数（默认7）
-- `confidenceThreshold`: 置信度阈值（默认0.7）
-- `reasoningHiddenDim`: 推理模块隐藏层维度（默认1024）
-- `enableIterativeReasoning`: 是否启用迭代推理（默认true）
+### 数据流
 
-**反思配置**：
-- `reflectionHiddenDim`: 反思模块隐藏层维度（默认1024）
-- `qualityThreshold`: 质量评估阈值（默认0.75）
-- `numQualityDimensions`: 质量评估维度数量（默认5）
-- `enableSelfImprovement`: 是否启用自我改进（默认true）
+```
+输入 Token IDs [batch, seq]
+    ↓
+DeepSeekR1TokenEmbedding
+    Token 嵌入 + 位置嵌入 → [batch, seq, embd]
+    ↓
+DeepSeekV3TransformerBlock × N（MoE 架构）
+    MHA → MoE FFN → 残差连接
+    ↓
+Final LayerNorm
+    ↓
+Linear 输出投影 → Logits [batch, seq, vocab]
+```
 
-**Dropout配置**：
-- `residPdrop`: 残差dropout（默认0.1）
-- `embdPdrop`: 嵌入dropout（默认0.1）
-- `attnPdrop`: 注意力dropout（默认0.1）
+## 🔧 核心组件
+
+### 1. 模型配置 (`DeepSeekR1Config`)
+
+继承 `DeepSeekBaseConfig`，与 V3 共享 MoE 基础架构配置，仅扩展 RL 训练参数。
 
 **预设配置工厂方法**：
+
 ```java
-// 微型配置（快速测试）
-DeepSeekR1Config.createTinyConfig()
-// 256维, 6层, 8头, 7步推理, 512序列长度
+// 微型配置（快速测试）：256维, 6层, 8头, 4专家, Top-2, 512序列
+DeepSeekR1Config.createTinyConfig();
 
-// 标准配置（标准应用）
-DeepSeekR1Config.createStandardConfig()
-// 512维, 12层, 8头, 7步推理, 2048序列长度
+// 小型配置（学习实验）：512维, 8层, 8头, 8专家, Top-2, 1024序列
+DeepSeekR1Config.createSmallConfig();
 
-// 小型配置（学习实验）
-DeepSeekR1Config.createSmallConfig()
-// 384维, 8层, 8头, 5步推理, 1024序列长度
-
-// 大型配置（高级应用）
-DeepSeekR1Config.createLargeConfig()
-// 768维, 18层, 12头, 7步推理, 2048序列长度
+// 标准配置（标准应用）：768维, 12层, 12头, 8专家, Top-2, 2048序列
+DeepSeekR1Config.createStandardConfig();
 ```
 
-#### 2. DeepSeekR1TokenEmbedding（V2 Module，完全Variable层面）
+**R1 特有的 RL 训练配置**：
 
-**核心实现**：
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `rlExplorationRate` | 0.1 | RL 探索率 |
+| `rlDiscountFactor` | 0.99 | 奖励折扣因子 |
+| `rlPolicyLearningRate` | 1e-5 | 策略学习率 |
+| `rlValueLearningRate` | 1e-4 | 值函数学习率 |
+| `rlClipRange` | 0.2 | PPO clip 范围 |
+| `rlEntropyCoefficient` | 0.01 | 熵系数（鼓励探索） |
+| `rlMaxGradNorm` | 1.0 | 最大梯度范数 |
+| `rlBatchSize` | 32 | RL 训练批次大小 |
+| `rlRewardScale` | 1.0 | 奖励缩放因子 |
+
+### 2. 主体块 (`DeepSeekR1Block`)
+
+R1 的核心计算模块，**直接复用 V3 的 MoE TransformerBlock**。
+
+初始化时将 R1Config 转换为 V3Config，复用 V3 组件：
+
 ```java
-// ✅ 完全在Variable层面实现
-private Variable getTokenEmbeddingsV2(Variable tokenIds, Variable tokenEmbedParam,
-                                      int batchSize, int sequenceLength) {
-    // 1. 展平tokenIds: [batch, seq] -> [batch*seq]
-    Variable flatIds = tokenIds.reshape(Shape.of(-1));
-    
-    // 2. 使用indexSelect选择嵌入: [batch*seq, embd]
-    Variable flatEmbeds = tokenEmbedParam.indexSelect(0, flatIds);
-    
-    // 3. Reshape回3D: [batch, seq, embd]
-    return flatEmbeds.reshape(Shape.of(batchSize, sequenceLength, embeddingDim));
-}
-
-private Variable getPositionEmbeddingsV2(Variable posEmbedParam, int batchSize, int sequenceLength) {
-    // 1. 创建位置索引
-    Variable posIds = new Variable(NdArray.of(posIndices));
-    
-    // 2. indexSelect选择位置嵌入
-    Variable posEmbeds = posEmbedParam.indexSelect(0, posIds);
-    
-    // 3. Reshape + repeat扩展batch维度
-    Variable posEmbeds3D = posEmbeds.reshape(Shape.of(1, sequenceLength, embeddingDim));
-    return posEmbeds3D.repeat(batchSize, 1, 1);
-}
+// R1Block 内部实现
+DeepSeekV3Config v3Config = convertToV3Config(config);
+DeepSeekV3TransformerBlock block = new DeepSeekV3TransformerBlock(name, v3Config);
 ```
 
-**Variable算子使用**：
-- ✅ `indexSelect` - 索引选择嵌入向量
-- ✅ `reshape` - 形状变换
-- ✅ `repeat` - 维度重复扩展
-- ✅ `add` - 嵌入相加
+**支持三种前向传播模式**：
 
-#### 3. DeepSeekR1ReasoningBlock（多步推理模块）
+| 方法 | 说明 | 返回值 |
+|------|------|--------|
+| `forward(Variable... inputs)` | 标准前向传播 | `Variable` logits |
+| `forward(Variable tokenIds, TaskType taskType)` | 带任务类型的前向传播 | `Variable` logits |
+| `forwardWithDetails(Variable tokenIds, TaskType taskType)` | 带 MoE 损失的详细输出 | `DetailedForwardResult` |
 
-**推理机制**：
+`DetailedForwardResult` 包含最终 logits 和平均 MoE 负载均衡损失。
+
+### 3. Token 嵌入层 (`DeepSeekR1TokenEmbedding`)
+
+完全在 Variable 层面实现，确保梯度正确回传：
 
 ```java
-/**
- * 执行多步推理
- * 
- * 推理流程：
- * 1. 初始化推理状态
- * 2. 迭代推理（最多7步）
- *    - 执行单步推理
- *    - 评估置信度
- *    - 判断是否需要继续
- * 3. 返回推理结果
- */
-public ReasoningResult performReasoning(Variable input, Variable context) {
-    List<ReasoningStep> steps = new ArrayList<>();
-    Variable currentState = input;
-    
-    for (int step = 0; step < config.getMaxReasoningSteps(); step++) {
-        // 单步推理
-        Variable stepOutput = reasoningLayer.forward(currentState);
-        
-        // 置信度评估
-        float confidence = evaluateConfidence(stepOutput);
-        
-        // 记录推理步骤
-        steps.add(new ReasoningStep(step + 1, stepOutput, confidence));
-        
-        // 判断是否达到置信度阈值
-        if (confidence >= config.getConfidenceThreshold()) {
-            break;
-        }
-        
-        // 更新状态
-        currentState = stepOutput;
+// Token 嵌入：使用 indexSelect 算子
+Variable flatIds = tokenIds.reshape(Shape.of(batchSize * sequenceLength));
+Variable flatEmbeds = tokenEmbedParam.indexSelect(0, flatIds);
+Variable tokenEmbeds = flatEmbeds.reshape(Shape.of(batchSize, sequenceLength, embeddingDim));
+
+// 位置嵌入：返回 [1, seq, embd]，依赖广播机制自动扩展
+Variable posEmbeds = posEmbedParam.indexSelect(0, posIds);
+Variable posEmbeds3D = posEmbeds.reshape(Shape.of(1, sequenceLength, embeddingDim));
+
+// 合并嵌入并应用 Dropout
+Variable combined = tokenEmbeds.add(positionEmbeds);
+return dropout.forward(combined);
+```
+
+**Variable 算子使用**：
+- **`indexSelect`** — 索引选择（替代手动 NdArray 操作）
+- **`reshape`** — 形状变换
+- **`add`** — 嵌入合并（利用广播机制）
+
+### 4. 模型类 (`DeepSeekR1Model`)
+
+提供高层 API，支持多种推理模式：
+
+| 方法 | 说明 |
+|------|------|
+| `predict(Variable tokenIds)` | 标准预测，返回 logits |
+| `predict(Variable tokenIds, TaskType taskType)` | 带任务类型的预测 |
+| `performReasoning(Variable tokenIds)` | 推理任务，返回 `ReasoningResult` |
+| `solveMath(Variable tokenIds)` | 数学计算任务 |
+| `generateSequence(NdArray promptIds, int maxNewTokens)` | 贪婪解码序列生成 |
+
+`ReasoningResult` 包含三个字段：
+- **`logits`** — 最终 logits 输出
+- **`moeLoss`** — MoE 负载均衡损失
+- **`taskType`** — 任务类型（REASONING / MATH 等）
+
+**工厂方法**：
+
+```java
+DeepSeekR1Model.createTinyModel("name");      // 微型模型
+DeepSeekR1Model.createSmallModel("name");     // 小型模型
+DeepSeekR1Model.createStandardModel("name");  // 标准模型
+```
+
+## 💻 使用示例
+
+### 1. 创建模型并推理
+
+```java
+// 创建微型模型（用于快速测试）
+DeepSeekR1Model model = DeepSeekR1Model.createTinyModel("DeepSeek-R1-Tiny");
+model.printModelInfo();
+
+// 准备输入 [batch_size=2, seq_len=8]
+DeepSeekR1Config config = model.getConfig();
+float[][] inputData = new float[2][8];
+for (int b = 0; b < 2; b++) {
+    for (int s = 0; s < 8; s++) {
+        inputData[b][s] = (float) (Math.random() * config.getVocabSize());
     }
-    
-    return new ReasoningResult(steps);
+}
+
+// 执行推理
+Variable logits = model.predict(new Variable(NdArray.of(inputData)));
+System.out.println("输出形状: " + logits.getValue().getShape());
+// 输出形状: [2, 8, 50257]
+```
+
+### 2. 带详细信息的推理
+
+```java
+// 执行推理任务（返回 MoE 损失等详细信息）
+NdArray tokenIds = NdArray.of(inputData);
+DeepSeekR1Model.ReasoningResult result = model.performReasoning(new Variable(tokenIds));
+
+System.out.println("任务类型: " + result.taskType.getDescription());
+System.out.println("MoE 损失: " + result.moeLoss);
+System.out.println("输出形状: " + result.logits.getValue().getShape());
+```
+
+### 3. 序列生成
+
+```java
+// 自回归文本生成（贪婪解码）
+float[][] promptData = new float[][]{{1, 15, 23, 42, 100}};
+NdArray promptIds = NdArray.of(promptData);
+int maxNewTokens = 10;
+
+NdArray generated = model.generateSequence(promptIds, maxNewTokens);
+System.out.println("生成序列形状: " + generated.getShape());
+// 生成序列形状: [1, 15]
+
+// 打印生成的 token
+for (int i = 0; i < 15; i++) {
+    System.out.printf("%.0f ", generated.get(0, i));
 }
 ```
 
-**关键特性**：
-- ✅ 最多7步迭代推理
-- ✅ 每步动态评估置信度
-- ✅ 置信度达标提前终止
-- ✅ 完整记录推理轨迹
-
-#### 4. DeepSeekR1ReflectionBlock（自我反思模块）
-
-**反思机制**：
+### 4. 自定义配置
 
 ```java
-/**
- * 执行自我反思
- * 
- * 反思维度（5个）：
- * 1. 准确性 (Accuracy) - 推理结果的正确性
- * 2. 逻辑性 (Logic) - 推理过程的逻辑连贯性
- * 3. 完整性 (Completeness) - 是否考虑所有相关因素
- * 4. 创新性 (Creativity) - 是否有新颖的见解
- * 5. 可行性 (Feasibility) - 结果的实际可行性
- */
-public ReflectionResult reflect(Variable reasoningOutput, Variable originalInput) {
-    // 1. 评估准确性
-    float accuracyScore = evaluateAccuracy(reasoningOutput, originalInput);
-    
-    // 2. 评估逻辑性
-    float logicScore = evaluateLogic(reasoningOutput);
-    
-    // 3. 评估完整性
-    float completenessScore = evaluateCompleteness(reasoningOutput);
-    
-    // 4. 评估创新性
-    float creativityScore = evaluateCreativity(reasoningOutput);
-    
-    // 5. 评估可行性
-    float feasibilityScore = evaluateFeasibility(reasoningOutput);
-    
-    // 综合评分
-    float qualityScore = (accuracyScore + logicScore + completenessScore + 
-                         creativityScore + feasibilityScore) / 5.0f;
-    
-    // 生成改进建议
-    List<String> suggestions = generateImprovementSuggestions(
-        accuracyScore, logicScore, completenessScore, 
-        creativityScore, feasibilityScore
-    );
-    
-    // 判断是否需要重新推理
-    boolean needsRefinement = qualityScore < config.getQualityThreshold();
-    
-    return new ReflectionResult(
-        qualityScore,
-        accuracyScore,
-        logicScore,
-        completenessScore,
-        creativityScore,
-        feasibilityScore,
-        suggestions,
-        needsRefinement
-    );
-}
-```
-
-**反思结果**：
-```java
-public static class ReflectionResult {
-    float qualityScore;           // 综合质量评分 (0-1)
-    float accuracyScore;          // 准确性评分
-    float logicScore;             // 逻辑性评分
-    float completenessScore;      // 完整性评分
-    float creativityScore;        // 创新性评分
-    float feasibilityScore;       // 可行性评分
-    List<String> suggestions;     // 改进建议
-    boolean needsRefinement;      // 是否需要重新推理
-}
-```
-
-## 🚀 使用指南
-
-### 1. 基本使用
-
-```java
-
-
-// 创建模型（使用工厂方法）
-DeepSeekR1Model model=DeepSeekR1Model.createStandardModel("deepseek-r1");
-
-// 打印模型信息
-        model.printModelInfo();
-
-// 基础推理
-        NdArray tokenIds=NdArray.of(new int[][]{{1,15,23,42}});
-        Variable output=model.predict(new Variable(tokenIds));
-        System.out.println("输出形状: "+output.getValue().getShape());
-```
-
-### 2. 多步推理
-
-```java
-// 执行带详细信息的推理
-DeepSeekR1Model.ReasoningOutput result = 
-    model.performReasoning(new Variable(tokenIds));
-
-System.out.println("推理步骤数: " + result.numReasoningSteps);
-System.out.println("平均置信度: " + result.averageConfidence);
-System.out.println("质量评分: " + result.qualityScore);
-
-// 获取详细推理过程
-DeepSeekR1Block.DetailedForwardResult detailedResult = 
-    model.predictWithDetails(new Variable(tokenIds));
-
-// 推理结果
-DeepSeekR1ReasoningBlock.ReasoningResult reasoningResult = 
-    detailedResult.reasoningResult;
-System.out.println("推理步骤: " + reasoningResult.numSteps);
-System.out.println("置信度: " + reasoningResult.averageConfidence);
-
-// 反思结果
-DeepSeekR1ReflectionBlock.ReflectionResult reflectionResult = 
-    detailedResult.reflectionResult;
-System.out.println("质量评分: " + reflectionResult.qualityScore);
-System.out.println("准确性: " + reflectionResult.accuracyScore);
-System.out.println("逻辑性: " + reflectionResult.logicScore);
-System.out.println("完整性: " + reflectionResult.completenessScore);
-System.out.println("创新性: " + reflectionResult.creativityScore);
-System.out.println("可行性: " + reflectionResult.feasibilityScore);
-System.out.println("需要改进: " + reflectionResult.needsRefinement);
-
-// 改进建议
-for (String suggestion : reflectionResult.suggestions) {
-    System.out.println("- " + suggestion);
-}
-```
-
-### 3. 自定义配置
-
-```java
-// 创建自定义配置
+// 创建自定义 MoE 配置
 DeepSeekR1Config config = new DeepSeekR1Config();
+config.setVocabSize(5000);
+config.setNEmbd(128);
+config.setNLayer(4);
+config.setNHead(4);
+config.setNInner(512);
+config.setNPositions(256);
 
-// 基础配置
-config.setVocabSize(50257);
-config.setNEmbd(512);
-config.setNLayer(12);
-config.setNHead(8);
+// MoE 配置（R1 使用与 V3 相同的 MoE 架构）
+config.setNumExperts(8);
+config.setTopK(2);
+config.setExpertHiddenDim(512);
 
-// 推理配置
-config.setMaxReasoningSteps(7);          // 最多7步推理
-config.setConfidenceThreshold(0.7f);     // 置信度阈值
-config.setEnableIterativeReasoning(true); // 启用迭代推理
-
-// 反思配置
-config.setQualityThreshold(0.75f);       // 质量阈值
-config.setNumQualityDimensions(5);       // 5个评估维度
-config.setEnableSelfImprovement(true);   // 启用自我改进
+// RL 训练配置（R1 特有）
+config.setRlExplorationRate(0.1);
+config.setRlDiscountFactor(0.99);
 
 // 创建模型
-DeepSeekR1Model model = new DeepSeekR1Model("custom-r1", config);
+DeepSeekR1Model model = new DeepSeekR1Model("DeepSeek-R1-Custom", config);
+System.out.println(model.getConfigSummary());
 ```
 
-### 4. 序列生成
+### 5. 对比不同规模的模型
 
 ```java
-// 贪婪解码生成序列
-NdArray promptIds = NdArray.of(new int[][]{{1, 2, 3}});
-NdArray generated = model.generateSequence(
-    promptIds, 
-    50  // 最大生成50个token
-);
+DeepSeekR1Model tinyModel = DeepSeekR1Model.createTinyModel("R1-Tiny");
+DeepSeekR1Model smallModel = DeepSeekR1Model.createSmallModel("R1-Small");
+DeepSeekR1Model standardModel = DeepSeekR1Model.createStandardModel("R1-Standard");
 
-System.out.println("生成序列长度: " + generated.getShape().getDimension(1));
+// 打印对比信息
+System.out.println(tinyModel);
+// DeepSeekR1Model{name='R1-Tiny', params=..., nLayer=6, nEmbd=256, experts=4}
+System.out.println(smallModel);
+// DeepSeekR1Model{name='R1-Small', params=..., nLayer=8, nEmbd=512, experts=8}
+System.out.println(standardModel);
+// DeepSeekR1Model{name='R1-Standard', params=..., nLayer=12, nEmbd=768, experts=8}
 ```
 
-## 📊 性能特点
+## 📈 训练流程
 
-### 模型规模
+### 多阶段训练
 
-| 配置 | 参数量 | 层数 | 维度 | 注意力头 | 推理步骤 | 序列长度 |
-|------|-------|------|------|---------|---------|---------|
-| Tiny | ~20M | 6 | 256 | 8 | 7 | 512 |
-| Small | ~60M | 8 | 384 | 8 | 5 | 1024 |
-| Standard | ~100M | 12 | 512 | 8 | 7 | 2048 |
-| Large | ~350M | 18 | 768 | 12 | 7 | 2048 |
+```
+阶段1: 预训练（因果语言建模）
+  DeepSeekR1PretrainV2 — 继承 DeepSeekBasePretrain，使用 SGD 优化器
+    ↓
+阶段2: 后训练（监督微调 SFT）
+  DeepSeekR1Posttrain — 推理质量优化
+    ↓
+阶段3: 强化学习（RL）
+  DeepSeekR1RLHFTrainer — 人类反馈强化学习
+  DeepSeekR1RLVRTrainer — 可验证奖励强化学习
+```
 
-### 推理特性
+### 预训练 (`DeepSeekR1PretrainV2`)
 
-| 特性 | 描述 | 优势 |
-|------|------|------|
-| 多步推理 | 最多7步迭代 | 逐步逼近最优答案 |
-| 置信度评估 | 每步动态评估 | 自适应终止条件 |
-| 自我反思 | 5维度评估 | 全面质量保证 |
-| 改进建议 | 自动生成 | 可解释性强 |
-
-### V2组件覆盖
-
-| 组件 | 使用位置 | Variable层面 |
-|------|----------|------------|
-| Module | 所有层基类 | ✅ |
-| Parameter | Token/Position嵌入 | ✅ |
-| LayerNorm | Transformer块、最终层 | ✅ |
-| MultiHeadAttention | Transformer块 | ✅ |
-| Linear | MLP、推理、反思、输出 | ✅ |
-| GELU | MLP | ✅ |
-| Dropout | 所有分支 | ✅ |
-
-## 🔬 训练支持
-
-### 训练器
-
-R1提供完整的训练支持，位于`training/`目录：
-
-1. **DeepSeekR1Pretrain** - 预训练
-   - 从随机初始化开始训练
-   - 大规模语料预训练
-
-2. **DeepSeekR1Finetune** - 微调
-   - 在预训练模型基础上微调
-   - 任务特定数据适配
-
-3. **DeepSeekR1RLTrainer** - 强化学习训练器
-   - 基于奖励的模型优化
-   - 支持PPO、DPO等RL算法
-   - 奖励函数考虑准确性、推理质量、反思深度
-
-4. **DeepSeekR1Inference** - 推理
-   - 高效推理实现
-   - 支持批量推理
-
-5. **DeepSeekR1Evaluator** - 评估器
-   - 模型性能评估
-   - 多维度指标计算
-
-6. **DeepSeekR1Generator** - 生成器
-   - 文本生成实现
-   - 支持多种解码策略
-
-### 强化学习训练
+继承 `DeepSeekBasePretrain`，实现因果语言建模。R1 的预训练使用 SGD 优化器以减少内存占用：
 
 ```java
-// 创建RL训练器
-DeepSeekR1RLTrainer trainer = new DeepSeekR1RLTrainer(
-    maxEpoch,
-    trainingMonitor,
-    evaluator
-);
+DeepSeekR1Model model = DeepSeekR1Model.createTinyModel("R1-Pretrain");
+DeepSeekR1Dataset dataset = new DeepSeekR1Dataset(...);
 
-// 初始化
-trainer.init(dataset, model, lossFunction, optimizer);
-
-// 设置奖励权重
-trainer.setRewardWeights(
-    0.4f,  // 准确性权重
-    0.3f,  // 推理质量权重
-    0.2f,  // 反思深度权重
-    0.1f   // 一致性权重
-);
-
-// 训练
-trainer.trainRL();
+DeepSeekR1PretrainV2 pretrainer = new DeepSeekR1PretrainV2(model, dataset);
+pretrainer.train();
 ```
+
+预训练损失计算流程：
+1. 前向传播获取 logits `[batch, seq, vocab]`
+2. Reshape 为 2D `[batch*seq, vocab]`
+3. 使用 SoftmaxCE 计算交叉熵损失
+4. 反向传播 + 梯度裁剪 + SGD 更新
+
+### RLHF 训练 (`DeepSeekR1RLHFTrainer`)
+
+通过人类反馈的强化学习优化推理质量：
+
+```java
+DeepSeekR1RLHFTrainer trainer = new DeepSeekR1RLHFTrainer(model, dataset);
+
+// 配置训练参数
+trainer.configure(
+    3,       // maxEpochs
+    1e-5f,   // learningRate
+    1.0f,    // rewardWeight（人类反馈权重）
+    0.5f     // qualityWeight（MoE 质量奖励权重）
+);
+
+// 开始训练
+trainer.train();
+```
+
+**RLHF 奖励计算**：
+
+```
+综合奖励 = rewardWeight × avgHumanReward + qualityWeight × (1 - moeLoss)
+```
+
+- **人类反馈奖励** — 来自标注数据的奖励信号
+- **MoE 质量奖励** — MoE 负载均衡损失越小，奖励越大（`1 - moeLoss`）
+- 训练目标：最大化综合奖励（损失 = 负奖励）
+
+训练过程包含梯度裁剪（默认 `maxGradNorm=0.5`）和检查点保存。
+
+### RLVR 训练 (`DeepSeekR1RLVRTrainer`)
+
+基于可验证奖励的强化学习训练，通过自动化验证器评估推理结果质量，无需人类标注。
+
+### 推理引擎 (`DeepSeekR1Inference`)
+
+支持文本生成和推理执行。
 
 ## 🧪 测试验证
 
 ### 编译验证
 
 ```bash
-# 编译模块
 cd tinyai-model-deepseek
 mvn clean compile
-
-# 运行测试
-mvn test -Dtest="DeepSeekR1Test"
 ```
 
-### 功能验证
+### 运行演示
 
-运行演示程序：
 ```bash
-mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.deepseek.rx.DeepSeekR1Demo"
+mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.deepseek.r1.DeepSeekR1Demo"
 ```
 
-### 验证清单
+演示程序（`DeepSeekR1Demo.java`）包含 6 个示例：
 
-- ✅ 模型创建和初始化
-- ✅ Token嵌入Variable层面计算
-- ✅ 多步推理功能
-- ✅ 置信度评估
-- ✅ 自我反思机制
-- ✅ 质量评分计算
-- ✅ 改进建议生成
-- ✅ 梯度完整回传
-- ✅ 编译通过无错误
-
-## 🔍 核心优势
-
-### 1. Variable层面完整性
-
-**TokenEmbedding**：
-- ✅ 使用`indexSelect`索引选择，而非手动NdArray操作
-- ✅ 使用`reshape`和`repeat`进行形状变换和扩展
-- ✅ 完整计算图，梯度正确回传到嵌入参数
-
-**与V3相同的实现**：
-```java
-// ✅ 完全在Variable层面
-Variable flatIds = tokenIds.reshape(Shape.of(-1));
-Variable flatEmbeds = tokenEmbedParam.indexSelect(0, flatIds);
-return flatEmbeds.reshape(Shape.of(batchSize, seqLen, nEmbd));
-```
-
-### 2. 多步推理机制
-
-**迭代推理流程**：
-1. 初始化推理状态
-2. 执行单步推理
-3. 评估置信度
-4. 判断是否继续（置信度 vs 阈值）
-5. 更新状态
-6. 重复步骤2-5，最多7次
-
-**优势**：
-- ✅ 逐步逼近最优答案
-- ✅ 自适应终止条件
-- ✅ 完整推理轨迹记录
-- ✅ 可解释性强
-
-### 3. 自我反思评估
-
-**5个评估维度**：
-
-| 维度 | 含义 | 作用 |
-|------|------|------|
-| 准确性 | 推理结果的正确性 | 确保答案可靠 |
-| 逻辑性 | 推理过程的逻辑连贯性 | 确保推理合理 |
-| 完整性 | 是否考虑所有相关因素 | 确保答案全面 |
-| 创新性 | 是否有新颖的见解 | 鼓励创造性思维 |
-| 可行性 | 结果的实际可行性 | 确保答案实用 |
-
-**综合评分**：
-```java
-qualityScore = (accuracy + logic + completeness + creativity + feasibility) / 5.0
-```
-
-**改进建议生成**：
-- 针对每个低分维度给出具体建议
-- 帮助模型自我改进
-- 增强可解释性
-
-### 4. 与V3的对比
-
-| 特性 | R1 | V3 |
-|------|----|----|---|
-| 架构 | 标准Transformer | MoE (8专家) |
-| 主要能力 | 推理、反思 | 代码生成、多任务 |
-| 推理机制 | 7步迭代推理 | 任务感知推理 |
-| 反思机制 | 5维度完整反思 | 自我纠错 |
-| 参数效率 | 全部激活 | 激活~25% |
-| 适用场景 | 推理、问题求解 | 代码、数学、多模态 |
+| 示例 | 说明 |
+|------|------|
+| **示例1** | 创建模型并打印架构信息和配置摘要 |
+| **示例2** | 基础推理 — 标准前向传播，验证输出形状 |
+| **示例3** | 带详细信息的推理 — 包含 MoE 损失的 `ReasoningResult` |
+| **示例4** | 序列生成 — 自回归贪婪解码生成新 token |
+| **示例5** | 自定义配置模型 — 灵活的 MoE + RL 配置 |
+| **示例6** | 对比不同规模的模型 — Tiny / Small / Standard 参数对比 |
 
 ## 🔍 与官方架构的差异
 
-### 官方 DeepSeek-R1 架构特征
+### 官方 DeepSeek-R1 架构
 
-根据 DeepSeek 官方技术报告([arXiv:2501.12948](https://arxiv.org/abs/2501.12948)),真实的 DeepSeek-R1 具有以下核心特征:
+根据 [DeepSeek-R1 论文 (arXiv:2501.12948)](https://arxiv.org/abs/2501.12948)：
 
 | 特性 | 官方 DeepSeek-R1 |
 |------|------------------|
 | **基础模型** | 基于 DeepSeek-V3-Base |
-| **总参数量** | 671B(6710亿)参数 |
-| **激活参数** | 每token激活 37B 参数 |
-| **架构类型** | **Mixture-of-Experts (MoE)** |
-| **层数** | 61层 Transformer |
-| **注意力机制** | **Multi-Head Latent Attention (MLA)** |
+| **总参数量** | 671B 参数 |
+| **激活参数** | 每 token 激活 37B |
+| **架构类型** | MoE（8 专家，Top-2 路由） |
+| **层数** | 61 层 Transformer |
+| **注意力机制** | Multi-Head Latent Attention (MLA) |
 | **上下文长度** | 128K tokens |
-| **训练方式** | **纯强化学习(RL)** 驱动推理能力 |
-| **推理能力** | 通过RL自然涌现的思维链推理 |
-| **关键创新** | RL直接激励推理能力,无需大量SFT数据 |
+| **训练方式** | 纯 RL 驱动推理能力涌现 |
+| **关键创新** | RL 直接激励推理能力，无需大量 SFT 数据 |
 
-**官方训练流程**:
-- **DeepSeek-R1-Zero**: 仅使用RL训练,无监督微调,展示推理能力自然涌现
-- **DeepSeek-R1**: 多阶段训练(冷启动数据 + RL + 拒绝采样SFT + 二次RL)
+**官方训练流程**：
+- **DeepSeek-R1-Zero**：仅使用 RL 训练，无监督微调，展示推理能力自然涌现
+- **DeepSeek-R1**：多阶段训练（冷启动数据 + RL + 拒绝采样 SFT + 二次 RL）
 
-### 核心差异对比表
+### 核心差异对比
 
-| 对比维度 | 官方 DeepSeek-R1 | 本项目实现 | 差异程度 |
-|---------|-----------------|-----------|---------|
-| **模型规模** | 671B参数 | 20M-350M | **~2000倍差距** |
-| **架构类型** | MoE(8专家) | 标准Dense Transformer | **架构完全不同** |
-| **注意力** | MLA(潜在注意力) | 标准多头注意力 | **机制不同** |
-| **推理方式** | RL涌现的隐式推理 | 显式7步迭代模块 | **哲学不同** |
-| **反思机制** | 通过RL奖励信号学习 | 显式5维度评估模块 | **实现方式不同** |
-| **上下文** | 128K | 512-2048 | **~60倍差距** |
-| **训练范式** | RL为主导,涌现推理 | 预训练+微调+RL | **方法不同** |
+| 维度 | 官方 R1 | 本项目实现 | 说明 |
+|------|---------|-----------|------|
+| **模型规模** | 671B | 可配置（Tiny~Standard） | 教育级缩放 |
+| **MoE 架构** | ✅ 8 专家 | ✅ 可配置专家数 | **架构一致** |
+| **R1 复用 V3** | ✅ 基于 V3-Base | ✅ 复用 V3 TransformerBlock | **设计一致** |
+| **注意力** | MLA | 标准 MHA | 简化实现 |
+| **推理能力** | RL 自然涌现 | RLHF/RLVR 训练器支持 | 理念一致，规模不同 |
+| **上下文** | 128K | 512~2048 | 硬件限制 |
+| **MTP** | ✅ | ❌ | 未实现 |
 
-### 设计理念差异
+### 设计理念
 
-#### 官方 DeepSeek-R1
-- **核心理念**: 通过强化学习**自然涌现**推理能力
-- **推理机制**: 模型在RL训练中自发学习思维链推理,无需人为设计
-- **技术创新**: 证明了纯RL可以激发LLM的推理能力,无需大量监督数据
-- **架构选择**: 继承V3的MoE架构,专注于通过RL优化推理质量
+本项目**忠实于官方 R1 的核心设计理念**：
 
-#### 本项目实现
-- **核心理念**: 通过**显式模块设计**展示推理过程
-- **推理机制**: 明确的7步迭代推理模块,每步评估置信度
-- **教育价值**: 让学习者直观理解"推理-反思"的概念和实现
-- **架构选择**: 标准Transformer,降低硬件门槛,便于学习和实验
+- ✅ **R1 复用 V3 的 MoE 架构** — `DeepSeekR1Block` 内部直接使用 `DeepSeekV3TransformerBlock`
+- ✅ **RL 驱动推理** — 提供 RLHF 和 RLVR 两种强化学习训练器
+- ✅ **多阶段训练** — 预训练 → SFT → RL 完整流程
+- ✅ **配置继承** — `DeepSeekR1Config` 继承 `DeepSeekBaseConfig`，与 V3 共享基础配置
 
-### 适用场景说明
-
-#### 官方 DeepSeek-R1 适用于:
-- ✅ 工业级生产环境
-- ✅ 复杂推理任务(数学、科学问题)
-- ✅ 需要强大推理能力的实际应用
-- ✅ 大规模部署场景
-
-#### 本项目实现适用于:
-- ✅ **AI教育和学习**
-- ✅ **推理机制概念验证**
-- ✅ **算法原型开发**
-- ✅ **小规模实验和研究**
-- ✅ **自动微分框架学习**
+**未实现的官方特性**：
+- ❌ MLA (Multi-Head Latent Attention) 注意力机制
+- ❌ Multi Token Prediction (MTP)
+- ❌ 128K 超长上下文支持
+- ❌ 671B 参数规模
 
 ### 教育价值
 
-尽管与官方架构存在显著差异,本项目作为教育性实现具有独特价值:
-
-| 维度 | 教育价值 |
-|------|----------|
-| **概念展示** | ✅ 显式的7步推理、5维反思清晰展示了"推理-反思"核心思想 |
-| **可理解性** | ✅ 模块化设计让学习者直观理解推理过程的每个环节 |
-| **可运行性** | ✅ 小规模参数可在普通硬件上运行和调试 |
-| **框架完整** | ✅ 包含预训练、微调、RL训练器的完整流程 |
-| **代码可读** | ✅ Variable层面完整计算图,利于学习自动微分 |
-| **实验友好** | ✅ 易于修改和扩展,适合算法实验 |
-
-### 局限性说明
-
-本项目**未实现**官方 DeepSeek-R1 的以下核心特性:
-
-- ❌ MoE(Mixture-of-Experts)架构
-- ❌ MLA(Multi-Head Latent Attention)注意力机制
-- ❌ 纯RL涌现推理能力的训练范式
-- ❌ Multi Token Prediction (MTP)
-- ❌ 128K超长上下文支持
-- ❌ 671B参数规模
-
-### 总结
-
-**本项目是一个优秀的教育性推理模型实现**,通过显式模块设计帮助学习者理解推理和反思的概念。虽然与官方 DeepSeek-R1 的技术架构存在本质差异,但作为教学工具和概念验证平台,这种简化是合理且必要的。
-
-如果你需要官方 DeepSeek-R1 的完整功能,请访问:
-- 官方论文: [DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning](https://arxiv.org/abs/2501.12948)
-- 官方GitHub: [DeepSeek-V3](https://github.com/deepseek-ai/DeepSeek-V3)
-- 官方API: [DeepSeek API Docs](https://api-docs.deepseek.com/)
-
+| 维度 | 说明 |
+|------|------|
+| **架构还原** | 忠实复现 R1 复用 V3 MoE 架构的设计 |
+| **可运行性** | 小规模参数可在普通硬件上运行和调试 |
+| **训练完整** | 包含预训练、SFT、RLHF、RLVR 完整训练流程 |
+| **代码可读** | Variable 层面完整计算图，利于学习自动微分 |
+| **实验友好** | 灵活的配置系统，易于修改和扩展 |
 
 ## 📚 参考资料
 
-### 相关文档
-- [DeepSeek-R1 主README](../README.md)
-- [训练文档](training/)
-- [推理机制详细说明](r1/README.md)
-
 ### 技术论文
 - [DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning (arXiv:2501.12948)](https://arxiv.org/abs/2501.12948)
-- [DeepSeek-V3 Technical Report](https://arxiv.org/abs/2412.19437)
-- Chain-of-Thought Prompting
-- Self-Reflection in Language Models
+- [DeepSeek-V3 Technical Report (arXiv:2412.19437)](https://arxiv.org/abs/2412.19437)
+
+### 官方资源
+- 官方 GitHub：[DeepSeek-V3](https://github.com/deepseek-ai/DeepSeek-V3)
+- 官方 API：[DeepSeek API Docs](https://api-docs.deepseek.com/)
+
+### 相关文档
+- [DeepSeek 模块主 README](../README.md)
+- [DeepSeek-V3 文档](V3_README.md)
 
 ### 源代码
-- [DeepSeekR1Model.java](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1Model.java)
-- [DeepSeekR1Config.java](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1Config.java)
-- [DeepSeekR1ReasoningBlock.java](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1ReasoningBlock.java)
-- [DeepSeekR1ReflectionBlock.java](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1ReflectionBlock.java)
+
+| 文件 | 说明 |
+|------|------|
+| [`DeepSeekR1Model.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1Model.java) | 模型主类，提供推理和生成 API |
+| [`DeepSeekR1Config.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1Config.java) | 配置类，继承 BaseConfig + RL 参数 |
+| [`DeepSeekR1Block.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1Block.java) | 主体块，复用 V3 MoE TransformerBlock |
+| [`DeepSeekR1TokenEmbedding.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1TokenEmbedding.java) | Token + 位置嵌入层 |
+| [`DeepSeekR1Demo.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1Demo.java) | 完整示例代码（6 个示例） |
+| [`DeepSeekR1PretrainV2.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/DeepSeekR1PretrainV2.java) | 预训练器（因果语言建模） |
+| [`DeepSeekR1Posttrain.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/DeepSeekR1Posttrain.java) | 后训练器（SFT 微调） |
+| [`DeepSeekR1RLHFTrainer.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/DeepSeekR1RLHFTrainer.java) | RLHF 强化学习训练器 |
+| [`DeepSeekR1RLVRTrainer.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/DeepSeekR1RLVRTrainer.java) | RLVR 可验证奖励训练器 |
+| [`DeepSeekR1Inference.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/DeepSeekR1Inference.java) | 推理引擎 |
 
 ---
 
 <div align="center">
-  <p><strong>DeepSeek-R1</strong> - 多步推理与自我反思</p>
-  <p>可解释推理 | 质量评估 | 自我改进</p>
+  <p><strong>DeepSeek-R1</strong> — MoE 架构 + RL 驱动推理</p>
+  <p>架构复用 V3 | 强化学习训练 | 教育友好</p>
 </div>

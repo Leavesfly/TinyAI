@@ -471,6 +471,6 @@ for (expert in experts) {
 ---
 
 <div align="center">
-  <p><strong>DeepSeek-V3</strong> - Variable层面的MoE实现</p>
-  <p>完整计算图 | 梯度正确回传 | 参数高效</p>
+  <p><strong>DeepSeek-V3</strong> — 基于 MoE 架构的大语言模型</p>
+  <p>混合专家 · 任务感知路由 · 完整训练流程 · 纯 Java 实现</p>
 </div>

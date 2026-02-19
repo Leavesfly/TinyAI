@@ -13,9 +13,66 @@ import java.util.Map;
  * @author leavesfly
  * @version 0.01
  * 
- * Agent类定义了强化学习智能体的标准接口，包括动作选择、学习更新等功能。
- * 智能体负责与环境交互，根据状态选择动作，并从经验中学习改进策略。
- * 支持不同的强化学习算法实现，如Q-Learning、Policy Gradient等。
+ * 【强化学习核心概念 - Agent】
+ * Agent(智能体)是强化学习系统的核心决策者,负责:
+ * 1. 感知环境状态(State Perception): 接收环境反馈的状态信息
+ * 2. 选择执行动作(Action Selection): 根据策略或价值函数选择动作
+ * 3. 从经验中学习(Learning): 通过奖励信号优化决策策略
+ * 4. 平衡探索与利用(Exploration vs Exploitation): ε-贪婪、Softmax等策略
+ * 
+ * 【MDP框架中的Agent】
+ * 在马尔可夫决策过程(MDP)中,Agent与Environment形成交互循环:
+ * ```
+ * t=0: s0 ----[Agent选择a0]----> Environment
+ *             <----[返回r1,s1]---- Environment
+ * t=1: s1 ----[Agent选择a1]----> Environment
+ *             <----[返回r2,s2]---- Environment
+ * ...
+ * ```
+ * 
+ * 【设计模式应用】
+ * 1. 模板方法模式: learn()定义学习流程,子类实现具体算法
+ *    - ValueBasedAgent: 经验回放 + TD学习
+ *    - PolicyBasedAgent: 回合采样 + 蒙特卡罗回报
+ * 
+ * 2. 策略模式: selectAction()支持不同的动作选择策略
+ *    - ε-贪婪策略: 概率探索
+ *    - Softmax策略: 温度参数控制
+ *    - 确定性策略: DDPG等
+ * 
+ * 【算法分类体系】
+ * TinyAI强化学习模块按算法类型组织Agent层次:
+ * 
+ * ```
+ * Agent (抽象基类)
+ *  ├── ValueBasedAgent (基于值函数)
+ *  │    ├── DQNAgent: 深度Q网络
+ *  │    ├── DoubleDQNAgent: 双Q网络(解决过估计)
+ *  │    └── DuelingDQNAgent: 对偶网络(分离V和A)
+ *  │
+ *  ├── PolicyBasedAgent (基于策略)
+ *  │    ├── REINFORCEAgent: 策略梯度
+ *  │    ├── A2CAgent: Actor-Critic
+ *  │    └── PPOAgent: 近端策略优化
+ *  │
+ *  └── BanditAgent (多臂老虎机)
+ *       ├── EpsilonGreedyBanditAgent
+ *       ├── UCBBanditAgent
+ *       └── ThompsonSamplingBanditAgent
+ * ```
+ * 
+ * 【教学价值】
+ * 通过这个分类体系,学习者可以:
+ * - 理解Value-Based vs Policy-Based的本质区别
+ * - 看到不同算法共享的通用模式
+ * - 快速定位算法差异点(如DQN vs DoubleDQN)
+ * - 轻松扩展新算法(只需继承并实现2-3个方法)
+ * 
+ * 【关键方法说明】
+ * - selectAction(): 根据当前状态选择动作
+ * - learn(): 从单个经验中学习
+ * - learnBatch(): 从批量经验中学习(提高效率)
+ * - storeExperience(): 存储经验到缓冲区
  */
 public abstract class Agent {
     
@@ -96,7 +153,29 @@ public abstract class Agent {
     /**
      * 从经验中学习更新模型
      * 
-     * @param experience 经验数据
+     * 【学习机制差异】
+     * 不同类型的Agent有不同的学习方式:
+     * 
+     * 1. ValueBasedAgent (如DQN):
+     *    - 经验回放: 存入ReplayBuffer,随机采样打破相关性
+     *    - TD学习: L = (r + γ*max Q_target(s',a') - Q(s,a))^2
+     *    - 批量更新: 每次从buffer采样batch_size个经验
+     * 
+     * 2. PolicyBasedAgent (如REINFORCE):
+     *    - 回合采样: 收集完整回合的(s,a,r)序列
+     *    - 蒙特卡罗回报: G_t = Σ γ^k * r_{t+k}
+     *    - 回合结束后更新: ∇θ J = Σ ∇log π(a|s) * G_t
+     * 
+     * 3. BanditAgent (如UCB):
+     *    - 增量更新: Q_new = Q_old + α * (r - Q_old)
+     *    - 无状态依赖: 直接更新动作价值估计
+     * 
+     * 【为什么需要不同的学习方式】
+     * - ValueBased需要稳定的训练目标 → 经验回放+目标网络
+     * - PolicyBased需要完整轨迹的回报 → 回合采样+蒙特卡罗
+     * - Bandit无时序依赖 → 增量式更新即可
+     * 
+     * @param experience 经验数据(s, a, r, s', done)
      */
     public abstract void learn(Experience experience);
     

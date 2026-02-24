@@ -3,7 +3,7 @@ package io.leavesfly.tinyai.deepseek.v3;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
+import io.leavesfly.tinyai.deepseek.DeepSeekTokenEmbeddingBase;
 import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
 
@@ -22,7 +22,7 @@ import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
  * @author leavesfly
  * @version 1.0
  */
-public class DeepSeekV3TokenEmbedding extends Module {
+public class DeepSeekV3TokenEmbedding extends DeepSeekTokenEmbeddingBase {
     
     private final DeepSeekV3Config config;
     
@@ -40,32 +40,32 @@ public class DeepSeekV3TokenEmbedding extends Module {
      * @param config V3配置对象
      */
     public DeepSeekV3TokenEmbedding(String name, DeepSeekV3Config config) {
-        super(name);
+        super(name,
+                config.getVocabSize(),
+                config.getNEmbd(),
+                config.getNPositions(),
+                (float) config.getEmbdPdrop(),
+                config.getInitializerRange());
         this.config = config;
         initializeEmbeddings();
     }
     
-    /**
-     * 初始化嵌入参数
-     */
-    private void initializeEmbeddings() {
-        // 1. 初始化Token嵌入矩阵
-        float[][] tokenWeights = new float[config.getVocabSize()][config.getNEmbd()];
-        initializeWeights(tokenWeights, config.getInitializerRange());
-        tokenEmbeddings = new Parameter(NdArray.of(tokenWeights));
-        registerParameter("token_embeddings", tokenEmbeddings);
+    @Override
+    protected void initializeEmbeddings() {
+        // 1. 初始化Token嵌入矩阵 [vocabSize, nEmbd]
+        NdArray tokenEmbedData = NdArray.likeRandomN(Shape.of(config.getVocabSize(), config.getNEmbd()))
+                .mulNum((float) config.getInitializerRange());
+        tokenEmbeddings = new Parameter(tokenEmbedData);
+        registerParameter("token_embedding", tokenEmbeddings);
         
-        // 2. 初始化位置嵌入矩阵
-        float[][] posWeights = new float[config.getNPositions()][config.getNEmbd()];
-        initializeWeights(posWeights, config.getInitializerRange());
-        positionEmbeddings = new Parameter(NdArray.of(posWeights));
-        registerParameter("position_embeddings", positionEmbeddings);
+        // 2. 初始化位置嵌入矩阵 [nPositions, nEmbd]
+        NdArray positionEmbedData = NdArray.likeRandomN(Shape.of(config.getNPositions(), config.getNEmbd()))
+                .mulNum((float) config.getInitializerRange());
+        positionEmbeddings = new Parameter(positionEmbedData);
+        registerParameter("position_embedding", positionEmbeddings);
         
         // 3. 初始化Dropout层
-        dropout = new Dropout(
-            name + "_dropout",
-            (float) config.getEmbdPdrop()
-        );
+        dropout = new Dropout("embedding_dropout", (float) config.getEmbdPdrop());
         registerModule("dropout", dropout);
     }
     
@@ -136,7 +136,8 @@ public class DeepSeekV3TokenEmbedding extends Module {
      * @param seqLen 序列长度
      * @return token嵌入 [batch_size, seq_len, nEmbd]
      */
-    private Variable getTokenEmbeddingsV2(Variable tokenIds, Variable tokenEmbedParam, 
+    @Override
+    protected Variable getTokenEmbeddingsV2(Variable tokenIds, Variable tokenEmbedParam, 
                                           int batchSize, int seqLen) {
         // ✅ 使用indexSelect算子在Variable层面操作
         // tokenEmbedParam: [vocabSize, nEmbd]
@@ -159,27 +160,20 @@ public class DeepSeekV3TokenEmbedding extends Module {
      * @param posEmbedParam 位置嵌入参数 [nPositions, nEmbd]
      * @param batchSize 批大小
      * @param seqLen 序列长度
-     * @return 位置嵌入 [batch_size, seq_len, nEmbd]
+     * @return 位置嵌入 [1, seqLen, nEmbd] - 依赖广播机制自动扩展
      */
-    private Variable getPositionEmbeddingsV2(Variable posEmbedParam, int batchSize, int seqLen) {
-        // ✅ 使用indexSelect + repeat算子在Variable层面操作
-        // posEmbedParam: [nPositions, nEmbd]
-        
-        // 1. 创建位置索引 [0, 1, 2, ..., seqLen-1]
+    @Override
+    protected Variable getPositionEmbeddingsV2(Variable posEmbedParam, int batchSize, int seqLen) {
+        // ✅ 使用indexSelect算子，不使用repeat以节省内存
+        // 返回 [1, seqLen, nEmbd] 形状，依赖add的广播机制自动扩展
         float[] posIndices = new float[seqLen];
         for (int i = 0; i < seqLen; i++) {
             posIndices[i] = i;
         }
         Variable posIds = new Variable(NdArray.of(posIndices));
-        
-        // 2. 使用indexSelect选择位置嵌入: [seqLen, nEmbd]
+        posIds.setRequireGrad(false);
         Variable posEmbeds = posEmbedParam.indexSelect(0, posIds);
-        
-        // 3. Reshape到3D并扩展batch维度: [1, seqLen, nEmbd] -> [batch_size, seqLen, nEmbd]
-        Variable posEmbeds3D = posEmbeds.reshape(Shape.of(1, seqLen, config.getNEmbd()));
-        
-        // 4. 在batch维度上重复
-        return posEmbeds3D.repeat(batchSize, 1, 1);
+        return posEmbeds.reshape(Shape.of(1, seqLen, config.getNEmbd()));
     }
     
     /**

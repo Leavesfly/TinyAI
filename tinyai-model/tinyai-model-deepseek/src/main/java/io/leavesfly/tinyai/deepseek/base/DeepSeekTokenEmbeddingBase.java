@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.deepseek;
+package io.leavesfly.tinyai.deepseek.base;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;

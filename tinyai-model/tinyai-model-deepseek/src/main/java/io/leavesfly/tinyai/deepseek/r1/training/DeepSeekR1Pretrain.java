@@ -379,10 +379,11 @@ public class DeepSeekR1Pretrain {
                         
                         Variable logits2D = logits.reshape(Shape.of(bs * seqLen, vocabSize));
                         Variable targetVar = new Variable(targetIds.reshape(Shape.of(bs * seqLen, 1)));
+                        
                         Variable loss = lossFunction.loss(targetVar, logits2D);
                         
                         float lossValue = loss.getValue().getNumber().floatValue();
-                        float moeLoss = (float) result.moeLoss;  // 使用 MoE 损失
+                        float moeLoss = (float) result.moeLoss;
                         
                         // 反向传播（在副本上）
                         modelCopy.clearGrads();
@@ -405,7 +406,6 @@ public class DeepSeekR1Pretrain {
                         return new BatchResult(true, lossValue, moeLoss, gradients);
                     } catch (Exception e) {
                         System.err.println("⚠️ 并行批次处理失败: " + e.getMessage());
-                        e.printStackTrace();
                         return new BatchResult(false, 0, 0, null);
                     }
                 });
@@ -529,6 +529,7 @@ public class DeepSeekR1Pretrain {
         
         Variable logits2D = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
         Variable targetVar = new Variable(targetIds.reshape(Shape.of(batchSize * seqLen, 1)));
+        
         Variable loss = lossFunction.loss(targetVar, logits2D);
         
         float lossValue = loss.getValue().getNumber().floatValue();

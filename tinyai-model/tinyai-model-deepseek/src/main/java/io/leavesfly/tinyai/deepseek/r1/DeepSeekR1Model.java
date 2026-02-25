@@ -131,11 +131,12 @@ public class DeepSeekR1Model extends Model {
      * @return 推理结果
      */
     public ReasoningResult performReasoning(Variable tokenIds) {
-        Variable logits = predict(tokenIds, TaskType.REASONING);
+        // 使用带详细输出的前向传播，获取 MoE 损失
+        DeepSeekR1Block.DetailedForwardResult result = r1Block.forwardWithDetails(tokenIds, TaskType.REASONING);
         
         return new ReasoningResult(
-            logits,
-            0.0,  // TODO: 待 R1Block 重构后获取 MoE 损失
+            result.logits,
+            result.avgMoELoss,
             TaskType.REASONING
         );
     }
@@ -147,11 +148,12 @@ public class DeepSeekR1Model extends Model {
      * @return 数学计算结果
      */
     public ReasoningResult solveMath(Variable tokenIds) {
-        Variable logits = predict(tokenIds, TaskType.MATH);
+        // 使用带详细输出的前向传播，获取 MoE 损失
+        DeepSeekR1Block.DetailedForwardResult result = r1Block.forwardWithDetails(tokenIds, TaskType.MATH);
         
         return new ReasoningResult(
-            logits,
-            0.0,  // TODO: 待 R1Block 重构后获取 MoE 损失
+            result.logits,
+            result.avgMoELoss,
             TaskType.MATH
         );
     }

@@ -3,7 +3,7 @@ package io.leavesfly.tinyai.deepseek.v3;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.deepseek.DeepSeekTokenEmbeddingBase;
+import io.leavesfly.tinyai.deepseek.base.DeepSeekTokenEmbeddingBase;
 import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
 
@@ -46,26 +46,30 @@ public class DeepSeekV3TokenEmbedding extends DeepSeekTokenEmbeddingBase {
                 config.getNPositions(),
                 (float) config.getEmbdPdrop(),
                 config.getInitializerRange());
+        // 注意：this.config 必须在 super() 之后赋值，
+        // 而 initializeEmbeddings() 已由父类构造函数调用（通过多态），
+        // 因此此处不再重复调用。
         this.config = config;
-        initializeEmbeddings();
     }
     
     @Override
     protected void initializeEmbeddings() {
+        // 父类构造函数在 this.config 赋值之前就通过多态调用此方法，
+        // 因此这里必须使用父类已赋值的字段，而不能使用 config。
         // 1. 初始化Token嵌入矩阵 [vocabSize, nEmbd]
-        NdArray tokenEmbedData = NdArray.likeRandomN(Shape.of(config.getVocabSize(), config.getNEmbd()))
-                .mulNum((float) config.getInitializerRange());
+        NdArray tokenEmbedData = NdArray.likeRandomN(Shape.of(vocabSize, embeddingDim))
+                .mulNum((float) initializerRange);
         tokenEmbeddings = new Parameter(tokenEmbedData);
         registerParameter("token_embedding", tokenEmbeddings);
         
         // 2. 初始化位置嵌入矩阵 [nPositions, nEmbd]
-        NdArray positionEmbedData = NdArray.likeRandomN(Shape.of(config.getNPositions(), config.getNEmbd()))
-                .mulNum((float) config.getInitializerRange());
+        NdArray positionEmbedData = NdArray.likeRandomN(Shape.of(maxPositions, embeddingDim))
+                .mulNum((float) initializerRange);
         positionEmbeddings = new Parameter(positionEmbedData);
         registerParameter("position_embedding", positionEmbeddings);
         
         // 3. 初始化Dropout层
-        dropout = new Dropout("embedding_dropout", (float) config.getEmbdPdrop());
+        dropout = new Dropout("embedding_dropout", dropoutProb);
         registerModule("dropout", dropout);
     }
     

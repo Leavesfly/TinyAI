@@ -112,14 +112,14 @@ public class DeepSeekR1Config extends DeepSeekBaseConfig {
      */
     public static DeepSeekR1Config createTinyConfig() {
         DeepSeekR1Config config = new DeepSeekR1Config();
-        config.setNEmbd(256);
+        config.setNEmbd(64);
         config.setNLayer(6);
         config.setNHead(8);
-        config.setNInner(1024);
-        config.setNPositions(512);
+        config.setNInner(256);
+        config.setNPositions(128);
         config.setNumExperts(4);
         config.setTopK(2);
-        config.setExpertHiddenDim(1024);
+        config.setExpertHiddenDim(256);
         return config;
     }
     

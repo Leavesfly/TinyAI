@@ -1,11 +1,6 @@
 package io.leavesfly.tinyai.deepseek.r1;
 
-import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.deepseek.DeepSeekTokenEmbeddingBase;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
+import io.leavesfly.tinyai.deepseek.base.DeepSeekTokenEmbeddingBase;
 
 /**
  * DeepSeek-R1 Token嵌入层

@@ -123,11 +123,11 @@ public class DeepSeekR1TrainDemoV2 {
         System.out.println("\n📝 创建DeepSeek-R1模型...");
         DeepSeekR1Config config = DeepSeekR1Config.createTinyConfig();
         config.setVocabSize(vocabSize);
-        config.setNLayer(2);  // 减少层数加速训练
+        config.setNLayer(1);  // 减少层数加速训练（2→1）
         
-        // MoE 配置（R1 使用与 V3 相同的 MoE 架构）
-        config.setNumExperts(4);  // 小规模演示使用较少专家
-        config.setTopK(2);
+        // MoE 配置 - 简化以加速
+        config.setNumExperts(2);  // 减少专家数量（4→2）
+        config.setTopK(1);        // 减少 Top-K（2→1）
         
         DeepSeekR1Model model = new DeepSeekR1Model("deepseek-r1-pretrain-v2", config);
         
@@ -158,18 +158,19 @@ public class DeepSeekR1TrainDemoV2 {
         System.out.println("\n📝 配置预训练器...");
         DeepSeekR1Pretrain trainer = new DeepSeekR1Pretrain(model, dataset);
         trainer.configure(
-            10,         // maxEpochs
+            3,          // maxEpochs（10→3，快速演示）
             5e-2f,      // learningRate
             5,          // warmupSteps
             1.0f        // maxGradNorm
         ).setCheckpoint(CHECKPOINT_DIR + "/pretrain", 200);
-        trainer.setLogInterval(50);
-        trainer.configureParallel(true, 4);
+        trainer.setLogInterval(20);  // 更频繁输出（50→20）
+        // 禁用并行训练以避免内存溢出（每个线程都需要深拷贝模型）
+        trainer.configureParallel(true, 2);
         
-        System.out.println("  ✓ 最大轮次: 10");
+        System.out.println("  ✓ 最大轮次: 3");
         System.out.println("  ✓ 学习率: 5e-2");
         System.out.println("  ✓ Warmup步数: 5");
-        System.out.println("  ✓ 并行训练: 已启用 (4线程)");
+        System.out.println("  ✓ 训练模式: 串行（避免OOM）");
         
         // 6. 开始训练
         System.out.println("\n📝 开始预训练...");

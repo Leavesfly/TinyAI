@@ -3,6 +3,7 @@ package io.leavesfly.tinyai.rl.agent;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
+import io.leavesfly.tinyai.rl.Experience;
 
 import java.util.Random;
 
@@ -57,6 +58,18 @@ public class EpsilonGreedyBanditAgent extends BanditAgent {
     private float epsilon;
     
     /**
+     * epsilon衰减因子,每次学习后 epsilon *= epsilonDecay
+     * 取值范围: (0, 1], 默认0.995
+     */
+    private float epsilonDecay;
+    
+    /**
+     * epsilon最小值,衰减不低于此值
+     * 默认0.01
+     */
+    private float minEpsilon;
+    
+    /**
      * 随机数生成器(用于探索)
      */
     private final Random random;
@@ -81,6 +94,8 @@ public class EpsilonGreedyBanditAgent extends BanditAgent {
     public EpsilonGreedyBanditAgent(String name, int numArms, float epsilon) {
         super(name, numArms);
         this.epsilon = epsilon;
+        this.epsilonDecay = 0.995f;
+        this.minEpsilon = 0.01f;
         this.random = new Random();
     }
     
@@ -177,6 +192,80 @@ public class EpsilonGreedyBanditAgent extends BanditAgent {
             throw new IllegalArgumentException("Epsilon must be in [0, 1], got: " + epsilon);
         }
         this.epsilon = epsilon;
+    }
+    
+    /**
+     * 设置随机数种子(用于可重现性测试)
+     * 
+     * @param seed 随机数种子
+     */
+    public void setSeed(long seed) {
+        this.random.setSeed(seed);
+    }
+    
+    /**
+     * 设置当前探索率(带边界截断)
+     * 
+     * @param epsilon 新的探索率,自动截断到 [0, 1]
+     */
+    public void setCurrentEpsilon(float epsilon) {
+        this.epsilon = Math.max(0.0f, Math.min(1.0f, epsilon));
+    }
+    
+    /**
+     * 获取epsilon衰减因子
+     * 
+     * @return epsilonDecay
+     */
+    public float getEpsilonDecay() {
+        return epsilonDecay;
+    }
+    
+    /**
+     * 设置epsilon衰减因子
+     * 
+     * @param epsilonDecay 衰减因子,取值范围 (0, 1]
+     */
+    public void setEpsilonDecay(float epsilonDecay) {
+        this.epsilonDecay = Math.max(0.0001f, Math.min(1.0f, epsilonDecay));
+    }
+    
+    /**
+     * 获取epsilon最小值
+     * 
+     * @return minEpsilon
+     */
+    public float getMinEpsilon() {
+        return minEpsilon;
+    }
+    
+    /**
+     * 设置epsilon最小值
+     * 
+     * @param minEpsilon 最小epsilon
+     */
+    public void setMinEpsilon(float minEpsilon) {
+        this.minEpsilon = Math.max(0.0f, minEpsilon);
+    }
+    
+    /**
+     * 获取算法描述信息
+     * 
+     * @return 算法描述字符串
+     */
+    public String getAlgorithmDescription() {
+        return String.format("ε-贪心算法 (epsilon=%.4f, decay=%.4f, minEpsilon=%.4f)",
+                epsilon, epsilonDecay, minEpsilon);
+    }
+    
+    /**
+     * 重写learn方法,每次学习后自动衰减epsilon
+     */
+    @Override
+    public void learn(Experience experience) {
+        super.learn(experience);
+        // 每次学习后衰减epsilon,但不低于minEpsilon
+        epsilon = Math.max(minEpsilon, epsilon * epsilonDecay);
     }
     
     /**

@@ -56,7 +56,7 @@ public class DeepSeekR1TrainDemoV2 {
             DeepSeekR1Model rlhfModel = runRLHFTraining(finetunedModel);
             
             // 步骤4: 强化学习训练（RLVR - 可验证奖励训练）
-//            DeepSeekR1Model alignedModel = runRLVRTraining(rlhfModel);
+            DeepSeekR1Model alignedModel = runRLVRTraining(rlhfModel);
             
             // 步骤5: 推理测试
             runInference(rlhfModel);

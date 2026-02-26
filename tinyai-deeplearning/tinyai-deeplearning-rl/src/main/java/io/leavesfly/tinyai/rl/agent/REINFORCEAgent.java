@@ -251,7 +251,7 @@ public class REINFORCEAgent extends PolicyBasedAgent {
      * 5. 清空回合缓冲区
      */
     @Override
-    protected void learnFromEpisode() {
+    public void learnFromEpisode() {
         if (episodeBuffer.isEmpty()) return;
         
         // 1. 计算回报

@@ -84,8 +84,10 @@ public class Position2D extends Module {
     /**
      * 获取指定位置的编码
      * 
+     * 使用 Variable 的 narrow 操作保持梯度计算图连通，支持反向传播。
+     * 
      * @param patchIndex Patch索引 [0, num_patches)
-     * @return 该位置的编码向量 [hidden_size]
+     * @return 该位置的编码向量 [1, 1, hidden_size]
      */
     public Variable getPositionAt(int patchIndex) {
         if (patchIndex < 0 || patchIndex >= numPatches) {
@@ -94,15 +96,10 @@ public class Position2D extends Module {
             );
         }
         
-        // 提取单个位置的编码
-        NdArray posData = positionEmbedding.data();
-        NdArray singlePos = NdArray.zeros(Shape.of(hiddenSize));
-        
-        for (int i = 0; i < hiddenSize; i++) {
-            singlePos.set(posData.get(0, patchIndex, i), i);
-        }
-        
-        return new Variable(singlePos);
+        // 使用 sliceRange 操作提取单个位置的编码，保持梯度计算图连通
+        // positionEmbedding: [1, num_patches, hidden_size]
+        // 结果: [1, 1, hidden_size]
+        return positionEmbedding.sliceRange(1, patchIndex, patchIndex + 1);
     }
     
     /**

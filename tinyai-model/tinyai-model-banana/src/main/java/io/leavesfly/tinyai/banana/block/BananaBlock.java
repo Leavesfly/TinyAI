@@ -7,7 +7,6 @@ import io.leavesfly.tinyai.banana.encoder.ImageEncoder;
 import io.leavesfly.tinyai.banana.encoder.TextEncoder;
 import io.leavesfly.tinyai.banana.fusion.MultiModalFusion;
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
@@ -99,10 +98,12 @@ public class BananaBlock extends Module {
     }
     
     /**
-     * 前向传播
+     * 前向传播（文本模式）
      * 
-     * @param inputs inputs[0]为文本token IDs或图像数据
-     * @return 输出Variable
+     * 完整流程: 文本Token -> TextEncoder -> LayerNorm -> outputProjection
+     *
+     * @param inputs inputs[0]为文本token IDs [batch, seq_len]
+     * @return 输出Variable [batch, seq_len, vocab_size]
      */
     @Override
     public Variable forward(Variable... inputs) {
@@ -112,12 +113,10 @@ public class BananaBlock extends Module {
         
         Variable input = inputs[0];
         
-        // 简化实现:直接通过LayerNorm和输出投影
-        // TODO: 后续实现完整的编码器和融合逻辑
-        Variable x = finalLayerNorm.forward(input);
-        Variable output = outputProjection.forward(x);
-        
-        return output;
+        // 完整的文本前向传播流程
+        Variable textFeatures = textEncoder.forward(input);   // [batch, seq_len, hidden_size]
+        Variable normalized = finalLayerNorm.forward(textFeatures);
+        return outputProjection.forward(normalized);          // [batch, seq_len, vocab_size]
     }
     
     /**
@@ -187,15 +186,35 @@ public class BananaBlock extends Module {
      * 带详细信息的前向传播
      * 
      * @param textTokenIds 文本token IDs
-     * @param imagePixels 图像像素(可选)
+     * @param imagePixels 图像像素(可选，为null则仅文本模式)
      * @param taskType 任务类型
      * @return 详细的前向结果
      */
     public DetailedForwardResult forwardWithDetails(Variable textTokenIds,
                                                     Variable imagePixels,
                                                     TaskType taskType) {
-        // TODO: 实现完整的多模态流程
-        throw new UnsupportedOperationException("详细前向传播尚未实现");
+        // 1. 编码文本
+        Variable textFeatures = textEncoder.forward(textTokenIds);
+        
+        // 2. 编码图像（可选）
+        Variable imageFeatures = null;
+        if (imagePixels != null) {
+            imageFeatures = imageEncoder.forward(imagePixels);
+        }
+        
+        // 3. 跨模态融合
+        Variable fusedFeatures;
+        if (fusionLayer != null && imageFeatures != null) {
+            fusedFeatures = fusionLayer.forward(textFeatures, imageFeatures);
+        } else {
+            fusedFeatures = textFeatures;
+        }
+        
+        // 4. 归一化 + 输出投影
+        Variable normalized = finalLayerNorm.forward(fusedFeatures);
+        Variable output = outputProjection.forward(normalized);
+        
+        return new DetailedForwardResult(output, textFeatures, imageFeatures, fusedFeatures, taskType);
     }
     
     /**
@@ -218,29 +237,45 @@ public class BananaBlock extends Module {
     /**
      * 文本到图像生成
      * 
+     * 设计说明:
+     * 由于 text-to-image 场景中没有原始图像作为参考，
+     * 我们使用文本特征进行自注意力（self-attention）操作来增强特征间的关联。
+     * imageDecoder.forward(fusedFeatures, fusedFeatures) 中传入相同特征，
+     * 让解码器在文本融合特征上执行自注意力，而非交叉注意力。
+     * 
      * @param textTokenIds 文本描述token IDs [batch, text_len]
      * @return 生成的图像 [batch, 3, image_size, image_size]
      */
     public Variable textToImage(Variable textTokenIds) {
         // 1. 编码文本
         Variable textFeatures = forwardText(textTokenIds);
-        
-        // 2. 融合（使用文本特征作为自注意力）
-        Variable fusedFeatures = fusionLayer.forward(textFeatures, textFeatures);
-        
+            
+        // 2. 融合（使用文本特征作自注意力）
+        Variable fusedFeatures;
+        if (fusionLayer != null) {
+            fusedFeatures = fusionLayer.forward(textFeatures, textFeatures);
+        } else {
+            // 未启用跨模态融合时，直接使用文本特征
+            fusedFeatures = textFeatures;
+        }
+            
         // 3. 将融合后的文本特征扩展到patch数量
         // [batch, text_len, hidden_size] -> [batch, num_patches, hidden_size]
         fusedFeatures = expandToPatches(fusedFeatures);
-        
+            
         // 4. 解码为图像
+        // 注意: 传入相同的fusedFeatures作为解码器输入和交叉注意力上下文，
+        // 这样解码器将在文本融合特征上执行自注意力操作
         Variable generatedImage = imageDecoder.forward(fusedFeatures, fusedFeatures);
-        
+            
         return generatedImage;
     }
     
     /**
      * 将文本特征扩展到patch数量
-     * 使用平均池化或重复策略
+     * 
+     * 使用平均池化聚合序列信息，再通过 expand 复制到所有patch位置。
+     * 保持梯度计算图连通。
      * 
      * @param textFeatures 文本特征 [batch, text_len, hidden_size]
      * @return 扩展后的特征 [batch, num_patches, hidden_size]
@@ -248,33 +283,133 @@ public class BananaBlock extends Module {
     private Variable expandToPatches(Variable textFeatures) {
         int[] shape = textFeatures.getValue().getShape().getShapeDims();
         int batchSize = shape[0];
-        int textLen = shape[1];
         int hiddenSize = shape[2];
-        
         int numPatches = config.getNumPatches();
         
-        // 简化实现：重复最后一个文本token的特征
-        // 更复杂的实现可以使用线性插值或可学习的投影层
-        NdArray inputData = textFeatures.getValue();
-        float[] outputData = new float[batchSize * numPatches * hiddenSize];
+        // 平均池化: [batch, text_len, hidden] -> [batch, 1, hidden]
+        Variable meanPooled = textFeatures.mean(1, true);
         
-        for (int b = 0; b < batchSize; b++) {
-            // 获取最后一个文本token的特征
-            for (int p = 0; p < numPatches; p++) {
-                for (int h = 0; h < hiddenSize; h++) {
-                    // 使用最后一个token的特征
-                    float value = inputData.get(b, textLen - 1, h);
-                    int outIdx = (b * numPatches + p) * hiddenSize + h;
-                    outputData[outIdx] = value;
-                }
-            }
+        // 扩展到 num_patches: [batch, 1, hidden] -> [batch, num_patches, hidden]
+        return meanPooled.expand(Shape.of(batchSize, numPatches, hiddenSize));
+    }
+    
+    /**
+     * 图像编辑
+     * 
+     * 使用原始图像特征与编辑指令融合后生成编辑后的图像。
+     * 设计说明：
+     * 1. 编码原始图像获得视觉特征
+     * 2. 编码编辑指令获得文本特征
+     * 3. 通过跨模态注意力融合文本指令和图像特征
+     * 4. 解码生成编辑后的图像
+     * 
+     * @param imagePixels 原始图像 [batch, channels, height, width]
+     * @param editInstructions 编辑指令token IDs [batch, text_len]
+     * @return 编辑后的图像 [batch, 3, image_size, image_size]
+     */
+    public Variable imageEditing(Variable imagePixels, Variable editInstructions) {
+        // 1. 编码原始图像
+        Variable imageFeatures = forwardImage(imagePixels);
+        
+        // 2. 编码编辑指令
+        Variable textFeatures = forwardText(editInstructions);
+        
+        // 3. 跨模态融合：文本指令注意到图像特征
+        Variable fusedFeatures;
+        if (fusionLayer != null) {
+            fusedFeatures = fusionLayer.forward(textFeatures, imageFeatures);
+        } else {
+            // 未启用跨模态融合时，拼接文本和图像特征
+            fusedFeatures = textFeatures;
         }
         
-        NdArray outputArray = NdArray.of(
-            outputData, 
-            Shape.of(batchSize, numPatches, hiddenSize)
-        );
-        return new Variable(outputArray);
+        // 4. 将融合特征扩展到patch数量
+        fusedFeatures = expandToPatches(fusedFeatures);
+        
+        // 5. 使用原始图像特征作为解码器的交叉注意力上下文
+        // 这样解码器可以参考原始图像生成编辑结果
+        Variable editedImage = imageDecoder.forward(fusedFeatures, imageFeatures);
+        
+        return editedImage;
+    }
+    
+    /**
+     * 图像理解（图像到文本）
+     * 
+     * 将图像编码后通过输出投影生成文本描述的logits。
+     * 设计说明：
+     * 1. 编码图像获得视觉特征
+     * 2. 通过LayerNorm归一化
+     * 3. 通过输出投影层映射到词汇表空间
+     * 
+     * @param imagePixels 图像 [batch, channels, height, width]
+     * @return 文本logits [batch, num_patches, vocab_size]
+     */
+    public Variable imageToText(Variable imagePixels) {
+        // 1. 编码图像
+        Variable imageFeatures = forwardImage(imagePixels);
+        
+        // 2. 如果启用跨模态注意力，使用自注意力增强特征
+        if (fusionLayer != null) {
+            imageFeatures = fusionLayer.forward(imageFeatures, imageFeatures);
+        }
+        
+        // 3. LayerNorm归一化
+        Variable normalized = finalLayerNorm.forward(imageFeatures);
+        
+        // 4. 投影到词汇表空间
+        Variable textLogits = outputProjection.forward(normalized);
+        
+        return textLogits;
+    }
+    
+    /**
+     * 多图像组合
+     * 
+     * 将多张图像的特征融合后生成组合图像。
+     * 设计说明：
+     * 1. 分别编码每张图像
+     * 2. 聚合多图像特征（平均池化）
+     * 3. 使用组合指令引导融合
+     * 4. 解码生成组合图像
+     * 
+     * @param images 多张图像堆叠 [num_images, channels, height, width]
+     * @param compositionInstructions 组合指令 [batch, text_len]
+     * @return 组合后的图像 [batch, 3, image_size, image_size]
+     */
+    public Variable composeMultipleImages(Variable images, Variable compositionInstructions) {
+        int[] imageShape = images.getValue().getShape().getShapeDims();
+        int numImages = imageShape[0];
+        int hiddenSize = config.getHiddenSize();
+        int numPatches = config.getNumPatches();
+        
+        // 1. 编码所有图像（作为单个batch处理）
+        // images: [num_images, channels, height, width]
+        Variable allImageFeatures = forwardImage(images);
+        // allImageFeatures: [num_images, num_patches, hidden_size]
+        
+        // 2. 聚合多图像特征：在图像维度上平均池化
+        // [num_images, num_patches, hidden_size] -> [1, num_patches, hidden_size]
+        Variable aggregatedFeatures = allImageFeatures.mean(0, true);
+        
+        // 3. 编码组合指令
+        Variable textFeatures = forwardText(compositionInstructions);
+        
+        // 4. 跨模态融合：组合指令注意到聚合的图像特征
+        Variable fusedFeatures;
+        if (fusionLayer != null) {
+            fusedFeatures = fusionLayer.forward(textFeatures, aggregatedFeatures);
+        } else {
+            fusedFeatures = textFeatures;
+        }
+        
+        // 5. 将融合特征扩展到patch数量
+        fusedFeatures = expandToPatches(fusedFeatures);
+        
+        // 6. 解码生成组合图像，使用聚合特征作为交叉注意力上下文
+        Variable composedImage = imageDecoder.forward(fusedFeatures, aggregatedFeatures);
+        
+        return composedImage;
     }
     
     /**

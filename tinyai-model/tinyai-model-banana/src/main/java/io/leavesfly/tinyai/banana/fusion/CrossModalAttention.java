@@ -192,7 +192,7 @@ public class CrossModalAttention extends Module {
         double scale = Math.sqrt(headDim);
         Variable scaledScores = scores.div(new Variable((float) scale));
         
-        // 4. Softmax(在最后一维)
+        // 4. Softmax(在最后一维kv_len上实施，softMax()默认在最后一维上计算)
         Variable attnWeights = scaledScores.softMax();
         
         // 5. 应用Dropout(训练时)

@@ -1,7 +1,7 @@
 package io.leavesfly.tinyai.banana.decoder;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.ndarr.NdArray;
+import io.leavesfly.tinyai.func.matrix.Permute;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
@@ -11,20 +11,20 @@ import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
  * 上采样块 (Upsample Block)
  * 
  * 将低分辨率特征图上采样到高分辨率:
- * 1. 双线性插值上采样 - 2x分辨率提升
+ * 1. 最近邻插值上采样 - 2x分辨率提升
  * 2. 卷积投影 - 通道数调整和特征精炼
  * 3. LayerNorm + ReLU - 归一化和激活
  * 
  * 架构流程:
  * 输入 [batch, in_channels, in_h, in_w]
- *   ↓ Bilinear Upsample (2x)
+ *   ↓ Nearest Neighbor Upsample (2x)
  * [batch, in_channels, in_h*2, in_w*2]
  *   ↓ Spatial Conv (模拟卷积)
  * [batch, out_channels, out_h, out_w]
  *   ↓ LayerNorm + ReLU
  * 输出 [batch, out_channels, out_h, out_w]
  * 
- * 注意: 由于TinyAI V2暂无转置卷积,使用双线性插值+Linear投影模拟
+ * 注意: 由于TinyAI V2暂无转置卷积,使用最近邻插值+Linear投影模拟
  * 
  * @author leavesfly
  * @version 1.0
@@ -98,8 +98,8 @@ public class UpsampleBlock extends Module {
         
         Variable x = inputs[0];
         
-        // 1. 双线性插值上采样
-        Variable upsampled = bilinearUpsample(x, outSize, outSize);
+        // 1. 最近邻插值上采样
+        Variable upsampled = nearestNeighborUpsample(x, outSize, outSize);
         
         // 2. 手动重排维度：[batch, in_channels, out_h, out_w] -> [batch, out_h, out_w, in_channels]
         upsampled = permuteNCHWToNHWC(upsampled);
@@ -121,110 +121,56 @@ public class UpsampleBlock extends Module {
     }
     
     /**
-     * 双线性插值上采样
+     * 最近邻上采样
      * 
-     * 简化实现：使用最近邻插值（双线性插值需要复杂的索引计算）
+     * 使用 Variable 算子实现以保持梯度计算图连通。
+     * 通过 reshape 和 expand 操作实现像素复制。
+     * [B, C, H, W] -> [B, C, H, scale, W, scale] -> [B, C, outH, outW]
      * 
      * @param x 输入 [batch, channels, in_h, in_w]
      * @param outH 目标高度
      * @param outW 目标宽度
      * @return 上采样结果 [batch, channels, out_h, out_w]
      */
-    private Variable bilinearUpsample(Variable x, int outH, int outW) {
+    private Variable nearestNeighborUpsample(Variable x, int outH, int outW) {
         int[] shape = x.getValue().getShape().getShapeDims();
         int batchSize = shape[0];
         int channels = shape[1];
         int inH = shape[2];
         int inW = shape[3];
-        
-        // 计算缩放比例
-        float scaleH = (float) inH / outH;
-        float scaleW = (float) inW / outW;
-        
-        // 准备输出数组
-        float[] outputData = new float[batchSize * channels * outH * outW];
-        NdArray inputData = x.getValue();
-        
-        // 最近邻上采样（简化实现）
-        for (int b = 0; b < batchSize; b++) {
-            for (int c = 0; c < channels; c++) {
-                for (int h = 0; h < outH; h++) {
-                    for (int w = 0; w < outW; w++) {
-                        // 计算源坐标（最近邻）
-                        int srcH = Math.min((int) (h * scaleH), inH - 1);
-                        int srcW = Math.min((int) (w * scaleW), inW - 1);
-                        
-                        // 复制像素值
-                        float value = inputData.get(b, c, srcH, srcW);
-                        int outIdx = ((b * channels + c) * outH + h) * outW + w;
-                        outputData[outIdx] = value;
-                    }
-                }
-            }
+            
+        int scaleH = outH / inH;
+        int scaleW = outW / inW;
+            
+        if (scaleH * inH != outH || scaleW * inW != outW) {
+            throw new IllegalArgumentException(
+                String.format("上采样比例必须为整数: inH=%d->outH=%d, inW=%d->outW=%d",
+                    inH, outH, inW, outW)
+            );
         }
-        
-        NdArray outputArray = NdArray.of(outputData, Shape.of(batchSize, channels, outH, outW));
-        return new Variable(outputArray);
+            
+        // [B, C, H, W] -> [B, C, H, 1, W, 1] -> expand [B, C, H, scaleH, W, scaleW] -> [B, C, outH, outW]
+        Variable reshaped = x.reshape(Shape.of(batchSize, channels, inH, 1, inW, 1));
+        Variable expanded = reshaped.expand(Shape.of(batchSize, channels, inH, scaleH, inW, scaleW));
+        return expanded.reshape(Shape.of(batchSize, channels, outH, outW));
     }
-    
+        
     /**
-     * 手动重排维度: NCHW -> NHWC
+     * 维度置换: NCHW -> NHWC
      * [batch, channels, height, width] -> [batch, height, width, channels]
+     * 使用 Permute Function 保持梯度计算图连通。
      */
     private Variable permuteNCHWToNHWC(Variable x) {
-        int[] shape = x.getValue().getShape().getShapeDims();
-        int batchSize = shape[0];
-        int channels = shape[1];
-        int height = shape[2];
-        int width = shape[3];
-        
-        NdArray inputData = x.getValue();
-        float[] outputData = new float[batchSize * height * width * channels];
-        
-        for (int b = 0; b < batchSize; b++) {
-            for (int h = 0; h < height; h++) {
-                for (int w = 0; w < width; w++) {
-                    for (int c = 0; c < channels; c++) {
-                        float value = inputData.get(b, c, h, w);
-                        int outIdx = ((b * height + h) * width + w) * channels + c;
-                        outputData[outIdx] = value;
-                    }
-                }
-            }
-        }
-        
-        NdArray outputArray = NdArray.of(outputData, Shape.of(batchSize, height, width, channels));
-        return new Variable(outputArray);
+        return new Permute(0, 2, 3, 1).call(x);
     }
-    
+        
     /**
-     * 手动重排维度: NHWC -> NCHW
+     * 维度置换: NHWC -> NCHW
      * [batch, height, width, channels] -> [batch, channels, height, width]
+     * 使用 Permute Function 保持梯度计算图连通。
      */
     private Variable permuteNHWCToNCHW(Variable x) {
-        int[] shape = x.getValue().getShape().getShapeDims();
-        int batchSize = shape[0];
-        int height = shape[1];
-        int width = shape[2];
-        int channels = shape[3];
-        
-        NdArray inputData = x.getValue();
-        float[] outputData = new float[batchSize * channels * height * width];
-        
-        for (int b = 0; b < batchSize; b++) {
-            for (int h = 0; h < height; h++) {
-                for (int w = 0; w < width; w++) {
-                    for (int c = 0; c < channels; c++) {
-                        float value = inputData.get(b, h, w, c);
-                        int outIdx = ((b * channels + c) * height + h) * width + w;
-                        outputData[outIdx] = value;
-                    }
-                }
-            }
-        }
-        
-        NdArray outputArray = NdArray.of(outputData, Shape.of(batchSize, channels, height, width));
-        return new Variable(outputArray);
+        return new Permute(0, 3, 1, 2).call(x);
     }
     
     // ==================== Getter方法 ====================

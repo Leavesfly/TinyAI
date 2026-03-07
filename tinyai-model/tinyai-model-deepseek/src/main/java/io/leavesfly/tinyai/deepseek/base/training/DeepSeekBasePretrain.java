@@ -237,8 +237,8 @@ public abstract class DeepSeekBasePretrain<M extends Model> {
         
         Map<String, Parameter> params = model.getModule().namedParameters("", true);
         for (Parameter param : params.values()) {
-            if (param.getGrad() != null) {
-                NdArray grad = param.getGrad();
+            if (param.grad() != null) {
+                NdArray grad = param.grad();
                 double paramNorm = Math.sqrt(grad.mul(grad).sum().getNumber().doubleValue());
                 totalNorm += paramNorm * paramNorm;
             }
@@ -247,10 +247,11 @@ public abstract class DeepSeekBasePretrain<M extends Model> {
         totalNorm = Math.sqrt(totalNorm);
         
         if (totalNorm > maxGradNorm) {
-            double scale = maxGradNorm / (totalNorm + 1e-6);
+            float scale = (float) (maxGradNorm / (totalNorm + 1e-6));
             for (Parameter param : params.values()) {
-                if (param.getGrad() != null) {
-                    param.setGrad(param.getGrad().mul(NdArray.of(scale)));
+                if (param.grad() != null) {
+                    // 统一使用 mulNum 方式，与其他 Trainer 保持一致
+                    param.setGrad(param.grad().mulNum(scale));
                 }
             }
         }

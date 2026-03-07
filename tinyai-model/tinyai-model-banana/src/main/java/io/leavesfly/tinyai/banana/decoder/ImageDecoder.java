@@ -2,7 +2,7 @@ package io.leavesfly.tinyai.banana.decoder;
 
 import io.leavesfly.tinyai.banana.config.BananaConfig;
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.ndarr.NdArray;
+import io.leavesfly.tinyai.func.matrix.Permute;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
@@ -90,8 +90,8 @@ public class ImageDecoder extends Module {
         registerModule("feat_dropout", featureDropout);
         
         // 3. 特征投影层（降维以便上采样）
-        // hidden_size (512) -> upsampling_base_dim (256)
-        int upsamplingBaseDim = 256;
+        // 动态计算 upsamplingBaseDim，适配不同规模（Tiny=256, Small=384, Base=512）
+        int upsamplingBaseDim = Math.max(config.getHiddenSize() / 2, 64);
         this.featureProjection = new Linear(
             name + "_feat_proj",
             config.getHiddenSize(),
@@ -112,57 +112,63 @@ public class ImageDecoder extends Module {
         // 16 -> 32 -> 64 -> 128 -> 256
         this.upsampleBlocks = new ArrayList<>();
         
-        // 计算初始patch网格尺寸
+        // 通道级联: baseDim -> baseDim/2 -> baseDim/4 -> baseDim/8 -> 16
+        int ch1 = upsamplingBaseDim / 2;
+        int ch2 = ch1 / 2;
+        int ch3 = ch2 / 2;
+        int ch4 = 16;  // 始终输出 16 通道供 PixelProjection
+                
+        // 计算初始 patch 网格尺寸
         int patchGridSize = config.getImageSize() / config.getPatchSize(); // 256/16=16
-        
-        // 第一个上采样块: [256, 16, 16] -> [128, 32, 32]
+                
+        // 第一个上采样块
         UpsampleBlock block1 = new UpsampleBlock(
             name + "_upsample_0",
             upsamplingBaseDim,
-            128,
+            ch1,
             patchGridSize,
             patchGridSize * 2
         );
         upsampleBlocks.add(block1);
         registerModule("upsample_0", block1);
-        
-        // 第二个上采样块: [128, 32, 32] -> [64, 64, 64]
+                
+        // 第二个上采样块
         UpsampleBlock block2 = new UpsampleBlock(
             name + "_upsample_1",
-            128,
-            64,
+            ch1,
+            ch2,
             patchGridSize * 2,
             patchGridSize * 4
         );
         upsampleBlocks.add(block2);
         registerModule("upsample_1", block2);
-        
-        // 第三个上采样块: [64, 64, 64] -> [32, 128, 128]
+                
+        // 第三个上采样块
         UpsampleBlock block3 = new UpsampleBlock(
             name + "_upsample_2",
-            64,
-            32,
+            ch2,
+            ch3,
             patchGridSize * 4,
             patchGridSize * 8
         );
         upsampleBlocks.add(block3);
         registerModule("upsample_2", block3);
-        
-        // 第四个上采样块: [32, 128, 128] -> [16, 256, 256]
+                
+        // 第四个上采样块
         UpsampleBlock block4 = new UpsampleBlock(
             name + "_upsample_3",
-            32,
-            16,
+            ch3,
+            ch4,
             patchGridSize * 8,
             config.getImageSize()
         );
         upsampleBlocks.add(block4);
         registerModule("upsample_3", block4);
-        
+                
         // 5. 像素投影层（最终输出）
         this.pixelProjection = new PixelProjection(
             name + "_pixel_proj",
-            16,
+            ch4,
             config.getImageChannels() // 3 (RGB)
         );
         registerModule("pixel_proj", pixelProjection);
@@ -228,6 +234,8 @@ public class ImageDecoder extends Module {
     /**
      * 将序列特征重塑为2D特征图
      * 
+     * 使用 Permute Function 保持梯度计算图连通。
+     *
      * @param x 输入特征 [batch, num_patches, dim]
      * @return 2D特征图 [batch, dim, grid_h, grid_w]
      */
@@ -246,25 +254,10 @@ public class ImageDecoder extends Module {
             );
         }
         
-        // 手动重排数据: [batch, num_patches, dim] -> [batch, dim, grid_h, grid_w]
-        NdArray inputData = x.getValue();
-        float[] outputData = new float[batchSize * dim * gridSize * gridSize];
-        
-        for (int b = 0; b < batchSize; b++) {
-            for (int p = 0; p < numPatches; p++) {
-                int h = p / gridSize;
-                int w = p % gridSize;
-                
-                for (int d = 0; d < dim; d++) {
-                    float value = inputData.get(b, p, d);
-                    int outIdx = ((b * dim + d) * gridSize + h) * gridSize + w;
-                    outputData[outIdx] = value;
-                }
-            }
-        }
-        
-        NdArray outputArray = NdArray.of(outputData, Shape.of(batchSize, dim, gridSize, gridSize));
-        return new Variable(outputArray);
+        // [B, N, D] -> [B, D, N] -> [B, D, gridH, gridW]
+        // 使用 Permute Function（支持自动微分），保持梯度计算图完整
+        Variable permuted = new Permute(0, 2, 1).call(x);
+        return permuted.reshape(Shape.of(batchSize, dim, gridSize, gridSize));
     }
     
     /**

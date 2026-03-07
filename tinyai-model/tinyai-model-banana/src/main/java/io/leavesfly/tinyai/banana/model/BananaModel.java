@@ -140,36 +140,50 @@ public class BananaModel extends Model {
     /**
      * 图像编辑
      * 
+     * 使用编辑指令修改原始图像。
+     * 设计说明：
+     * 1. 编码原始图像获得视觉特征
+     * 2. 编码编辑指令获得文本特征
+     * 3. 通过跨模态注意力融合文本指令和图像特征
+     * 4. 解码生成编辑后的图像
+     * 
      * @param imagePixels 原始图像 [batch, channels, height, width]
      * @param editInstructions 编辑指令token IDs [batch, text_len]
      * @return 编辑后的图像 [batch, channels, height, width]
      */
     public Variable editImage(Variable imagePixels, Variable editInstructions) {
-        // TODO: 实现图像编辑
-        throw new UnsupportedOperationException("图像编辑尚未实现");
+        return bananaBlock.imageEditing(imagePixels, editInstructions);
     }
     
     /**
      * 图像理解
      * 
+     * 将图像转换为文本描述的logits。
+     * 输出的logits可以通过argmax或sampling解码为文本token。
+     * 
      * @param imagePixels 图像 [batch, channels, height, width]
-     * @return 图像描述token IDs [batch, seq_len]
+     * @return 图像描述logits [batch, num_patches, vocab_size]
      */
     public Variable understandImage(Variable imagePixels) {
-        // TODO: 实现图像理解
-        throw new UnsupportedOperationException("图像理解尚未实现");
+        return bananaBlock.imageToText(imagePixels);
     }
     
     /**
      * 多图像组合
+     * 
+     * 将多张图像按照组合指令融合为一张新图像。
+     * 设计说明：
+     * 1. 编码所有输入图像
+     * 2. 聚合多图像特征（平均池化）
+     * 3. 使用组合指令引导融合
+     * 4. 解码生成组合图像
      * 
      * @param images 多张图像 [num_images, channels, height, width]
      * @param compositionInstructions 组合指令 [batch, text_len]
      * @return 组合后的图像 [batch, channels, height, width]
      */
     public Variable composeImages(Variable images, Variable compositionInstructions) {
-        // TODO: 实现多图像组合
-        throw new UnsupportedOperationException("多图像组合尚未实现");
+        return bananaBlock.composeMultipleImages(images, compositionInstructions);
     }
     
     /**

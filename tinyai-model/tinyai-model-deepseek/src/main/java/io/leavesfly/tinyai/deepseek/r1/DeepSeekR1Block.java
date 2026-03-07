@@ -174,8 +174,15 @@ public class DeepSeekR1Block extends Module {
         
         // 2. Transformer层堆叠（带任务类型）
         for (DeepSeekV3TransformerBlock block : transformerBlocks) {
-            // V3 的 TransformerBlock 支持任务感知
-            x = block.forward(x);  // TODO: 传递 taskType 给 V3Block
+            if (taskType != null) {
+                // 使用带任务感知路由的前向传播
+                DeepSeekV3TransformerBlock.DetailedForwardResult detailedResult = 
+                    block.forwardWithDetails(x, taskType);
+                x = detailedResult.output;
+            } else {
+                // 无任务类型时使用普通前向传播
+                x = block.forward(x);
+            }
         }
         
         // 3. 最终LayerNorm

@@ -407,7 +407,26 @@ public class DeepSeekR1RLVRTrainer {
         }
         
         if (validSamples == 0) {
-            return logits.sum().mul(new Variable(NdArray.of(0.0001f)));
+            // 改进：当所有样本无效时，使用熔损代替无意义的近零损失
+            // 熔损鼓励模型输出更均匀的分布，避免过度自信
+            // 熔 = -sum(softmax(logits) * log(softmax(logits)))
+            Variable lastPosLogits;
+            if (shape.length == 3) {
+                lastPosLogits = logits.sliceRange(1, seqLen - 1, seqLen);
+                lastPosLogits = lastPosLogits.reshape(Shape.of(actualBatchSize, vocabSize));
+            } else if (shape.length == 2) {
+                lastPosLogits = logits.sliceRange(0, seqLen - 1, seqLen);
+            } else {
+                lastPosLogits = logits;
+            }
+            
+            // 计算负熔作为损失（最小化负熔 = 最大化熔）
+            Variable probs = lastPosLogits.softMax();
+            Variable logProbs = lastPosLogits.logSoftmax();
+            Variable entropy = probs.mul(logProbs).sum().neg();
+            
+            // 返回小权重的熔损失
+            return entropy.mul(new Variable(NdArray.of(0.01f)));
         }
         
         // ========== 简化方案：使用sliceRange提取最后位置 ==========

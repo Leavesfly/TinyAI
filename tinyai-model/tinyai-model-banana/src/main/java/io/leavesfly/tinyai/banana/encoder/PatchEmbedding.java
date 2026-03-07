@@ -1,6 +1,8 @@
 package io.leavesfly.tinyai.banana.encoder;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.func.matrix.Permute;
+import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.layer.conv.Conv2d;
 
@@ -120,6 +122,8 @@ public class PatchEmbedding extends Module {
      * 
      * 将卷积输出从 [batch, hidden_size, h', w'] 
      * 重塑为 [batch, num_patches, hidden_size]
+     * 
+     * 使用 Permute Function 保持计算图连通，确保梯度可以回传到 patchConv。
      */
     private Variable reshapeToPatchSequence(Variable patchFeatures) {
         int batchSize = patchFeatures.size(0);
@@ -135,18 +139,14 @@ public class PatchEmbedding extends Module {
             );
         }
         
-        // 使用reshape和transpose的组合
-        // [B, H, h', w'] -> [B, H, h'*w'] -> [B, h'*w', H]
+        // [B, H, h', w'] -> [B, H, h'*w']
         Variable reshaped = patchFeatures.reshape(
-            io.leavesfly.tinyai.ndarr.Shape.of(batchSize, hiddenSize, totalPatches)
+            Shape.of(batchSize, hiddenSize, totalPatches)
         );
         
-        // 转置: [B, H, N] -> [B, N, H]
-        // 需要对NdArray进行转置，因为Variable的transpose()不支持参数
-        io.leavesfly.tinyai.ndarr.NdArray data = reshaped.getValue();
-        io.leavesfly.tinyai.ndarr.NdArray transposed = data.transpose(0, 2, 1);
-        
-        return new Variable(transposed);
+        // [B, H, N] -> [B, N, H]
+        // 使用 Permute Function（支持自动微分），保持梯度计算图完整
+        return new Permute(0, 2, 1).call(reshaped);
     }
     
     /**

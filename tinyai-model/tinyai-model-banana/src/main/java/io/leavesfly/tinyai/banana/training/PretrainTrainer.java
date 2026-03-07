@@ -259,24 +259,16 @@ public class PretrainTrainer {
     /**
      * 计算重建损失
      * 
+     * 使用 meanSquaredError 保持梯度计算图连通，
+     * 确保 loss.backward() 能正确回传梯度到模型参数。
+     * 
      * @param reconstructed 重建特征
      * @param original 原始特征
-     * @return 损失值
+     * @return 损失値 (Variable)
      */
     private Variable computeReconstructionLoss(Variable reconstructed, Variable original) {
-        // 计算MSE损失
-        Variable diff = reconstructed.sub(original);
-        Variable squared = diff.mul(diff);
-        
-        // 计算均值
-        NdArray sumArray = squared.getValue().sum();
-        float totalLoss = sumArray.getNumber().floatValue();
-        int numElements = reconstructed.getValue().getShape().getShapeDims()[0] 
-                        * reconstructed.getValue().getShape().getShapeDims()[1]
-                        * reconstructed.getValue().getShape().getShapeDims()[2];
-        float meanLoss = totalLoss / numElements;
-        
-        return new Variable(NdArray.of(new float[]{meanLoss}, io.leavesfly.tinyai.ndarr.Shape.of(1)));
+        // 使用内置 MSE 算子，保持计算图完整
+        return reconstructed.meanSquaredError(original);
     }
     
     /**

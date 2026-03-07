@@ -113,9 +113,14 @@ public class MultiModalFusion extends Module {
     /**
      * 前向传播
      * 
+     * 注意: 由于 Module.forward() 方法只能返回单个 Variable，
+     * 此方法仅返回融合后的文本特征。
+     * 如果需要同时获取融合后的文本和图像特征，请使用 forwardBoth() 方法。
+     * 
      * @param inputs inputs[0]: textFeatures [batch, text_len, hidden_size]
      *               inputs[1]: imageFeatures [batch, num_patches, hidden_size]
-     * @return Variable数组: [fusedTextFeatures, fusedImageFeatures]
+     * @return fusedTextFeatures [batch, text_len, hidden_size]
+     * @see #forwardBoth(Variable, Variable) 同时获取两种融合特征
      */
     @Override
     public Variable forward(Variable... inputs) {
@@ -132,13 +137,10 @@ public class MultiModalFusion extends Module {
         // 文本特征作为Query,图像特征作为Key/Value
         Variable fusedTextFeatures = fuseTextWithImage(textFeatures, imageFeatures);
         
-        // 2. Image → Text 跨模态注意力
+        // 2. Image → Text 跨模态注意力 (计算但不返回，需要时请用forwardBoth)
         // 图像特征作为Query,文本特征作为Key/Value
-        Variable fusedImageFeatures = fuseImageWithText(imageFeatures, textFeatures);
+        // Variable fusedImageFeatures = fuseImageWithText(imageFeatures, textFeatures);
         
-        // 返回融合后的特征
-        // 注意: Variable.forward只能返回单个Variable,这里我们只返回文本融合结果
-        // 图像融合结果可通过forwardBoth方法获取
         return fusedTextFeatures;
     }
     

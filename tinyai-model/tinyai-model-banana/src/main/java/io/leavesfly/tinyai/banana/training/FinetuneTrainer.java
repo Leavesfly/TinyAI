@@ -319,19 +319,13 @@ public class FinetuneTrainer {
     
     /**
      * 计算损失
+     * 
+     * 使用 meanSquaredError 保持梯度计算图连通，
+     * 确保 loss.backward() 能正确回传梯度到模型参数。
      */
     private Variable computeLoss(Variable reconstructed, Variable original) {
-        Variable diff = reconstructed.sub(original);
-        Variable squared = diff.mul(diff);
-        
-        NdArray sumArray = squared.getValue().sum();
-        float totalLoss = sumArray.getNumber().floatValue();
-        int numElements = reconstructed.getValue().getShape().getShapeDims()[0] 
-                        * reconstructed.getValue().getShape().getShapeDims()[1]
-                        * reconstructed.getValue().getShape().getShapeDims()[2];
-        float meanLoss = totalLoss / numElements;
-        
-        return new Variable(NdArray.of(new float[]{meanLoss}, io.leavesfly.tinyai.ndarr.Shape.of(1)));
+        // 使用内置 MSE 算子，保持计算图完整
+        return reconstructed.meanSquaredError(original);
     }
     
     /**

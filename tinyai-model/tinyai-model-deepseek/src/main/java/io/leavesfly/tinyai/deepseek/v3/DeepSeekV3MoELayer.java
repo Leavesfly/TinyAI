@@ -5,7 +5,6 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 import io.leavesfly.tinyai.nnet.v2.layer.activation.SiLU;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
@@ -36,18 +35,24 @@ import java.util.List;
  * @version 2.0
  */
 public class DeepSeekV3MoELayer extends Module {
-    
+
+    /** 负载均衡损失为零的判断阈值 */
+    private static final float ZERO_THRESHOLD = 1e-9f;
+
+    /** 任务类型总数（用于任务感知路由偏置分配） */
+    private static final int NUM_TASK_TYPES = 5;
+
     private final DeepSeekV3Config config;
-    
+
     // 门控网络
     private Linear gatingNetwork;
-    
+
     // 共享专家列表（每次必激活，DeepSeekMoE核心创新）
     private List<ExpertNetwork> sharedExperts;
-    
+
     // 路由专家列表（Top-K选择）
-    private List<ExpertNetwork> experts;
-    
+    private List<ExpertNetwork> routedExperts;
+
     // Dropout层
     private Dropout expertDropout;
     
@@ -89,14 +94,14 @@ public class DeepSeekV3MoELayer extends Module {
         }
         
         // 3. 初始化路由专家（Top-K选择）
-        experts = new ArrayList<>();
+        routedExperts = new ArrayList<>();
         for (int i = 0; i < config.getNumExperts(); i++) {
             ExpertNetwork expert = new ExpertNetwork(
                 name + "_expert_" + i,
                 config.getNEmbd(),
                 config.getExpertHiddenDim()
             );
-            experts.add(expert);
+            routedExperts.add(expert);
             registerModule("expert_" + i, expert);
         }
         
@@ -120,17 +125,8 @@ public class DeepSeekV3MoELayer extends Module {
         if (inputs == null || inputs.length == 0) {
             throw new IllegalArgumentException("输入不能为空");
         }
-        
-        Variable input = inputs[0];
-        TaskType taskType = null;
-        if (inputs.length > 1 && inputs[1] != null) {
-            // 这里假设inputs[1]包含任务类型信息
-            // 实际使用中需要从Variable中提取TaskType
-        }
-        
-        // 执行MoE计算
-        MoEOutput moeOutput = computeMoE(input, taskType);
-        
+        // 执行MoE计算，不携带任务类型（标准路由模式）
+        MoEOutput moeOutput = computeMoE(inputs[0], null);
         // 应用dropout
         return expertDropout.forward(moeOutput.output);
     }
@@ -152,8 +148,8 @@ public class DeepSeekV3MoELayer extends Module {
             gatingLogits = applyTaskAwareBias(gatingLogits, taskType);
         }
         
-        // 3. 计算门控概率（softmax）
-        Variable gatingProbs = softmax(gatingLogits, -1);
+        // 3. 计算门控概率（softmax归一化）
+        Variable gatingProbs = gatingLogits.softMax();
         
         // 4. Top-K选择
         TopKResult topKResult = selectTopK(gatingProbs, config.getTopK());
@@ -174,53 +170,30 @@ public class DeepSeekV3MoELayer extends Module {
     }
     
     /**
-     * 应用任务感知偏置 (使用Variable算子)
+     * 应用任务感知偏置：将任务特定偏置广播加到门控logits上
      */
     private Variable applyTaskAwareBias(Variable gatingLogits, TaskType taskType) {
-        // ✅ 使用Variable算子添加偏置
-        // 获取任务偏置并转换为Variable
         float[] taskBias = getTaskBias(taskType);
-        
-        // 将偏置扩展为 [1, 1, numExperts] 形状
-        NdArray biasArray = NdArray.of(taskBias);
-        Variable biasVar = new Variable(biasArray);
-        Variable bias3D = biasVar.reshape(Shape.of(1, 1, config.getNumExperts()));
-        
-        // 使用Variable的add算子（会自动广播）
+        // 扩展为 [1, 1, numExperts] 以支持广播加法
+        Variable bias3D = new Variable(NdArray.of(taskBias))
+            .reshape(Shape.of(1, 1, config.getNumExperts()));
         return gatingLogits.add(bias3D);
     }
     
     /**
-     * 获取任务类型的专家偏置
-     * 
-     * 根据实际专家数量动态分配偏置，避免越界
+     * 根据任务类型生成专家偏置向量
+     * 使用取模运算确保索引不越界，每种任务类型均匀分配偏向的专家范围
      */
     private float[] getTaskBias(TaskType taskType) {
         int numExperts = config.getNumExperts();
         float[] bias = new float[numExperts];
-        
-        // 根据任务类型和实际专家数量动态分配偏置
-        // 使用取模运算确保索引不越界
         int taskId = taskType.getId();
-        
-        // 每个任务类型倾向于2个专家（如果专家数足够）
-        int expertsPerTask = Math.max(1, numExperts / 5);  // 5种任务类型
+        int expertsPerTask = Math.max(1, numExperts / NUM_TASK_TYPES);
         int startIdx = (taskId * expertsPerTask) % numExperts;
-        
-        for (int i = 0; i < expertsPerTask && i < numExperts; i++) {
-            int expertIdx = (startIdx + i) % numExperts;
-            bias[expertIdx] = 1.0f;
+        for (int i = 0; i < expertsPerTask; i++) {
+            bias[(startIdx + i) % numExperts] = 1.0f;
         }
-        
         return bias;
-    }
-    
-    /**
-     * Softmax激活函数 (使用Variable算子)
-     */
-    private Variable softmax(Variable logits, int dim) {
-        // ✅ 直接使用Variable的softMax算子
-        return logits.softMax();
     }
     
     /**
@@ -310,42 +283,28 @@ public class DeepSeekV3MoELayer extends Module {
     }
     
     /**
-     * 计算所有专家的输出并加权组合
-     * 
-     * ✅ 优化方案：批量计算，完全在Variable层面
-     * 策略：
-     * 1. 让所有专家并行处理整个batch的输入
-     * 2. 根据TopK结果构建权重矩阵
-     * 3. 使用Variable算子进行加权组合
-     * 
-     * 这样既保证了梯度回传，又避免了逐位置的循环
+     * 计算所有路由专家的输出并按 TopK 权重加权组合
+     * 策略：让所有专家批量处理整个 batch，再根据 TopK 权重做稀疏累加，保证梯度回传
      */
     private Variable computeExpertOutputs(Variable input, TopKResult topKResult) {
-        int batchSize = input.getValue().getShape().getDimension(0);
-        int seqLen = input.getValue().getShape().getDimension(1);
-        int nEmbd = input.getValue().getShape().getDimension(2);
-        int numExperts = config.getNumExperts();
-        
-        // ✅ 方案1：所有专家并行计算（推荐用于推理）
-        // 存储所有专家的输出
-        List<Variable> expertOutputs = new ArrayList<>();
-        for (int i = 0; i < numExperts; i++) {
-            // 每个专家处理整个batch
-            Variable expertOut = experts.get(i).forward(input);
-            expertOutputs.add(expertOut);
+        Shape inputShape = input.getValue().getShape();
+        int batchSize = inputShape.getDimension(0);
+        int seqLen    = inputShape.getDimension(1);
+        int nEmbd     = inputShape.getDimension(2);
+
+        // 所有路由专家批量计算各自输出
+        List<Variable> allExpertOutputs = new ArrayList<>();
+        for (ExpertNetwork expert : routedExperts) {
+            allExpertOutputs.add(expert.forward(input));
         }
-        
-        // ✅ 构建专家选择和权重矩阵
-        // 对于每个位置(b,t)，根据TopK结果加权组合对应的专家输出
-        Variable result = createWeightedExpertCombination(
-            expertOutputs, topKResult, batchSize, seqLen, nEmbd
-        );
-        
-        return result;
+
+        return createWeightedExpertCombination(allExpertOutputs, topKResult, batchSize, seqLen, nEmbd);
     }
     
     /**
-     * ✅ 根据TopK结果加权组合专家输出（在Variable层面）
+     * 根据 TopK 结果对各专家输出进行稀疏加权累加
+     * 权重矩阵形状为 [batch, seq, 1]，通过广播与 [batch, seq, nEmbd] 相乘
+     * 未被任何位置选中的专家直接跳过，减少无效计算
      */
     private Variable createWeightedExpertCombination(
             List<Variable> expertOutputs,
@@ -353,34 +312,18 @@ public class DeepSeekV3MoELayer extends Module {
             int batchSize,
             int seqLen,
             int nEmbd) {
-        
-        // 初始化输出为零
-        NdArray outputArray = NdArray.zeros(Shape.of(batchSize, seqLen, nEmbd));
-        Variable output = new Variable(outputArray);
-        
-        // 对每个专家，构建其权重mask并累加
+
+        Variable output = new Variable(NdArray.zeros(Shape.of(batchSize, seqLen, nEmbd)));
+
         for (int expertIdx = 0; expertIdx < expertOutputs.size(); expertIdx++) {
-            // 构建该专家的权重矩阵 [batch_size, seq_len, 1]
-            Variable weightMask = createExpertWeightMask(
-                expertIdx, topKResult, batchSize, seqLen
-            );
-            
-            // 如果该专家没有被任何位置选中，跳过
+            Variable weightMask = createExpertWeightMask(expertIdx, topKResult, batchSize, seqLen);
             if (isZeroMask(weightMask)) {
                 continue;
             }
-            
-            // 获取该专家的输出并加权
-            Variable expertOut = expertOutputs.get(expertIdx);
-            
-            // 使用广播乘法: [batch, seq, 1] × [batch, seq, nEmbd]
-            // 避免使用repeat创建大量中间变量
-            Variable weightedOut = expertOut.mul(weightMask);
-            
-            // ✅ 累加到输出（在Variable层面）
-            output = output.add(weightedOut);
+            // 广播乘法: [batch, seq, 1] × [batch, seq, nEmbd]
+            output = output.add(expertOutputs.get(expertIdx).mul(weightMask));
         }
-        
+
         return output;
     }
     
@@ -412,28 +355,26 @@ public class DeepSeekV3MoELayer extends Module {
     }
     
     /**
-     * 检查权重mask是否全为0
+     * 检查权重 mask 是否全为零（未被任何 token 选中）
      */
     private boolean isZeroMask(Variable mask) {
-        NdArray arr = mask.getValue();
-        float sum = arr.sum().getNumber().floatValue();
-        return Math.abs(sum) < 1e-9f;
+        float sum = mask.getValue().sum().getNumber().floatValue();
+        return Math.abs(sum) < ZERO_THRESHOLD;
     }
     
     /**
-     * 计算负载均衡损失
-     * 目标：确保所有专家被均匀使用
+     * 计算负载均衡损失：以各专家平均激活频率与理想均匀分布的方差衡量不均衡程度
+     * 方差越小说明专家利用越均匀，理想值为 0（所有专家频率均为 1/numExperts）
      */
     private double computeLoadBalanceLoss(Variable gatingProbs) {
         NdArray probsArray = gatingProbs.getValue();
-        int batchSize = probsArray.getShape().getDimension(0);
-        int seqLen = probsArray.getShape().getDimension(1);
+        int batchSize  = probsArray.getShape().getDimension(0);
+        int seqLen     = probsArray.getShape().getDimension(1);
         int numExperts = probsArray.getShape().getDimension(2);
-        
-        // 计算每个专家的平均使用频率
-        float[] expertFreq = new float[numExperts];
         int totalTokens = batchSize * seqLen;
-        
+
+        // 统计每个专家跨所有 token 的平均激活频率
+        float[] expertFreq = new float[numExperts];
         for (int b = 0; b < batchSize; b++) {
             for (int t = 0; t < seqLen; t++) {
                 for (int e = 0; e < numExperts; e++) {
@@ -441,20 +382,15 @@ public class DeepSeekV3MoELayer extends Module {
                 }
             }
         }
-        
-        for (int e = 0; e < numExperts; e++) {
-            expertFreq[e] /= totalTokens;
-        }
-        
-        // 计算方差（理想情况下所有专家频率都接近1/numExperts）
+
+        // 计算与均匀分布（1/numExperts）之间的方差
         float idealFreq = 1.0f / numExperts;
-        float variance = 0.0f;
-        
+        float variance  = 0.0f;
         for (int e = 0; e < numExperts; e++) {
-            float diff = expertFreq[e] - idealFreq;
+            float diff = (expertFreq[e] / totalTokens) - idealFreq;
             variance += diff * diff;
         }
-        
+
         return variance * config.getLoadBalanceLossWeight();
     }
     
@@ -469,10 +405,10 @@ public class DeepSeekV3MoELayer extends Module {
      * - SiLU激活函数比GELU计算简单且效果相当
      */
     private static class ExpertNetwork extends Module {
-        private Linear gateProj;   // 门控投影: inputDim -> hiddenDim
-        private SiLU silu;         // SiLU激活函数
-        private Linear upProj;     // 上投影: inputDim -> hiddenDim
-        private Linear downProj;   // 下投影: hiddenDim -> inputDim
+        private final Linear gateProj;   // 门控投影: inputDim -> hiddenDim
+        private final SiLU   silu;       // SiLU激活函数
+        private final Linear upProj;     // 上投影: inputDim -> hiddenDim
+        private final Linear downProj;   // 下投影: hiddenDim -> inputDim
         
         public ExpertNetwork(String name, int inputDim, int hiddenDim) {
             super(name);

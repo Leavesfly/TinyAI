@@ -58,16 +58,16 @@ public class RLAdvancedFeaturesDemo {
         
         for (int bufferSize : bufferSizes) {
             for (int batchSize : batchSizes) {
-                System.out.println(String.format("\n缓冲区大小: %d, 批次大小: %d", bufferSize, batchSize));
+                System.out.printf("%n缓冲区大小: %d, 批次大小: %d%n", bufferSize, batchSize);
                 
                 DQNAgent agent = new DQNAgent("DQN", 4, 2, new int[]{64, 64}, 
                                             0.001f, 0.1f, 0.99f, batchSize, bufferSize, 100);
                 
                 float[] results = testExperienceReplayEffect(agent, environment, 50);
                 
-                System.out.println(String.format("  平均奖励: %.2f, 标准差: %.2f", results[0], results[1]));
-                System.out.println(String.format("  缓冲区使用率: %.2f%%, 平均损失: %.6f", 
-                                 agent.getBufferUsage() * 100, agent.getAverageLoss()));
+                System.out.printf("  平均奖励: %.2f, 标准差: %.2f%n", results[0], results[1]);
+                System.out.printf("  缓冲区使用率: %.2f%%, 平均损失: %.6f%n",
+                    agent.getBufferUsage() * 100, agent.getAverageLoss());
             }
         }
         
@@ -112,12 +112,12 @@ public class RLAdvancedFeaturesDemo {
                                          0.001f, 0.1f, 0.99f, 32, 10000, 100);
         
         System.out.println("比较自适应参数调整与固定参数的学习效果:");
-        
-        float adaptiveReward = trainAgent(adaptiveAgent, environment, 200);
-        float fixedReward = trainAgent(fixedAgent, environment, 200);
-        
-        System.out.println(String.format("自适应参数平均奖励: %.2f", adaptiveReward / 200));
-        System.out.println(String.format("固定参数平均奖励: %.2f", fixedReward / 200));
+        int episodes = 200;
+        float adaptiveReward = trainAgent(adaptiveAgent, environment, episodes);
+        float fixedReward    = trainAgent(fixedAgent,    environment, episodes);
+
+        System.out.printf("自适应参数平均奖励: %.2f%n", adaptiveReward / episodes);
+        System.out.printf("固定参数平均奖励: %.2f%n",   fixedReward    / episodes);
         
         demonstrateAdaptiveStrategies();
     }
@@ -137,23 +137,25 @@ public class RLAdvancedFeaturesDemo {
         DQNAgent sourceAgent = new DQNAgent("源智能体", 2, 4, new int[]{32, 32}, 
                                           0.01f, 0.1f, 0.99f, 32, 5000, 50);
         
+        int sourceEpisodes = 100;
+        int targetEpisodes = 150;
+
         System.out.println("阶段1: 在源环境训练...");
-        float sourcePerformance = trainAgent(sourceAgent, sourceEnv, 100);
-        System.out.println(String.format("源环境训练完成，平均奖励: %.2f", sourcePerformance / 100));
-        
-        // 迁移学习 vs 从头训练对比
-        DQNAgent transferAgent = new DQNAgent("迁移智能体", 2, 4, new int[]{32, 32}, 
-                                            0.005f, 0.05f, 0.99f, 32, 5000, 50); // 更低的学习率
-        
-        DQNAgent scratchAgent = new DQNAgent("从头训练", 2, 4, new int[]{32, 32}, 
-                                           0.01f, 0.1f, 0.99f, 32, 5000, 50);
-        
+        float sourcePerformance = trainAgent(sourceAgent, sourceEnv, sourceEpisodes);
+        System.out.printf("源环境训练完成，平均奖励: %.2f%n", sourcePerformance / sourceEpisodes);
+
+        // 迁移智能体使用更低学习率（0.005 vs 0.01），以保护从源环境习得的知识
+        DQNAgent transferAgent = new DQNAgent("迁移智能体", 2, 4, new int[]{32, 32},
+                                            0.005f, 0.05f, 0.99f, 32, 5000, 50);
+        DQNAgent scratchAgent  = new DQNAgent("从头训练",   2, 4, new int[]{32, 32},
+                                            0.01f,  0.1f,  0.99f, 32, 5000, 50);
+
         System.out.println("阶段2: 在目标环境比较迁移学习与从头训练...");
-        float transferReward = trainAgent(transferAgent, targetEnv, 150);
-        float scratchReward = trainAgent(scratchAgent, targetEnv, 150);
-        
-        System.out.println(String.format("迁移学习平均奖励: %.2f", transferReward / 150));
-        System.out.println(String.format("从头训练平均奖励: %.2f", scratchReward / 150));
+        float transferReward = trainAgent(transferAgent, targetEnv, targetEpisodes);
+        float scratchReward  = trainAgent(scratchAgent,  targetEnv, targetEpisodes);
+
+        System.out.printf("迁移学习平均奖励: %.2f%n", transferReward / targetEpisodes);
+        System.out.printf("从头训练平均奖励: %.2f%n",  scratchReward  / targetEpisodes);
         
         if (transferReward > scratchReward) {
             System.out.println("迁移学习显示出优势，学习速度更快");
@@ -173,10 +175,10 @@ public class RLAdvancedFeaturesDemo {
         DQNAgent agent = new DQNAgent("测试智能体", 4, 2, new int[]{64, 64}, 
                                     0.001f, 0.1f, 0.99f, 32, 10000, 100);
         
-        // 先正常训练
         System.out.println("正常环境训练...");
-        float normalPerformance = trainAgent(agent, environment, 100);
-        System.out.println(String.format("正常环境平均奖励: %.2f", normalPerformance / 100));
+        int episodes = 100;
+        float normalPerformance = trainAgent(agent, environment, episodes);
+        System.out.printf("正常环境平均奖励: %.2f%n", normalPerformance / episodes);
         
         // 测试噪声鲁棒性
         System.out.println("\n测试噪声鲁棒性:");
@@ -228,7 +230,6 @@ public class RLAdvancedFeaturesDemo {
         ReplayBuffer buffer = new ReplayBuffer(1000);
         Random random = new Random();
         
-        // 模拟添加经验
         for (int i = 0; i < 1500; i++) {
             float reward = random.nextFloat() * 2 - 1;
             Experience exp = new Experience(
@@ -242,7 +243,7 @@ public class RLAdvancedFeaturesDemo {
             buffer.push(exp);
         }
         
-        System.out.println(String.format("缓冲区使用率: %.2f%%", buffer.getUsageRate() * 100));
+        System.out.printf("缓冲区使用率: %.2f%%%n", buffer.getUsageRate() * 100);
         System.out.println("经验回放有助于打破数据间的时间相关性，提高学习稳定性");
     }
     
@@ -267,9 +268,8 @@ public class RLAdvancedFeaturesDemo {
                 totalReward += result.getReward();
             }
             
-            System.out.println(String.format("%s: 总奖励=%.2f, 平均奖励=%.4f, 最优选择率=%.2f%%",
-                             agent.getName(), totalReward, totalReward / steps, 
-                             agent.getOptimalActionRate() * 100));
+            System.out.printf("%s: 总奖励=%.2f, 平均奖励=%.4f, 最优选择率=%.2f%%%n",
+                agent.getName(), totalReward, totalReward / steps, agent.getOptimalActionRate() * 100);
         }
     }
     
@@ -323,86 +323,82 @@ public class RLAdvancedFeaturesDemo {
     }
     
     private void testNoiseRobustness(DQNAgent agent, CartPoleEnvironment environment) {
-        // 模拟噪声环境测试
         Random random = new Random();
-        
-        float[] noiseLevels = {0.0f, 0.1f, 0.2f, 0.3f};
-        
-        for (float noiseLevel : noiseLevels) {
+        final int testEpisodes = 20;
+
+        for (float noiseLevel : new float[]{0.0f, 0.1f, 0.2f, 0.3f}) {
             float totalReward = 0.0f;
-            int testEpisodes = 20;
-            
+
             for (int episode = 0; episode < testEpisodes; episode++) {
                 Variable state = environment.reset();
                 float episodeReward = 0.0f;
                 int steps = 0;
-                
+
                 while (!environment.isDone() && steps < 200) {
-                    // 添加噪声到状态观测
-                    NdArray originalArray = state.getValue();
-                    Shape shape = originalArray.getShape();
-                    float[] data = new float[shape.size()];
-                    
-                    // 复制原始数据并添加噪声
-                    for (int i = 0; i < data.length; i++) {
-                        if (shape.isMatrix()) {
-                            data[i] = originalArray.get(i / shape.getColumn(), i % shape.getColumn());
-                        } else {
-                            data[i] = originalArray.get(i);
-                        }
-                        float noise = (random.nextFloat() - 0.5f) * 2 * noiseLevel;
-                        data[i] += noise;
-                    }
-                    
-                    Variable noisyState = new Variable(NdArray.of(data, shape));
-                    
-                    Variable action = agent.selectAction(noisyState);
+                    Variable action = agent.selectAction(addNoise(state, noiseLevel, random));
                     Environment.StepResult result = environment.step(action);
-                    
                     state = result.getNextState();
                     episodeReward += result.getReward();
                     steps++;
                 }
-                
                 totalReward += episodeReward;
             }
-            
-            System.out.println(String.format("噪声水平 %.1f: 平均奖励 %.2f", 
-                             noiseLevel, totalReward / testEpisodes));
+
+            System.out.printf("噪声水平 %.1f: 平均奖励 %.2f%n", noiseLevel, totalReward / testEpisodes);
         }
     }
     
     private void demonstrateAnomalyDetection(DQNAgent agent, CartPoleEnvironment environment) {
         System.out.println("\n=== 异常检测演示 ===");
-        
-        // 收集正常表现数据
-        List<Float> normalRewards = new ArrayList<>();
-        for (int i = 0; i < 10; i++) {
+
+        List<Float> normalRewards = collectEpisodeRewards(agent, environment, 10);
+
+        double meanReward = normalRewards.stream().mapToDouble(Double::valueOf).average().orElse(0.0);
+        double stdReward  = Math.sqrt(normalRewards.stream()
+            .mapToDouble(r -> Math.pow(r - meanReward, 2)).average().orElse(0.0));
+
+        System.out.printf("正常表现: 平均奖励 %.2f ± %.2f%n", meanReward, stdReward);
+
+        // 均值 - 2σ 作为异常检测阈值（覆盖约 95% 正常区间，低于此值视为异常）
+        double anomalyThreshold = meanReward - 2 * stdReward;
+        System.out.printf("异常检测阈值: %.2f%n", anomalyThreshold);
+        System.out.println("当奖励低于阈值时，可能表明智能体遇到了异常情况或需要重新训练");
+    }
+
+    /**
+     * 向观测状态的每个元素添加均匀分布噪声，幅度为 [-noiseLevel, +noiseLevel]
+     */
+    private Variable addNoise(Variable state, float noiseLevel, Random random) {
+        NdArray original = state.getValue();
+        Shape shape = original.getShape();
+        float[] data = new float[shape.size()];
+        for (int i = 0; i < data.length; i++) {
+            data[i] = shape.isMatrix()
+                ? original.get(i / shape.getColumn(), i % shape.getColumn())
+                : original.get(i);
+            data[i] += (random.nextFloat() - 0.5f) * 2 * noiseLevel;
+        }
+        return new Variable(NdArray.of(data, shape));
+    }
+
+    /**
+     * 推断模式运行指定回合数，收集每回合总奖励（仅执行动作选择，不调用 learn）
+     */
+    private List<Float> collectEpisodeRewards(Agent agent, Environment environment, int episodes) {
+        List<Float> rewards = new ArrayList<>();
+        for (int episode = 0; episode < episodes; episode++) {
             Variable state = environment.reset();
             float episodeReward = 0.0f;
             int steps = 0;
-            
             while (!environment.isDone() && steps < 200) {
                 Variable action = agent.selectAction(state);
                 Environment.StepResult result = environment.step(action);
-                
                 state = result.getNextState();
                 episodeReward += result.getReward();
                 steps++;
             }
-            
-            normalRewards.add(episodeReward);
+            rewards.add(episodeReward);
         }
-        
-        double meanReward = normalRewards.stream().mapToDouble(Double::valueOf).average().orElse(0.0);
-        double stdReward = Math.sqrt(normalRewards.stream()
-            .mapToDouble(r -> Math.pow(r - meanReward, 2)).average().orElse(0.0));
-        
-        System.out.println(String.format("正常表现: 平均奖励 %.2f ± %.2f", meanReward, stdReward));
-        
-        // 异常阈值
-        double anomalyThreshold = meanReward - 2 * stdReward;
-        System.out.println(String.format("异常检测阈值: %.2f", anomalyThreshold));
-        System.out.println("当奖励低于阈值时，可能表明智能体遇到了异常情况或需要重新训练");
+        return rewards;
     }
 }

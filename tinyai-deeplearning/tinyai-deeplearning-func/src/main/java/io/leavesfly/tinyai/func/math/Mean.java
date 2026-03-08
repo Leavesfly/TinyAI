@@ -79,6 +79,23 @@ public class Mean extends Function {
     @Override
     public List<NdArray> backward(NdArray yGrad) {
         if (!keepdims) {
+            // keepdims=false 时，yGrad 缺少被约简的轴维度，
+            // 需要先将该轴以大小 1 重新插入，使 shape 与 inputShape 可广播对齐。
+            int[] shape = inputShape.getShapeDims();
+            int actualAxis = axis;
+            if (actualAxis < 0) {
+                actualAxis = shape.length + actualAxis;
+            }
+            int[] gradShape = yGrad.getShape().getShapeDims();
+            int[] expandedShape = new int[gradShape.length + 1];
+            for (int i = 0; i < actualAxis; i++) {
+                expandedShape[i] = gradShape[i];
+            }
+            expandedShape[actualAxis] = 1;
+            for (int i = actualAxis; i < gradShape.length; i++) {
+                expandedShape[i + 1] = gradShape[i];
+            }
+            yGrad = yGrad.reshape(Shape.of(expandedShape));
             yGrad = yGrad.broadcastTo(inputShape);
         }
         // 梯度需要除以轴的大小，因为是平均值

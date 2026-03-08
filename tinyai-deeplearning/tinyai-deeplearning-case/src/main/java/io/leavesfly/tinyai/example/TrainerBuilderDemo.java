@@ -178,41 +178,39 @@ public class TrainerBuilderDemo {
             }
         }
 
-        NdArray[] xs = new NdArray[numSamples];
-        NdArray[] ys = new NdArray[numSamples];
+        NdArray[] xsArr = new NdArray[numSamples];
+        NdArray[] ysArr = new NdArray[numSamples];
 
         for (int i = 0; i < numSamples; i++) {
-            xs[i] = NdArray.of(xData[i], Shape.of(1, inputDim));
-            ys[i] = NdArray.of(yData[i], Shape.of(1, numClasses));
+            xsArr[i] = NdArray.of(xData[i], Shape.of(1, inputDim));
+            ysArr[i] = NdArray.of(yData[i], Shape.of(1, numClasses));
         }
 
-        return new ArrayDataset(32) {
-            {
-                this.xs = xs;
-                this.ys = ys;
-            }
+        // 使用 SimpleArrayDataset 避免匿名内部类初始化顺序问题
+        SimpleArrayDataset dataset = new SimpleArrayDataset(32, xsArr, ysArr);
+        return dataset;
+    }
 
-            @Override
-            protected DataSet build(int batchSize, NdArray[] _xs, NdArray[] _ys) {
-                ArrayDataset dataset = new ArrayDataset(batchSize) {
-                    @Override
-                    protected DataSet build(int batchSize, NdArray[] __xs, NdArray[] __ys) {
-                        return null;
-                    }
+    /**
+     * 简单的 ArrayDataset 实现，避免匿名内部类的复杂性
+     */
+    private static class SimpleArrayDataset extends ArrayDataset {
+        public SimpleArrayDataset(int batchSize, NdArray[] xs, NdArray[] ys) {
+            super(batchSize);
+            this.xs = xs;
+            this.ys = ys;
+        }
 
-                    @Override
-                    public void doPrepare() {
-                    }
-                };
-                dataset.setXs(_xs);
-                dataset.setYs(_ys);
-                return dataset;
-            }
+        @Override
+        protected DataSet build(int batchSize, NdArray[] _xs, NdArray[] _ys) {
+            return new SimpleArrayDataset(batchSize, _xs, _ys);
+        }
 
-            @Override
-            public void doPrepare() {
-            }
-        };
+        @Override
+        public void doPrepare() {
+            // 调用 splitDataset 来初始化训练/测试/验证集
+            splitDataset(0.8f, 0.1f, 0.1f);
+        }
     }
 
     /**

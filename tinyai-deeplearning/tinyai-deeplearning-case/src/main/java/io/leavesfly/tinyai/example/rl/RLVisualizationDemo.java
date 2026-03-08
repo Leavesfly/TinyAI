@@ -449,8 +449,8 @@ public class RLVisualizationDemo {
                 Variable action = agent.selectAction(state);
                 Environment.StepResult result = environment.step(action);
                 
-                int x = (int) state.getValue().get(0);
-                int y = (int) state.getValue().get(1);
+                int x = (int) state.getValue().get(0, 0);
+                int y = (int) state.getValue().get(0, 1);
                 int actionIndex = (int) action.getValue().getNumber().floatValue();
                 
                 String[] actionNames = {"↑", "↓", "←", "→"};
@@ -485,8 +485,8 @@ public class RLVisualizationDemo {
             int steps = 0;
             
             while (!environment.isDone() && steps < 50) {
-                int x = (int) state.getValue().get(0);
-                int y = (int) state.getValue().get(1);
+                int x = (int) state.getValue().get(0, 0);
+                int y = (int) state.getValue().get(0, 1);
                 
                 if (x >= 0 && x < 6 && y >= 0 && y < 6) {
                     visitCount[y][x]++;

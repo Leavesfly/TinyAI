@@ -166,126 +166,75 @@ public class DeepSeekV3Pretrain {
      */
     private void trainOneEpoch() {
         dataset.prepare(true);
-        
-        double epochLoss = 0.0;
-        double epochMoeLoss = 0.0;
-        double epochConfidence = 0.0;
-        int batchCount = 0;
-        
-        long epochStartTime = System.currentTimeMillis();
-        
+        EpochStats stats = new EpochStats();
+
         while (dataset.hasNext()) {
-            DeepSeekV3Dataset.Batch batch = dataset.nextBatch();
-            
-            // 训练一步
-            StepResult stepResult = trainStep(batch);
-            
-            epochLoss += stepResult.languageModelLoss;
-            epochMoeLoss += stepResult.moeLoss;
-            epochConfidence += stepResult.confidence;
-            batchCount++;
-            globalStep++;
-            
-            // 记录
-            lossHistory.add(stepResult.languageModelLoss);
-            moeLossHistory.add(stepResult.moeLoss);
-            confidenceHistory.add(stepResult.confidence);
-            
-            // 打印日志
-            if (globalStep % logInterval == 0) {
-                float avgLoss = getAverage(lossHistory, logInterval);
-                float avgMoeLoss = getAverage(moeLossHistory, logInterval);
-                float avgConf = getAverage(confidenceHistory, logInterval);
-                System.out.printf("Epoch %d/%d | Step %d | LM Loss: %.4f | MoE Loss: %.6f | " +
-                                 "Confidence: %.4f | LR: %.6f%n",
-                    currentEpoch + 1, maxEpochs, globalStep, avgLoss, avgMoeLoss, 
-                    avgConf, currentLearningRate);
-            }
-            
-            // 保存检查点
-            if (globalStep % saveInterval == 0) {
-                saveCheckpoint("step_" + globalStep);
-            }
+            processBatch(dataset.nextBatch(), stats);
         }
-        
-        long epochEndTime = System.currentTimeMillis();
-        double avgEpochLoss = batchCount > 0 ? epochLoss / batchCount : 0.0;
-        double avgEpochMoeLoss = batchCount > 0 ? epochMoeLoss / batchCount : 0.0;
-        double avgEpochConf = batchCount > 0 ? epochConfidence / batchCount : 0.0;
-        
-        System.out.printf("Epoch %d 完成 | 平均LM损失: %.4f | 平均MoE损失: %.6f | " +
-                         "平均置信度: %.4f | 耗时: %d ms%n",
-            currentEpoch + 1, avgEpochLoss, avgEpochMoeLoss, avgEpochConf, 
-            epochEndTime - epochStartTime);
-        
+
+        System.out.printf("Epoch %d 完成 | 平均LM损失: %.4f | 平均MoE损失: %.6f | 平均置信度: %.4f | 耗时: %d ms%n",
+            currentEpoch + 1, stats.avgLoss(), stats.avgMoeLoss(), stats.avgConfidence(), stats.elapsedMs());
         dataset.reset();
+    }
+
+    /**
+     * 处理单个batch：训练一步 + 记录历史 + 定期日志/保存
+     */
+    private void processBatch(DeepSeekV3Dataset.Batch batch, EpochStats stats) {
+        StepResult stepResult = trainStep(batch);
+        stats.accumulate(stepResult);
+        globalStep++;
+
+        lossHistory.add(stepResult.languageModelLoss);
+        moeLossHistory.add(stepResult.moeLoss);
+        confidenceHistory.add(stepResult.confidence);
+
+        if (globalStep % logInterval == 0) {
+            logStepProgress();
+        }
+        if (globalStep % saveInterval == 0) {
+            saveCheckpoint("step_" + globalStep);
+        }
+    }
+
+    /**
+     * 打印当前步骤训练进度
+     */
+    private void logStepProgress() {
+        float avgLoss    = getAverage(lossHistory, logInterval);
+        float avgMoeLoss = getAverage(moeLossHistory, logInterval);
+        float avgConf    = getAverage(confidenceHistory, logInterval);
+        System.out.printf("Epoch %d/%d | Step %d | LM Loss: %.4f | MoE Loss: %.6f | Confidence: %.4f | LR: %.6f%n",
+            currentEpoch + 1, maxEpochs, globalStep, avgLoss, avgMoeLoss, avgConf, currentLearningRate);
     }
     
     /**
      * 训练单步（含MoE负载均衡）
      */
     private StepResult trainStep(DeepSeekV3Dataset.Batch batch) {
-        // 更新学习率
         updateLearningRate();
-        
-        // 准备输入
+
         NdArray inputIds = batch.getInputIds();
         NdArray targetIds = batch.getTargetIds();
-        
-        // 打印批数据详情（用于调试数据结构）
-//        if (globalStep % logInterval == 0) {
-//            printBatchDetails(batch, inputIds, targetIds);
-//        }
-        
-        Variable inputVar = new Variable(inputIds);
-        
-        // 前向传播(带详细信息,包含MoE损失)
-        DeepSeekV3Block.DetailedForwardResult result = 
-            model.predictWithDetails(inputVar, batch.getMajorityTaskType());
-        Variable logits = result.logits;
-        
+
+        // 前向传播，result 中同时携带各层 MoE 负载均衡损失
+        DeepSeekV3Block.DetailedForwardResult result =
+            model.predictWithDetails(new Variable(inputIds), batch.getMajorityTaskType());
+
         // 计算语言模型损失
-        // SoftmaxCE只接受2维输入，需要将3D张量reshape为2D
-        int batchSize = inputIds.getShape().getDimension(0);
-        int seqLen = inputIds.getShape().getDimension(1);
-        int vocabSize = model.getConfig().getVocabSize();
-        
-        // logits: [batch_size, seq_len, vocab_size] -> [batch_size * seq_len, vocab_size]
-        Variable logits2D = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
-        
-        // targets: [batch_size, seq_len] -> [batch_size * seq_len, 1]
-        Variable targetVar = new Variable(targetIds);
-        Variable targets2D = targetVar.reshape(Shape.of(batchSize * seqLen, 1));
-        
-        Variable lmLoss = lossFunction.loss(targets2D, logits2D);
-        
-        float lmLossValue = lmLoss.getValue().getNumber().floatValue();
+        Variable[] shaped = reshapeForLoss(inputIds, targetIds, result.logits);
+        Variable lmLoss = lossFunction.loss(shaped[1], shaped[0]);
+        float lmLossValue  = lmLoss.getValue().getNumber().floatValue();
         float moeLossValue = (float) result.avgMoELoss;
-        
-        // 总损失 = 语言模型损失 + MoE负载均衡损失
-        Variable totalLoss = lmLoss;
-        if (moeLoadBalanceWeight > 0) {
-            // 创建标量MoE损失，使用一维数组
-            float[] moeLossData = new float[]{moeLossValue * moeLoadBalanceWeight};
-            Variable moeLossVar = new Variable(NdArray.of(moeLossData));
-            totalLoss = totalLoss.add(moeLossVar);
-        }
-        
-        // 清空梯度
+
+        // 反向传播：总损失 = LM损失 + MoE负载均衡损失
+        Variable totalLoss = buildTotalLoss(lmLoss, moeLossValue);
         model.clearGrads();
-        
-        // 反向传播
         totalLoss.backward();
-        
-        // 梯度裁剪
         clipGradients();
-        
-        // 参数更新
         optimizer.update();
-        
-        // 断开计算图
         totalLoss.unChainBackward();
-        
+
         return new StepResult(lmLossValue, moeLossValue, 0.0f);
     }
     
@@ -423,6 +372,28 @@ public class DeepSeekV3Pretrain {
     }
     
     /**
+     * 将 logits 和 targets reshape 为 2D（供损失函数使用）
+     * 返回 [logits2D, targets2D]
+     */
+    private Variable[] reshapeForLoss(NdArray inputIds, NdArray targetIds, Variable logits) {
+        int batchSize = inputIds.getShape().getDimension(0);
+        int seqLen    = inputIds.getShape().getDimension(1);
+        int vocabSize = model.getConfig().getVocabSize();
+        Variable logits2D  = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
+        Variable targets2D = new Variable(targetIds).reshape(Shape.of(batchSize * seqLen, 1));
+        return new Variable[]{logits2D, targets2D};
+    }
+
+    /**
+     * 融合语言模型损失与 MoE 负载均衡损失
+     */
+    private Variable buildTotalLoss(Variable lmLoss, float moeLoss) {
+        if (moeLoadBalanceWeight <= 0) return lmLoss;
+        Variable moeLossVar = new Variable(NdArray.of(new float[]{moeLoss * moeLoadBalanceWeight}));
+        return lmLoss.add(moeLossVar);
+    }
+
+    /**
      * 更新学习率(warmup + cosine衰减)
      */
     private void updateLearningRate() {
@@ -444,12 +415,10 @@ public class DeepSeekV3Pretrain {
     }
     
     /**
-     * 梯度裁剪（使用V2 Parameter）
+     * 梯度裁剪（全局梯度范数裁剪，防止梯度爆炸）
      */
     private void clipGradients() {
         double totalNorm = 0.0;
-        
-        // 计算梯度范数
         Map<String, Parameter> params = model.getModule().namedParameters("", true);
         for (Parameter param : params.values()) {
             if (param.requiresGrad() && param.grad() != null) {
@@ -489,7 +458,6 @@ public class DeepSeekV3Pretrain {
     private void saveCheckpoint(String name) {
         String path = checkpointDir + "/" + name + ".ckpt";
         System.out.println("保存检查点: " + path);
-        // 实际保存逻辑（这里简化）
     }
     
     /**
@@ -519,19 +487,38 @@ public class DeepSeekV3Pretrain {
         }
     }
     
-    /**
-     * 训练步骤结果类
-     */
+    /** 单步训练结果 */
     private static class StepResult {
-        final float languageModelLoss;  // 语言模型损失
-        final float moeLoss;            // MoE负载均衡损失
-        final float confidence;         // 推理置信度
-        
+        final float languageModelLoss;  // 语言模型（下一词预测）损失
+        final float moeLoss;            // MoE 负载均衡损失
+        final float confidence;         // 推理置信度（预留字段，当前始终为 0）
+
         StepResult(float languageModelLoss, float moeLoss, float confidence) {
             this.languageModelLoss = languageModelLoss;
             this.moeLoss = moeLoss;
             this.confidence = confidence;
         }
+    }
+
+    /** epoch 内累计统计，避免在 trainOneEpoch 中散落多个计数变量 */
+    private static class EpochStats {
+        double totalLoss       = 0.0;
+        double totalMoeLoss    = 0.0;
+        double totalConfidence = 0.0;
+        int    batchCount      = 0;
+        final long startTime   = System.currentTimeMillis();
+
+        void accumulate(StepResult result) {
+            totalLoss       += result.languageModelLoss;
+            totalMoeLoss    += result.moeLoss;
+            totalConfidence += result.confidence;
+            batchCount++;
+        }
+
+        double avgLoss()       { return batchCount > 0 ? totalLoss       / batchCount : 0.0; }
+        double avgMoeLoss()    { return batchCount > 0 ? totalMoeLoss    / batchCount : 0.0; }
+        double avgConfidence() { return batchCount > 0 ? totalConfidence / batchCount : 0.0; }
+        long   elapsedMs()     { return System.currentTimeMillis() - startTime; }
     }
     
     /**

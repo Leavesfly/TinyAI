@@ -168,63 +168,49 @@ public class DeepSeekV3Posttrain {
      */
     private void trainOneEpoch() {
         trainDataset.prepare(true);
-        
-        double epochLoss = 0.0;
-        double epochMoeLoss = 0.0;
-        double epochCodeQuality = 0.0;
-        int batchCount = 0;
-        int codeTaskCount = 0;
-        
+        EpochStats stats = new EpochStats();
+
         while (trainDataset.hasNext()) {
-            DeepSeekV3Dataset.Batch batch = trainDataset.nextBatch();
-            
-            // 训练一步
-            StepResult stepResult = trainStep(batch);
-            
-            epochLoss += stepResult.loss;
-            epochMoeLoss += stepResult.moeLoss;
-            if (stepResult.codeQuality > 0) {
-                epochCodeQuality += stepResult.codeQuality;
-                codeTaskCount++;
-            }
-            batchCount++;
-            globalStep++;
-            
-            trainLossHistory.add(stepResult.loss);
-            if (stepResult.codeQuality > 0) {
-                codeQualityHistory.add(stepResult.codeQuality);
-            }
-            
-            // 打印日志
-            if (globalStep % logInterval == 0) {
-                float avgLoss = getAverage(trainLossHistory, logInterval);
-                float avgCodeQuality = codeTaskCount > 0 ? 
-                    getAverage(codeQualityHistory, logInterval) : 0.0f;
-                System.out.printf("Epoch %d/%d | Step %d | Loss: %.4f | " +
-                                 "代码质量: %.4f | LR: %.6f%n",
-                    currentEpoch + 1, maxEpochs, globalStep, avgLoss, 
-                    avgCodeQuality, currentLearningRate);
-            }
-            
-            // 定期验证
-            if (globalStep % valInterval == 0) {
-                float valLoss = validate();
-                System.out.printf("中期验证损失: %.4f%n", valLoss);
-            }
-            
-            // 保存检查点
-            if (globalStep % saveInterval == 0) {
-                saveCheckpoint("step_" + globalStep);
-            }
+            processBatch(trainDataset.nextBatch(), stats);
         }
-        
-        double avgEpochLoss = batchCount > 0 ? epochLoss / batchCount : 0.0;
-        double avgEpochCodeQuality = codeTaskCount > 0 ? epochCodeQuality / codeTaskCount : 0.0;
-        
+
         System.out.printf("Epoch %d 完成 | 平均损失: %.4f | 平均代码质量: %.4f%n",
-            currentEpoch + 1, avgEpochLoss, avgEpochCodeQuality);
-        
+            currentEpoch + 1, stats.avgLoss(), stats.avgCodeQuality());
         trainDataset.reset();
+    }
+
+    /**
+     * 处理单个batch：训练一步 + 记录历史 + 日志/验证/保存
+     */
+    private void processBatch(DeepSeekV3Dataset.Batch batch, EpochStats stats) {
+        StepResult stepResult = trainStep(batch);
+        stats.accumulate(stepResult);
+        globalStep++;
+
+        trainLossHistory.add(stepResult.loss);
+        if (stepResult.codeQuality > 0) {
+            codeQualityHistory.add(stepResult.codeQuality);
+        }
+
+        if (globalStep % logInterval == 0) {
+            logTrainingProgress();
+        }
+        if (globalStep % valInterval == 0) {
+            System.out.printf("中期验证损失: %.4f%n", validate());
+        }
+        if (globalStep % saveInterval == 0) {
+            saveCheckpoint("step_" + globalStep);
+        }
+    }
+
+    /**
+     * 打印训练进度日志
+     */
+    private void logTrainingProgress() {
+        float avgLoss = getAverage(trainLossHistory, logInterval);
+        float avgCodeQuality = getAverage(codeQualityHistory, logInterval);
+        System.out.printf("Epoch %d/%d | Step %d | Loss: %.4f | 代码质量: %.4f | LR: %.6f%n",
+            currentEpoch + 1, maxEpochs, globalStep, avgLoss, avgCodeQuality, currentLearningRate);
     }
     
     /**
@@ -232,53 +218,30 @@ public class DeepSeekV3Posttrain {
      */
     private StepResult trainStep(DeepSeekV3Dataset.Batch batch) {
         updateLearningRate();
-        
+
         NdArray inputIds = batch.getInputIds();
         NdArray targetIds = batch.getTargetIds();
         TaskType taskType = batch.getMajorityTaskType();
-        
-        Variable inputVar = new Variable(inputIds);
-        
+
         // 前向传播
-        DeepSeekV3Block.DetailedForwardResult result = 
-            model.predictWithDetails(inputVar, taskType);
-        Variable logits = result.logits;
-        
-        // 计算损失 - SoftmaxCE只接受2维输入，需要将3D张量reshape为2D
-        int batchSize = inputIds.getShape().getDimension(0);
-        int seqLen = inputIds.getShape().getDimension(1);
-        int vocabSize = model.getConfig().getVocabSize();
-        
-        // logits: [batch_size, seq_len, vocab_size] -> [batch_size * seq_len, vocab_size]
-        Variable logits2D = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
-        
-        // targets: [batch_size, seq_len] -> [batch_size * seq_len, 1]
-        Variable targetVar = new Variable(targetIds);
-        Variable targets2D = targetVar.reshape(Shape.of(batchSize * seqLen, 1));
-        
-        Variable lmLoss = lossFunction.loss(targets2D, logits2D);
-        
+        DeepSeekV3Block.DetailedForwardResult result =
+            model.predictWithDetails(new Variable(inputIds), taskType);
+
+        // 计算损失
+        Variable[] shaped = reshapeForLoss(inputIds, targetIds, result.logits);
+        Variable lmLoss = lossFunction.loss(shaped[1], shaped[0]);
         float lossValue = lmLoss.getValue().getNumber().floatValue();
         float moeLoss = (float) result.avgMoELoss;
-        
-        // 代码质量（简化，使用MoE损失）
-        float moeLossValue = (float) result.avgMoELoss;
-        
-        // 总损失
-        Variable totalLoss = lmLoss;
-        if (moeLoadBalanceWeight > 0) {
-            float[] moeLossData = new float[]{moeLoss * moeLoadBalanceWeight};
-            Variable moeLossVar = new Variable(NdArray.of(moeLossData));
-            totalLoss = totalLoss.add(moeLossVar);
-        }
-        
+
+        // 反向传播
+        Variable totalLoss = buildTotalLoss(lmLoss, moeLoss);
         model.clearGrads();
         totalLoss.backward();
         clipGradients();
         optimizer.update();
         totalLoss.unChainBackward();
-        
-        return new StepResult(lossValue, moeLoss, moeLossValue);
+
+        return new StepResult(lossValue, moeLoss);
     }
     
     /**
@@ -286,40 +249,49 @@ public class DeepSeekV3Posttrain {
      */
     private float validate() {
         valDataset.prepare(false);
-        
         double totalLoss = 0.0;
         int count = 0;
-        
+
         while (valDataset.hasNext()) {
             DeepSeekV3Dataset.Batch batch = valDataset.nextBatch();
-            
             NdArray inputIds = batch.getInputIds();
             NdArray targetIds = batch.getTargetIds();
-            
-            Variable inputVar = new Variable(inputIds);
-            Variable logits = model.predict(inputVar);
-            
-            // 将3D张量reshape为2D计算损失
-            int batchSize = inputIds.getShape().getDimension(0);
-            int seqLen = inputIds.getShape().getDimension(1);
-            int vocabSize = model.getConfig().getVocabSize();
-            
-            Variable logits2D = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
-            Variable targetVar = new Variable(targetIds);
-            Variable targets2D = targetVar.reshape(Shape.of(batchSize * seqLen, 1));
-            
-            Variable loss = lossFunction.loss(targets2D, logits2D);
-            
+
+            Variable logits = model.predict(new Variable(inputIds));
+            Variable[] shaped = reshapeForLoss(inputIds, targetIds, logits);
+            Variable loss = lossFunction.loss(shaped[1], shaped[0]);
+
             totalLoss += loss.getValue().getNumber().floatValue();
             count++;
-            
             loss.unChainBackward();
         }
-        
+
         valDataset.reset();
         return count > 0 ? (float) (totalLoss / count) : 0.0f;
     }
     
+    /**
+     * 将 logits 和 targets reshape 为 2D（供损失函数使用）
+     * 返回 [logits2D, targets2D]
+     */
+    private Variable[] reshapeForLoss(NdArray inputIds, NdArray targetIds, Variable logits) {
+        int batchSize = inputIds.getShape().getDimension(0);
+        int seqLen    = inputIds.getShape().getDimension(1);
+        int vocabSize = model.getConfig().getVocabSize();
+        Variable logits2D  = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
+        Variable targets2D = new Variable(targetIds).reshape(Shape.of(batchSize * seqLen, 1));
+        return new Variable[]{logits2D, targets2D};
+    }
+
+    /**
+     * 融合语言模型损失与 MoE 负载均衡损失
+     */
+    private Variable buildTotalLoss(Variable lmLoss, float moeLoss) {
+        if (moeLoadBalanceWeight <= 0) return lmLoss;
+        Variable moeLossVar = new Variable(NdArray.of(new float[]{moeLoss * moeLoadBalanceWeight}));
+        return lmLoss.add(moeLossVar);
+    }
+
     private void updateLearningRate() {
         if (globalStep < warmupSteps) {
             currentLearningRate = initialLearningRate * ((float) globalStep / warmupSteps);
@@ -384,13 +356,36 @@ public class DeepSeekV3Posttrain {
     
     private static class StepResult {
         final float loss;
-        final float moeLoss;
-        final float codeQuality;
-        
-        StepResult(float loss, float moeLoss, float codeQuality) {
+        final float codeQuality;  // 以 MoE loss 近似表示代码质量
+
+        StepResult(float loss, float codeQuality) {
             this.loss = loss;
-            this.moeLoss = moeLoss;
             this.codeQuality = codeQuality;
+        }
+    }
+
+    /** epoch 内累计统计，避免在 trainOneEpoch 中散落多个计数变量 */
+    private static class EpochStats {
+        double totalLoss = 0.0;
+        double totalCodeQuality = 0.0;
+        int batchCount = 0;
+        int codeTaskCount = 0;
+
+        void accumulate(StepResult result) {
+            totalLoss += result.loss;
+            if (result.codeQuality > 0) {
+                totalCodeQuality += result.codeQuality;
+                codeTaskCount++;
+            }
+            batchCount++;
+        }
+
+        double avgLoss() {
+            return batchCount > 0 ? totalLoss / batchCount : 0.0;
+        }
+
+        double avgCodeQuality() {
+            return codeTaskCount > 0 ? totalCodeQuality / codeTaskCount : 0.0;
         }
     }
 }

@@ -72,7 +72,6 @@ public class DeepSeekR1RLVRTrainer {
     
     // 训练统计
     private List<Float> correctnessHistory;
-    private List<Float> rewardHistory;
     private List<Float> qualityHistory;
     
     // ========== GRPO参数 ==========
@@ -121,7 +120,6 @@ public class DeepSeekR1RLVRTrainer {
         this.currentEpoch = 0;
         this.globalStep = 0;
         this.correctnessHistory = new ArrayList<>();
-        this.rewardHistory = new ArrayList<>();
         this.qualityHistory = new ArrayList<>();
     }
     
@@ -186,129 +184,156 @@ public class DeepSeekR1RLVRTrainer {
      */
     private void trainOneEpoch() {
         dataset.prepare(true);
-            
+    
         double epochAvgReward = 0.0;
         int count = 0;
-        int epochGrpoTotal = 0;      // epoch级GRPO样本统计
-        int epochFallbackTotal = 0; // epoch级Fallback样本统计
-            
+        int epochGrpoTotal = 0;
+        int epochFallbackTotal = 0;
+    
         while (dataset.hasNext()) {
             DeepSeekR1RLVRDataset.Batch batch = dataset.nextBatch();
-            int batchSize = batch.getBatchSize();
-                
+    
             // 前向传播（获取当前策略logits）
             Variable inputVar = new Variable(batch.getInputIds());
             DeepSeekR1Model.ReasoningResult result = model.performReasoning(inputVar);
-                
-            String[] groundTruths = batch.getGroundTruths();
-            String[] verifierTypes = batch.getVerifierTypes();
-                
-            Variable totalLoss = null;
-            float batchAvgReward = 0.0f;
-            int validSamples = 0;
-            int grpoSamples = 0;      // GRPO 路径样本数
-            int fallbackSamples = 0;  // Fallback 路径样本数
-                
-            // 对batch中每个样本执行GRPO
-            for (int i = 0; i < batchSize; i++) {
-                    
-                // ===== GRPO Step1: 组采样（G个输出）=====
-                float[] groupRewards = new float[groupSize];
-                int[] groupTokens = new int[groupSize];
-                    
-                Verifier verifier = verifiers.get(verifierTypes[i]);
-                if (verifier == null) verifier = verifiers.get("math");
-                    
-                // 解析 groundTruth 为目标数值，用于计算连续奖励
-                double targetValue = parseGroundTruthAsDouble(groundTruths[i]);
-                
-                for (int g = 0; g < groupSize; g++) {
-                    // 温度采样：每次返回不同的token，形成组内多样性
-                    int sampledToken = sampleTokenFromLogits(result.logits, i, temperature);
-                    groupTokens[g] = sampledToken;
-                        
-                    // 计算连续奖励：基于采样token与正确答案的距离
-                    // 距离越近奖励越高，使组内不同采样产生差异化信号
-                    groupRewards[g] = computeProximityReward(sampledToken, targetValue);
-                }
-                    
-                // ===== GRPO Step2: 组内相对优势 A_i = (r_i - mean) / std =====
-                float[] advantages = computeGroupAdvantages(groupRewards);
-                    
-                // 检查是否有有效学习信号（当所有G个输出全对或全错时优势方差趋近0）
-                boolean hasSignal = false;
-                for (float a : advantages) {
-                    if (Math.abs(a) > 1e-6f) { hasSignal = true; break; }
-                }
-                    
-                Variable sampleLoss = null;
-                float meanReward = calculateAverage(toFloatList(groupRewards));
-                    
-                if (!hasSignal) {
-                    // Fallback: 组内无差异信号，使用监督学习引导
-                    if (meanReward < 0.5f) {
-                        // 全错：用CE损失朝正确答案学习
-                        sampleLoss = computeFallbackCELoss(result.logits, i, groundTruths[i]);
-                        if (sampleLoss != null) fallbackSamples++;
-                    }
-                    // 全对时无需更新（已经学会）
-                } else {
-                    // ===== GRPO Step3: 计算GRPO损失 =====
-                    sampleLoss = computeGRPOLoss(result.logits, i, groupTokens, advantages);
-                    if (sampleLoss != null) grpoSamples++;
-                }
-                if (sampleLoss == null) continue;
-                    
-                totalLoss = (totalLoss == null) ? sampleLoss : totalLoss.add(sampleLoss);
-                batchAvgReward += calculateAverage(toFloatList(groupRewards));
-                validSamples++;
-            }
-                
-            if (totalLoss == null || validSamples == 0) {
+    
+            BatchResult br = processBatch(batch, result);
+    
+            if (br.totalLoss == null || br.validSamples == 0) {
                 globalStep++;
                 continue;
             }
-                
-            // 对batch求平均
-            Variable avgLoss = totalLoss.mul(new Variable(NdArray.of(1.0f / validSamples)));
-            batchAvgReward /= validSamples;
-                
-            // 反向传播 + 更新
+    
+            // 对batch求平均 + 反向传播更新
+            Variable avgLoss = br.totalLoss.mul(new Variable(NdArray.of(1.0f / br.validSamples)));
+            float batchAvgReward = br.totalReward / br.validSamples;
+    
             model.clearGrads();
             avgLoss.backward();
             clipGradients();
             optimizer.update();
-                
+    
             // 记录统计
             correctnessHistory.add(batchAvgReward);
-            rewardHistory.add(batchAvgReward);
             qualityHistory.add((float) result.moeLoss);
-                
+    
             epochAvgReward += batchAvgReward;
             count++;
             globalStep++;
-                
+    
             if (globalStep % logInterval == 0) {
                 System.out.printf(
                     "Epoch %d | Step %d | GRPO: %d | Fallback: %d | Reward: %.4f | MoE: %.4f%n",
-                    currentEpoch + 1, globalStep, grpoSamples, fallbackSamples, batchAvgReward, result.moeLoss
+                    currentEpoch + 1, globalStep, br.grpoSamples, br.fallbackSamples, batchAvgReward, result.moeLoss
                 );
             }
-            epochGrpoTotal += grpoSamples;
-            epochFallbackTotal += fallbackSamples;
+            epochGrpoTotal += br.grpoSamples;
+            epochFallbackTotal += br.fallbackSamples;
         }
-            
+    
         System.out.printf(
             "Epoch %d 完成 | GRPO样本: %d | Fallback样本: %d | 平均奖励: %.4f%n",
             currentEpoch + 1, epochGrpoTotal, epochFallbackTotal, count > 0 ? epochAvgReward / count : 0.0
         );
-            
+    
         dataset.reset();
         if ((currentEpoch + 1) % 10 == 0) {
             saveCheckpoint("epoch_" + (currentEpoch + 1));
         }
     }
     
+    /** 单个 batch GRPO处理结果 */
+    private static class BatchResult {
+        Variable totalLoss;
+        float totalReward;
+        int validSamples;
+        int grpoSamples;
+        int fallbackSamples;
+    }
+    
+    /**
+     * 对单个 batch 执行 GRPO 组采样并汇总损失
+     *
+     * @param batch  当前批次数据
+     * @param result 前向传播结果
+     * @return 汇总损失及统计信息
+     */
+    private BatchResult processBatch(DeepSeekR1RLVRDataset.Batch batch,
+                                     DeepSeekR1Model.ReasoningResult result) {
+        BatchResult br = new BatchResult();
+        String[] groundTruths  = batch.getGroundTruths();
+
+        for (int i = 0; i < batch.getBatchSize(); i++) {
+            // Step1: 组采样（G 个输出）
+            double targetValue = parseGroundTruthAsDouble(groundTruths[i]);
+            float[] groupRewards = new float[groupSize];
+            int[]   groupTokens  = new int[groupSize];
+            for (int g = 0; g < groupSize; g++) {
+                groupTokens[g]  = sampleTokenFromLogits(result.logits, i, temperature);
+                groupRewards[g] = computeProximityReward(groupTokens[g], targetValue);
+            }
+    
+            // Step2: 组内相对优势 A_i = (r_i - mean) / std
+            float[] advantages = computeGroupAdvantages(groupRewards);
+    
+            // 检查是否有有效学习信号
+            boolean hasSignal = false;
+            for (float a : advantages) {
+                if (Math.abs(a) > 1e-6f) { hasSignal = true; break; }
+            }
+    
+            // Step3: 计算损失
+            Variable sampleLoss;
+            float meanReward = calculateAverage(groupRewards);
+            if (!hasSignal) {
+                // Fallback：组内无差异信号，全错时用监督学习引导
+                if (meanReward < 0.5f) {
+                    sampleLoss = computeFallbackCELoss(result.logits, i, groundTruths[i]);
+                    if (sampleLoss != null) br.fallbackSamples++;
+                } else {
+                    continue; // 全对：无需更新
+                }
+            } else {
+                // GRPO正常路径
+                sampleLoss = computeGRPOLoss(result.logits, i, groupTokens, advantages);
+                if (sampleLoss != null) br.grpoSamples++;
+            }
+            if (sampleLoss == null) continue;
+    
+            br.totalLoss   = (br.totalLoss == null) ? sampleLoss : br.totalLoss.add(sampleLoss);
+            br.totalReward += meanReward;
+            br.validSamples++;
+        }
+        return br;
+    }
+    
+    /**
+     * 提取当前样本最后位置的 logits → [1, vocabSize]
+     * 
+     * 统一处理 3D [batchSize, seqLen, vocabSize]、2D [seqLen, vocabSize]、1D [vocabSize] 三种形状，
+     * 供 computeGRPOLoss、computeFallbackCELoss、sampleTokenFromLogits 共用。
+     * 
+     * @param logits    模型输出 logits
+     * @param sampleIdx 当前样本在 batch 中的索引（仅 3D 时使用）
+     * @return shape [1, vocabSize] 的 logits
+     */
+    private Variable extractSampleLogits(Variable logits, int sampleIdx) {
+        int[] shape = logits.getValue().getShape().getShapeDims();
+        int vocabSize = shape[shape.length - 1];
+        int seqLen = shape.length >= 2 ? shape[shape.length - 2] : 1;
+
+        if (shape.length == 3) {
+            // [batchSize, seqLen, vocabSize] → 取 sampleIdx 行，再取最后时间步
+            Variable sample = logits.sliceRange(0, sampleIdx, sampleIdx + 1); // [1, seqLen, vocabSize]
+            Variable last   = sample.sliceRange(1, seqLen - 1, seqLen);       // [1, 1, vocabSize]
+            return last.reshape(Shape.of(1, vocabSize));                       // [1, vocabSize]
+        } else if (shape.length == 2) {
+            return logits.sliceRange(0, seqLen - 1, seqLen);                  // [1, vocabSize]
+        } else {
+            return logits;                                                     // [vocabSize]
+        }
+    }
+
     /**
      * 计算 GRPO 损失（对标论文公式 (4)）
      * 
@@ -318,30 +343,15 @@ public class DeepSeekR1RLVRTrainer {
      * 对每个采样 token o_g，计算 -log p(o_g | logits) 即 CE 损失。
      * clip(A_g, -ε, +ε) 作为该 CE 损失的加权系数（相当于PPO的保守裁剪）。
      * 
-     * @param logits   模型输出 logits
-     * @param sampleIdx 当前样本在 batch 中的索引
+     * @param logits      模型输出 logits
+     * @param sampleIdx   当前样本在 batch 中的索引
      * @param groupTokens 组内 G 个采样 token
      * @param advantages  组内归一化优势 A_g
      * @return GRPO 损失（标量 Variable）
      */
     private Variable computeGRPOLoss(Variable logits, int sampleIdx,
                                      int[] groupTokens, float[] advantages) {
-        int[] shape = logits.getValue().getShape().getShapeDims();
-        int vocabSize = shape[shape.length - 1];
-        int seqLen = shape.length >= 2 ? shape[shape.length - 2] : 1;
-
-        // 提取当前样本最后位置的 logits → [1, vocabSize]
-        Variable sampleLogits;
-        if (shape.length == 3) {
-            // logits: [batchSize, seqLen, vocabSize] → 先取 sampleIdx 样本，再取最后时间步
-            sampleLogits = logits.sliceRange(0, sampleIdx, sampleIdx + 1);  // [1, seqLen, vocabSize]
-            sampleLogits = sampleLogits.sliceRange(1, seqLen - 1, seqLen);  // [1, 1, vocabSize]
-            sampleLogits = sampleLogits.reshape(Shape.of(1, vocabSize));    // [1, vocabSize]
-        } else if (shape.length == 2) {
-            sampleLogits = logits.sliceRange(0, seqLen - 1, seqLen);
-        } else {
-            sampleLogits = logits;
-        }
+        Variable sampleLogits = extractSampleLogits(logits, sampleIdx);
 
         // 对 G 个采样 token 分别计算 clip(A_g) * CE
         Variable grpoLoss = null;
@@ -355,11 +365,10 @@ public class DeepSeekR1RLVRTrainer {
             Variable target = new Variable(NdArray.of(targetArr).reshape(Shape.of(1, 1)));
 
             // CE(logits, token_g) = -log p(token_g)
-            Variable ce = sampleLogits.softmaxCrossEntropy(target);
-
-            // GRPO：最大化 clip(A_g) * log π(o_g)，即最小化 -clip(A_g) * log π(o_g)
-            // = 最小化 clip(A_g) * CE  （注意 A_g 正 → 鼓励，A_g 负 → 抑制）
-            Variable weighted = ce.mul(new Variable(NdArray.of(clippedAdv)));
+            // GRPO：最大化 clip(A_g) * log π(o_g) ↔ 最小化 clip(A_g) * CE
+            // （A_g 正 → 鼓励该输出，A_g 负 → 抑制该输出）
+            Variable weighted = sampleLogits.softmaxCrossEntropy(target)
+                    .mul(new Variable(NdArray.of(clippedAdv)));
             grpoLoss = (grpoLoss == null) ? weighted : grpoLoss.add(weighted);
         }
 
@@ -412,26 +421,11 @@ public class DeepSeekR1RLVRTrainer {
      * @return CE 损失
      */
     private Variable computeFallbackCELoss(Variable logits, int sampleIdx, String groundTruth) {
-        int[] shape = logits.getValue().getShape().getShapeDims();
-        int vocabSize = shape[shape.length - 1];
-        int seqLen = shape.length >= 2 ? shape[shape.length - 2] : 1;
-
-        // 将 groundTruth 映射到合法 token 范围 [0, vocabSize)
+        int vocabSize = logits.getValue().getShape().getShapeDims()[logits.getValue().getShape().getShapeDims().length - 1];
         int targetToken = mapGroundTruthToToken(groundTruth, vocabSize);
 
-        // 提取当前样本最后位置的 logits → [1, vocabSize]
-        Variable sampleLogits;
-        if (shape.length == 3) {
-            sampleLogits = logits.sliceRange(0, sampleIdx, sampleIdx + 1);  // [1, seqLen, vocabSize]
-            sampleLogits = sampleLogits.sliceRange(1, seqLen - 1, seqLen);  // [1, 1, vocabSize]
-            sampleLogits = sampleLogits.reshape(Shape.of(1, vocabSize));    // [1, vocabSize]
-        } else if (shape.length == 2) {
-            sampleLogits = logits.sliceRange(0, seqLen - 1, seqLen);
-        } else {
-            sampleLogits = logits;
-        }
+        Variable sampleLogits = extractSampleLogits(logits, sampleIdx);
 
-        // CE(logits, targetToken)
         float[] targetArr = {targetToken};
         Variable target = new Variable(NdArray.of(targetArr).reshape(Shape.of(1, 1)));
         return sampleLogits.softmaxCrossEntropy(target);
@@ -505,21 +499,16 @@ public class DeepSeekR1RLVRTrainer {
      * @return 采样到的 token id
      */
     private int sampleTokenFromLogits(Variable logits, int sampleIdx, float temp) {
-        NdArray logitsArr = logits.getValue();
+        // 复用 extractSampleLogits 统一切片，直接读取其底层数组
+        Variable sliced = extractSampleLogits(logits, sampleIdx);
+        NdArray logitsArr = sliced.getValue();
         int[] shape = logitsArr.getShape().getShapeDims();
         int vocabSize = shape[shape.length - 1];
-        int seqLen = shape.length >= 2 ? shape[shape.length - 2] : 1;
 
         // 提取最后位置 logits
         float[] rawLogits = new float[vocabSize];
         for (int v = 0; v < vocabSize; v++) {
-            if (shape.length == 3) {
-                rawLogits[v] = logitsArr.get(sampleIdx, seqLen - 1, v);
-            } else if (shape.length == 2) {
-                rawLogits[v] = logitsArr.get(seqLen - 1, v);
-            } else {
-                rawLogits[v] = logitsArr.get(v);
-            }
+            rawLogits[v] = shape.length >= 2 ? logitsArr.get(0, v) : logitsArr.get(v);
         }
 
         // 温度缩放并 softmax
@@ -544,42 +533,6 @@ public class DeepSeekR1RLVRTrainer {
         return vocabSize - 1;
     }
 
-    /**
-     * float[] 转 List<Float>（用于 calculateAverage 辅助方法）
-     */
-    private List<Float> toFloatList(float[] arr) {
-        List<Float> list = new ArrayList<>(arr.length);
-        for (float v : arr) list.add(v);
-        return list;
-    }
-
-    /**
-     * 解析目标答案为整数
-     */
-    private int parseTargetAnswer(String groundTruth) throws NumberFormatException {
-        if (groundTruth == null || groundTruth.trim().isEmpty()) {
-            throw new NumberFormatException("答案为空");
-        }
-        
-        String answer = groundTruth.trim().toLowerCase();
-        
-        // 支持布尔值
-        if (answer.equals("true") || answer.equals("yes")) {
-            return 1;
-        }
-        if (answer.equals("false") || answer.equals("no")) {
-            return 0;
-        }
-        
-        // 提取第一个数字
-        String cleaned = groundTruth.trim().replaceAll("[^0-9.-]", " ").trim();
-        String[] parts = cleaned.split("\\s+");
-        if (parts.length > 0 && !parts[0].isEmpty()) {
-            return (int) Double.parseDouble(parts[0]);
-        }
-        throw new NumberFormatException("无法解析: " + groundTruth);
-    }
-    
     /**
      * 梯度裁剪
      */
@@ -641,7 +594,7 @@ public class DeepSeekR1RLVRTrainer {
         
         if (!correctnessHistory.isEmpty()) {
             float avgCorrectness = calculateAverage(correctnessHistory);
-            float avgReward = calculateAverage(rewardHistory);
+            float avgReward = calculateAverage(correctnessHistory);
             float avgQuality = calculateAverage(qualityHistory);
             
             System.out.printf("总训练步数: %d\n", globalStep);
@@ -669,7 +622,17 @@ public class DeepSeekR1RLVRTrainer {
     }
     
     /**
-     * 计算平均值
+     * 计算平均値（float[] 版）
+     */
+    private float calculateAverage(float[] values) {
+        if (values == null || values.length == 0) return 0.0f;
+        float sum = 0.0f;
+        for (float v : values) sum += v;
+        return sum / values.length;
+    }
+    
+    /**
+     * 计算平均値
      */
     private float calculateAverage(List<Float> values) {
         if (values == null || values.isEmpty()) return 0.0f;
@@ -685,7 +648,7 @@ public class DeepSeekR1RLVRTrainer {
         Map<String, Object> stats = new HashMap<>();
         stats.put("total_steps", globalStep);
         stats.put("avg_correctness", calculateAverage(correctnessHistory));
-        stats.put("avg_reward", calculateAverage(rewardHistory));
+        stats.put("avg_reward", calculateAverage(correctnessHistory));
         stats.put("avg_quality", calculateAverage(qualityHistory));
         return stats;
     }

@@ -49,20 +49,19 @@ public class MultiArmedBanditExample {
         System.out.println("  臂数量: " + NUM_ARMS);
         System.out.println("  实验步数: " + NUM_STEPS);
         System.out.println("  独立运行次数: " + NUM_RUNS);
-        System.out.print("  真实奖励: [");
+        StringBuilder rewardStr = new StringBuilder("[");
         for (int i = 0; i < TRUE_REWARDS.length; i++) {
-            System.out.print(String.format("%.2f", TRUE_REWARDS[i]));
-            if (i < TRUE_REWARDS.length - 1) System.out.print(", ");
+            if (i > 0) rewardStr.append(", ");
+            rewardStr.append(String.format("%.2f", TRUE_REWARDS[i]));
         }
-        System.out.println("]");
-        System.out.println("  最优臂: " + getOptimalArm() + " (奖励: " + String.format("%.2f", getOptimalReward()) + ")");
+        rewardStr.append("]");
+        System.out.println("  真实奖励: " + rewardStr);
+        System.out.printf("  最优臂: %d (奖励: %.2f)%n", getOptimalArm(), getOptimalReward());
         System.out.println();
 
-        // 运行比较实验
         runComparisonExperiment();
 
-        // 运行单次详细实验
-        System.out.println("\n======== 单次详细实验 ========");
+        System.out.println("\n======== 单次详细实验 ========\n");
         runDetailedSingleExperiment();
     }
 
@@ -72,13 +71,11 @@ public class MultiArmedBanditExample {
     private static void runComparisonExperiment() {
         System.out.println("开始多次运行实验...\n");
 
-        // 存储每次运行的结果
         Map<String, List<ExperimentResult>> allResults = new HashMap<>();
 
         for (int run = 0; run < NUM_RUNS; run++) {
             System.out.println("运行 " + (run + 1) + "/" + NUM_RUNS);
 
-            // 创建智能体
             List<BanditAgent> agents = createAgents();
 
             for (BanditAgent agent : agents) {
@@ -87,7 +84,6 @@ public class MultiArmedBanditExample {
             }
         }
 
-        // 计算并显示平均结果
         System.out.println("\n======== 实验结果总结 ========");
         displayAverageResults(allResults);
     }
@@ -127,21 +123,17 @@ public class MultiArmedBanditExample {
      * 运行单次实验
      */
     private static ExperimentResult runSingleExperiment(BanditAgent agent, int runIndex) {
-        // 重置智能体
         agent.reset();
 
-        // 为支持随机种子的智能体设置种子
+        // 固定随机种子以确保多次运行结果可复现
         if (agent instanceof EpsilonGreedyBanditAgent) {
             ((EpsilonGreedyBanditAgent) agent).setSeed(runIndex * 100L);
         } else if (agent instanceof ThompsonSamplingBanditAgent) {
             ((ThompsonSamplingBanditAgent) agent).setSeed(runIndex * 100L);
         }
 
-        // 创建环境
         MultiArmedBanditEnvironment env = new MultiArmedBanditEnvironment(TRUE_REWARDS, NUM_STEPS);
         env.setSeed(runIndex * 100L);
-
-        // 初始化环境
         env.reset();
 
         float totalReward = 0.0f;
@@ -149,15 +141,10 @@ public class MultiArmedBanditExample {
         int optimalActions = 0;
         int optimalArm = getOptimalArm();
 
-        // 运行实验
         for (int step = 0; step < NUM_STEPS; step++) {
-            // 智能体选择动作
             Variable action = agent.selectAction(env.getCurrentState());
-
-            // 环境执行动作
             Environment.StepResult result = env.step(action);
 
-            // 创建经验并让智能体学习
             Experience experience = new Experience(
                     env.getCurrentState(),
                     action,
@@ -168,7 +155,6 @@ public class MultiArmedBanditExample {
             );
             agent.learn(experience);
 
-            // 统计指标
             totalReward += result.getReward();
             totalRegret += (float) result.getInfo().get("instantRegret");
 
@@ -209,9 +195,9 @@ public class MultiArmedBanditExample {
 
             if (step % 10 == 0 || step < 10) {
                 int selectedArm = (int) result.getInfo().get("selectedArm");
-                System.out.println(String.format("步骤 %3d: 选择臂 %d, 奖励 %.4f, 悔恨 %.4f",
+                System.out.printf("步骤 %3d: 选择臂 %d, 奖励 %.4f, 悔恨 %.4f%n",
                         step + 1, selectedArm, result.getReward(),
-                        (float) result.getInfo().get("instantRegret")));
+                        (float) result.getInfo().get("instantRegret"));
             }
         }
 
@@ -226,7 +212,7 @@ public class MultiArmedBanditExample {
     private static void displayAverageResults(Map<String, List<ExperimentResult>> allResults) {
         System.out.printf("%-20s | %12s | %12s | %15s%n",
                 "算法", "平均累积奖励", "平均累积悔恨", "平均最优选择率");
-        System.out.println("-----|-------------|-------------|---------------");
+        System.out.println("-".repeat(68));
 
         List<String> sortedAgents = new ArrayList<>(allResults.keySet());
         sortedAgents.sort((a, b) -> {

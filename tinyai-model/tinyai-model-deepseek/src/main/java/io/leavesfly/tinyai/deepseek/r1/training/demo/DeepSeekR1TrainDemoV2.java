@@ -59,7 +59,7 @@ public class DeepSeekR1TrainDemoV2 {
             DeepSeekR1Model alignedModel = runRLVRTraining(rlhfModel);
             
             // 步骤5: 推理测试
-            runInference(rlhfModel);
+            runInference(alignedModel);
             
             System.out.println("\n" + "=".repeat(80));
             System.out.println("✅ DeepSeek-R1完整训练流程演示成功!");
@@ -366,9 +366,9 @@ public class DeepSeekR1TrainDemoV2 {
         rlvrTrainer.configure(
             50,         // maxEpochs (增加训练轮次以充分学习)
             0.05f,      // learningRate (降低学习率提高稳定性)
-            0.7f,       // correctnessWeight
-            0.2f,       // reasoningQualityWeight
-            0.1f        // verificationWeight
+            4,          // groupSize G (GRPO每个问题采样数)
+            0.2f,       // clipEps   (PPO clip范围)
+            1.0f        // temperature (采样温度)
         );
         
         System.out.println("  ✓ 最大轮次: 50");

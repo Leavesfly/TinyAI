@@ -189,6 +189,8 @@ public class DeepSeekR1RLVRTrainer {
             
         double epochAvgReward = 0.0;
         int count = 0;
+        int epochGrpoTotal = 0;      // epoch级GRPO样本统计
+        int epochFallbackTotal = 0; // epoch级Fallback样本统计
             
         while (dataset.hasNext()) {
             DeepSeekR1RLVRDataset.Batch batch = dataset.nextBatch();
@@ -204,6 +206,8 @@ public class DeepSeekR1RLVRTrainer {
             Variable totalLoss = null;
             float batchAvgReward = 0.0f;
             int validSamples = 0;
+            int grpoSamples = 0;      // GRPO 路径样本数
+            int fallbackSamples = 0;  // Fallback 路径样本数
                 
             // 对batch中每个样本执行GRPO
             for (int i = 0; i < batchSize; i++) {
@@ -215,15 +219,17 @@ public class DeepSeekR1RLVRTrainer {
                 Verifier verifier = verifiers.get(verifierTypes[i]);
                 if (verifier == null) verifier = verifiers.get("math");
                     
+                // 解析 groundTruth 为目标数值，用于计算连续奖励
+                double targetValue = parseGroundTruthAsDouble(groundTruths[i]);
+                
                 for (int g = 0; g < groupSize; g++) {
                     // 温度采样：每次返回不同的token，形成组内多样性
                     int sampledToken = sampleTokenFromLogits(result.logits, i, temperature);
                     groupTokens[g] = sampledToken;
                         
-                    // 用采样token生成文本表示，验证器打分
-                    String generated = String.format("The answer is %d.", sampledToken);
-                    VerificationResult vr = verifier.verify(generated, groundTruths[i]);
-                    groupRewards[g] = vr.getReward();
+                    // 计算连续奖励：基于采样token与正确答案的距离
+                    // 距离越近奖励越高，使组内不同采样产生差异化信号
+                    groupRewards[g] = computeProximityReward(sampledToken, targetValue);
                 }
                     
                 // ===== GRPO Step2: 组内相对优势 A_i = (r_i - mean) / std =====
@@ -234,10 +240,23 @@ public class DeepSeekR1RLVRTrainer {
                 for (float a : advantages) {
                     if (Math.abs(a) > 1e-6f) { hasSignal = true; break; }
                 }
-                if (!hasSignal) continue;
                     
-                // ===== GRPO Step3: 计算GRPO损失 =====
-                Variable sampleLoss = computeGRPOLoss(result.logits, i, groupTokens, advantages);
+                Variable sampleLoss = null;
+                float meanReward = calculateAverage(toFloatList(groupRewards));
+                    
+                if (!hasSignal) {
+                    // Fallback: 组内无差异信号，使用监督学习引导
+                    if (meanReward < 0.5f) {
+                        // 全错：用CE损失朝正确答案学习
+                        sampleLoss = computeFallbackCELoss(result.logits, i, groundTruths[i]);
+                        if (sampleLoss != null) fallbackSamples++;
+                    }
+                    // 全对时无需更新（已经学会）
+                } else {
+                    // ===== GRPO Step3: 计算GRPO损失 =====
+                    sampleLoss = computeGRPOLoss(result.logits, i, groupTokens, advantages);
+                    if (sampleLoss != null) grpoSamples++;
+                }
                 if (sampleLoss == null) continue;
                     
                 totalLoss = (totalLoss == null) ? sampleLoss : totalLoss.add(sampleLoss);
@@ -271,19 +290,21 @@ public class DeepSeekR1RLVRTrainer {
                 
             if (globalStep % logInterval == 0) {
                 System.out.printf(
-                    "Epoch %d | Step %d | GRPO | Group Reward: %.4f | MoE Loss: %.4f | G=%d%n",
-                    currentEpoch + 1, globalStep, batchAvgReward, result.moeLoss, groupSize
+                    "Epoch %d | Step %d | GRPO: %d | Fallback: %d | Reward: %.4f | MoE: %.4f%n",
+                    currentEpoch + 1, globalStep, grpoSamples, fallbackSamples, batchAvgReward, result.moeLoss
                 );
             }
+            epochGrpoTotal += grpoSamples;
+            epochFallbackTotal += fallbackSamples;
         }
             
         System.out.printf(
-            "Epoch %d 完成 | GRPO平均奖励: %.4f%n",
-            currentEpoch + 1, count > 0 ? epochAvgReward / count : 0.0
+            "Epoch %d 完成 | GRPO样本: %d | Fallback样本: %d | 平均奖励: %.4f%n",
+            currentEpoch + 1, epochGrpoTotal, epochFallbackTotal, count > 0 ? epochAvgReward / count : 0.0
         );
             
         dataset.reset();
-        if ((currentEpoch + 1) % 2 == 0) {
+        if ((currentEpoch + 1) % 10 == 0) {
             saveCheckpoint("epoch_" + (currentEpoch + 1));
         }
     }
@@ -312,8 +333,10 @@ public class DeepSeekR1RLVRTrainer {
         // 提取当前样本最后位置的 logits → [1, vocabSize]
         Variable sampleLogits;
         if (shape.length == 3) {
-            sampleLogits = logits.sliceRange(1, seqLen - 1, seqLen);
-            sampleLogits = sampleLogits.reshape(Shape.of(1, vocabSize));
+            // logits: [batchSize, seqLen, vocabSize] → 先取 sampleIdx 样本，再取最后时间步
+            sampleLogits = logits.sliceRange(0, sampleIdx, sampleIdx + 1);  // [1, seqLen, vocabSize]
+            sampleLogits = sampleLogits.sliceRange(1, seqLen - 1, seqLen);  // [1, 1, vocabSize]
+            sampleLogits = sampleLogits.reshape(Shape.of(1, vocabSize));    // [1, vocabSize]
         } else if (shape.length == 2) {
             sampleLogits = logits.sliceRange(0, seqLen - 1, seqLen);
         } else {
@@ -376,6 +399,99 @@ public class DeepSeekR1RLVRTrainer {
             advantages[i] = (rewards[i] - mean) / std;
         }
         return advantages;
+    }
+
+    /**
+     * Fallback CE 损失：当组内无差异信号且全错时，用监督学习引导模型学习正确答案
+     * 
+     * 使用 groundTruth 的哈希值映射到合法 token 范围，确保始终能生成有效损失。
+     * 
+     * @param logits      模型输出 logits
+     * @param sampleIdx   当前样本在 batch 中的索引
+     * @param groundTruth 正确答案字符串
+     * @return CE 损失
+     */
+    private Variable computeFallbackCELoss(Variable logits, int sampleIdx, String groundTruth) {
+        int[] shape = logits.getValue().getShape().getShapeDims();
+        int vocabSize = shape[shape.length - 1];
+        int seqLen = shape.length >= 2 ? shape[shape.length - 2] : 1;
+
+        // 将 groundTruth 映射到合法 token 范围 [0, vocabSize)
+        int targetToken = mapGroundTruthToToken(groundTruth, vocabSize);
+
+        // 提取当前样本最后位置的 logits → [1, vocabSize]
+        Variable sampleLogits;
+        if (shape.length == 3) {
+            sampleLogits = logits.sliceRange(0, sampleIdx, sampleIdx + 1);  // [1, seqLen, vocabSize]
+            sampleLogits = sampleLogits.sliceRange(1, seqLen - 1, seqLen);  // [1, 1, vocabSize]
+            sampleLogits = sampleLogits.reshape(Shape.of(1, vocabSize));    // [1, vocabSize]
+        } else if (shape.length == 2) {
+            sampleLogits = logits.sliceRange(0, seqLen - 1, seqLen);
+        } else {
+            sampleLogits = logits;
+        }
+
+        // CE(logits, targetToken)
+        float[] targetArr = {targetToken};
+        Variable target = new Variable(NdArray.of(targetArr).reshape(Shape.of(1, 1)));
+        return sampleLogits.softmaxCrossEntropy(target);
+    }
+    
+    /**
+     * 将 groundTruth 字符串映射到合法 token 范围 [0, vocabSize)
+     * 
+     * 优先尝试解析为数值并取模，失败时使用哈希值取模，确保始终返回合法 token。
+     */
+    private int mapGroundTruthToToken(String groundTruth, int vocabSize) {
+        if (groundTruth == null || groundTruth.trim().isEmpty()) {
+            return 0;
+        }
+        try {
+            int parsed = (int) Double.parseDouble(groundTruth.trim());
+            return Math.abs(parsed) % vocabSize;
+        } catch (NumberFormatException ignored) {
+        }
+        // 布尔值
+        String lower = groundTruth.trim().toLowerCase();
+        if (lower.equals("true") || lower.equals("yes")) return 1 % vocabSize;
+        if (lower.equals("false") || lower.equals("no")) return 0;
+        // 兜底：哈希映射
+        return Math.abs(groundTruth.hashCode()) % vocabSize;
+    }
+    
+    /**
+     * 解析 groundTruth 为 double 数值
+     * 
+     * 支持纯数字、布尔值，解析失败时使用哈希值作为替代。
+     */
+    private double parseGroundTruthAsDouble(String groundTruth) {
+        if (groundTruth == null || groundTruth.trim().isEmpty()) return 0.0;
+        String trimmed = groundTruth.trim().toLowerCase();
+        if (trimmed.equals("true") || trimmed.equals("yes")) return 1.0;
+        if (trimmed.equals("false") || trimmed.equals("no")) return 0.0;
+        try {
+            return Double.parseDouble(trimmed);
+        } catch (NumberFormatException e) {
+            return Math.abs(groundTruth.hashCode()) % 1000.0;
+        }
+    }
+    
+    /**
+     * 基于采样 token 与正确答案的距离计算连续奖励
+     * 
+     * 使用高斯核函数：reward = exp(-distance² / (2σ²))
+     * 距离越近奖励越高（趋近1.0），距离越远奖励越低（趋近0.0）。
+     * 不同采样 token 与目标的距离不同，自然产生差异化的组内奖励信号。
+     * 
+     * @param sampledToken 采样到的 token id
+     * @param targetValue  正确答案的数值
+     * @return 连续奖励值 [0, 1]
+     */
+    private float computeProximityReward(int sampledToken, double targetValue) {
+        double distance = sampledToken - targetValue;
+        // σ 控制奖励衰减速度，较小的 σ 使奖励更集中在正确答案附近
+        double sigma = Math.max(10.0, Math.abs(targetValue) * 0.3);
+        return (float) Math.exp(-(distance * distance) / (2.0 * sigma * sigma));
     }
 
     /**

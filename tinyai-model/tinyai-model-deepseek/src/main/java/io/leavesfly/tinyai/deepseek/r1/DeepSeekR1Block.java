@@ -7,7 +7,7 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
+import io.leavesfly.tinyai.nnet.v2.layer.norm.RMSNorm;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,7 +41,7 @@ public class DeepSeekR1Block extends Module {
     // 核心组件（复用 V3 的 MoE 架构）
     private DeepSeekR1TokenEmbedding tokenEmbedding;
     private List<DeepSeekV3TransformerBlock> transformerBlocks;  // ✅ 复用 V3 的 MoE TransformerBlock
-    private LayerNorm finalLayerNorm;
+    private RMSNorm finalLayerNorm;
     private Linear outputProjection;
     
     /**
@@ -76,8 +76,8 @@ public class DeepSeekR1Block extends Module {
             registerModule("transformer_" + i, block);
         }
         
-        // 3. 初始化最终LayerNorm
-        finalLayerNorm = new LayerNorm(
+        // 3. 初始化最终RMSNorm（对标DeepSeek-R1论文）
+        finalLayerNorm = new RMSNorm(
             name + "_final_ln",
             config.getNEmbd(),
             (float) config.getLayerNormEpsilon()
@@ -113,6 +113,7 @@ public class DeepSeekR1Block extends Module {
         v3Config.setNInner(r1Config.getNInner());
         v3Config.setNumExperts(r1Config.getNumExperts());
         v3Config.setTopK(r1Config.getTopK());
+        v3Config.setNumSharedExperts(r1Config.getNumSharedExperts());
         v3Config.setExpertHiddenDim(r1Config.getExpertHiddenDim());
         v3Config.setLoadBalanceLossWeight(r1Config.getLoadBalanceLossWeight());
         v3Config.setEnableTaskAwareRouting(r1Config.isEnableTaskAwareRouting());

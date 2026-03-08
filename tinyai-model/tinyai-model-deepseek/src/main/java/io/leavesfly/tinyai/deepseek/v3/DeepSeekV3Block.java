@@ -5,7 +5,7 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
+import io.leavesfly.tinyai.nnet.v2.layer.norm.RMSNorm;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,7 +35,7 @@ public class DeepSeekV3Block extends Module {
     // 核心组件
     private DeepSeekV3TokenEmbedding tokenEmbedding;
     private List<DeepSeekV3TransformerBlock> transformerBlocks;
-    private LayerNorm finalLayerNorm;
+    private RMSNorm finalLayerNorm;
     private Linear outputProjection;
     
     /**
@@ -67,8 +67,8 @@ public class DeepSeekV3Block extends Module {
             registerModule("transformer_" + i, block);
         }
         
-        // 3. 初始化最终LayerNorm
-        finalLayerNorm = new LayerNorm(
+        // 3. 初始化最终RMSNorm（对标DeepSeek-V3论文）
+        finalLayerNorm = new RMSNorm(
             name + "_final_ln",
             config.getNEmbd(),
             (float) config.getLayerNormEpsilon()
@@ -200,7 +200,7 @@ public class DeepSeekV3Block extends Module {
         System.out.printf("Transformer块数量: %d (每块集成MoE)\n", transformerBlocks.size());
         System.out.printf("专家数量: %d专家, Top-%d选择\n", 
             config.getNumExperts(), config.getTopK());
-        System.out.printf("架构模式: Pre-LayerNorm + 纯MoE (推理和代码能力自然涌现)\n");
+        System.out.printf("架构模式: Pre-RMSNorm + 纯MoE (推理和代码能力自然涌现)\n");
         System.out.printf("估算总参数: %s\n", formatParamCount(getParameterCount()));
         System.out.printf("激活参数: %s (%.2f%%)\n", 
             formatParamCount(getActiveParameterCount()),

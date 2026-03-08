@@ -4,18 +4,18 @@ import io.leavesfly.tinyai.deepseek.base.TaskType;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
-import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
+import io.leavesfly.tinyai.nnet.v2.layer.norm.RMSNorm;
 import io.leavesfly.tinyai.nnet.v2.layer.transformer.MultiHeadAttention;
 
 /**
- * DeepSeek-V3 Transformer块（Pre-LayerNorm + MoE架构）
+ * DeepSeek-V3 Transformer块（Pre-RMSNorm + MoE架构）
  * 
- * 采用Pre-LN架构并集成混合专家层，实现参数高效和任务专门化：
+ * 采用Pre-RMSNorm架构并集成混合专家层，实现参数高效和任务专门化：
  * 1. 多头自注意力层（带因果掩码）
  * 2. 混合专家层(MoE)替代传统FFN
  * 
  * 架构特点：
- * - Pre-LayerNorm提升训练稳定性
+ * - Pre-RMSNorm提升训练稳定性（对标DeepSeek-V3论文，替代LayerNorm）
  * - MoE层实现参数高效（仅激活Top-K专家）
  * - 支持任务感知的专家路由
  * 
@@ -28,12 +28,12 @@ public class DeepSeekV3TransformerBlock extends Module {
     
     // 注意力子层
     private final MultiHeadAttention attention;
-    private final LayerNorm layerNorm1;
+    private final RMSNorm layerNorm1;
     private final Dropout attnDropout;
     
     // MoE子层（替代传统FFN）
     private final DeepSeekV3MoELayer moeLayer;
-    private final LayerNorm layerNorm2;
+    private final RMSNorm layerNorm2;
     
     /**
      * 构造函数
@@ -52,12 +52,12 @@ public class DeepSeekV3TransformerBlock extends Module {
         
         // 初始化注意力子层组件
         this.attention = new MultiHeadAttention("attn", dModel, numHeads, attnDropoutRate);
-        this.layerNorm1 = new LayerNorm("ln1", dModel, (float) config.getLayerNormEpsilon());
+        this.layerNorm1 = new RMSNorm("ln1", dModel, (float) config.getLayerNormEpsilon());
         this.attnDropout = new Dropout("attn_dropout", dropout);
         
         // 初始化MoE子层
         this.moeLayer = new DeepSeekV3MoELayer(name + "_moe", config);
-        this.layerNorm2 = new LayerNorm("ln2", dModel, (float) config.getLayerNormEpsilon());
+        this.layerNorm2 = new RMSNorm("ln2", dModel, (float) config.getLayerNormEpsilon());
         
         // 注册所有子模块
         registerModule("attn", attention);
@@ -70,9 +70,9 @@ public class DeepSeekV3TransformerBlock extends Module {
     /**
      * 前向传播
      * 
-     * Pre-LN + MoE架构流程：
-     * 1. 注意力分支: x -> LN -> Attn -> Dropout -> Add(x)
-     * 2. MoE分支: x -> LN -> MoE -> Add(x)
+     * Pre-RMSNorm + MoE架构流程：
+     * 1. 注意力分支: x -> RMSNorm -> Attn -> Dropout -> Add(x)
+     * 2. MoE分支: x -> RMSNorm -> MoE -> Add(x)
      * 
      * @param inputs inputs[0]为输入张量 [batch_size, seq_len, d_model]
      *               inputs[1](可选)为任务类型 TaskType

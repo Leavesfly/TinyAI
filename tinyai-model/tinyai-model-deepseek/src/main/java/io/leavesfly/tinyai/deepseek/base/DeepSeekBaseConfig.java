@@ -66,6 +66,14 @@ public class DeepSeekBaseConfig implements Serializable {
     /** Top-K专家选择数量，默认选择2个专家（与官方一致，激活率25%） */
     protected int topK = 2;
     
+    /**
+     * 共享专家数量（DeepSeekMoE核心创新）
+     * 共享专家每次必被激活，与路由专家共同作用。
+     * 论文原版：1个共享专家 + 256个细粒度路由专家
+     * 教学简化：1个共享专家 + numExperts个路由专家
+     */
+    protected int numSharedExperts = 1;
+    
     /** 每个专家的隐藏层维度，默认与nInner相同 */
     protected int expertHiddenDim = 3072;
     
@@ -390,6 +398,14 @@ public class DeepSeekBaseConfig implements Serializable {
         this.topK = topK;
     }
     
+    public int getNumSharedExperts() {
+        return numSharedExperts;
+    }
+    
+    public void setNumSharedExperts(int numSharedExperts) {
+        this.numSharedExperts = numSharedExperts;
+    }
+    
     public int getExpertHiddenDim() {
         return expertHiddenDim;
     }
@@ -501,6 +517,7 @@ public class DeepSeekBaseConfig implements Serializable {
             "    最大序列长度: %d\n" +
             "  MoE配置:\n" +
             "    专家数量: %d\n" +
+            "    共享专家数: %d\n" +
             "    Top-K选择: %d\n" +
             "    专家隐藏维度: %d\n" +
             "    激活率: %.1f%%\n" +
@@ -515,7 +532,7 @@ public class DeepSeekBaseConfig implements Serializable {
             "    注意力dropout: %.2f\n" +
             "}",
             vocabSize, nEmbd, nLayer, nHead, nInner, nPositions,
-            numExperts, topK, expertHiddenDim, getActivationRatio() * 100,
+            numExperts, numSharedExperts, topK, expertHiddenDim, getActivationRatio() * 100,
             enableTaskAwareRouting, numTaskTypes,
             estimateParameterCount(), estimateParameterCount() / 1_000_000.0,
             estimateActiveParameterCount(), estimateActiveParameterCount() / 1_000_000.0,

@@ -6,7 +6,7 @@ import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.core.Parameter;
-import io.leavesfly.tinyai.nnet.v2.layer.activation.GELU;
+import io.leavesfly.tinyai.nnet.v2.layer.activation.SiLU;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
 
@@ -16,19 +16,24 @@ import java.util.List;
 /**
  * DeepSeek-V3混合专家层(Mixture of Experts Layer)
  * 
- * 核心创新：通过门控网络动态选择Top-K个专家处理输入，实现参数高效和任务专门化。
+ * 核心创新：通过门控网络动态选择Top-K个路由专家处理输入，实现参数高效和任务专门化。
  * 
  * 组件：
- * 1. 门控网络(Gating Network) - 计算每个专家的选择概率
- * 2. 专家网络(Expert Networks) - 8个独立的前馈网络
- * 3. Top-K选择 - 选择概率最高的K个专家
- * 4. 加权组合 - 根据门控权重组合专家输出
+ * 1. 共享专家(Shared Experts)    - 每次必激活，提供通用知识（DeepSeekMoE创新）
+ * 2. 门控网络(Gating Network)    - 计算路由专家的选择概率
+ * 3. 路由专家(Routed Experts)    - Top-K选择的独立前馈网络
+ * 4. 加权组合                       - 共享专家输出 + Top-K路由专家加权输出
  * 
  * 架构：
- * Input → Gating Network → Top-K Selection → Expert Processing → Weighted Combination → Output
+ * Input → Shared Experts → 输出直接累加
+ *      → Gating Network → Top-K Selection → Routed Experts → 加权组合
+ * 输出 = Shared输出 + Routed输出
+ * 
+ * ExpertNetwork FFN结构（SwiGLU）：
+ * output = down_proj( SiLU(gate_proj(x)) ⊙ up_proj(x) )
  * 
  * @author leavesfly
- * @version 1.0
+ * @version 2.0
  */
 public class DeepSeekV3MoELayer extends Module {
     
@@ -37,7 +42,10 @@ public class DeepSeekV3MoELayer extends Module {
     // 门控网络
     private Linear gatingNetwork;
     
-    // 专家网络列表
+    // 共享专家列表（每次必激活，DeepSeekMoE核心创新）
+    private List<ExpertNetwork> sharedExperts;
+    
+    // 路由专家列表（Top-K选择）
     private List<ExpertNetwork> experts;
     
     // Dropout层
@@ -68,7 +76,19 @@ public class DeepSeekV3MoELayer extends Module {
         );
         registerModule("gating", gatingNetwork);
         
-        // 2. 初始化专家网络
+        // 2. 初始化共享专家（每次必激活）
+        sharedExperts = new ArrayList<>();
+        for (int i = 0; i < config.getNumSharedExperts(); i++) {
+            ExpertNetwork shared = new ExpertNetwork(
+                name + "_shared_expert_" + i,
+                config.getNEmbd(),
+                config.getExpertHiddenDim()
+            );
+            sharedExperts.add(shared);
+            registerModule("shared_expert_" + i, shared);
+        }
+        
+        // 3. 初始化路由专家（Top-K选择）
         experts = new ArrayList<>();
         for (int i = 0; i < config.getNumExperts(); i++) {
             ExpertNetwork expert = new ExpertNetwork(
@@ -80,7 +100,7 @@ public class DeepSeekV3MoELayer extends Module {
             registerModule("expert_" + i, expert);
         }
         
-        // 3. 初始化Dropout层
+        // 4. 初始化Dropout层
         expertDropout = new Dropout(
             name + "_expert_dropout",
             (float) config.getExpertDropout()
@@ -138,10 +158,16 @@ public class DeepSeekV3MoELayer extends Module {
         // 4. Top-K选择
         TopKResult topKResult = selectTopK(gatingProbs, config.getTopK());
         
-        // 5. 专家计算
-        Variable expertOutputs = computeExpertOutputs(input, topKResult);
+        // 5. 共享专家计算（每次必激活）
+        Variable sharedOutput = computeSharedExpertsOutput(input);
         
-        // 6. 计算负载均衡损失
+        // 6. 路由专家加权组合
+        Variable routedOutput = computeExpertOutputs(input, topKResult);
+        
+        // 7. 共享专家输出 + 路由专家输出
+        Variable expertOutputs = sharedOutput.add(routedOutput);
+        
+        // 8. 计算负载均衡损失
         double loadBalanceLoss = computeLoadBalanceLoss(gatingProbs);
         
         return new MoEOutput(expertOutputs, gatingProbs, topKResult, loadBalanceLoss);
@@ -195,6 +221,26 @@ public class DeepSeekV3MoELayer extends Module {
     private Variable softmax(Variable logits, int dim) {
         // ✅ 直接使用Variable的softMax算子
         return logits.softMax();
+    }
+    
+    /**
+     * 计算共享专家输出（每次必激活，DeepSeekMoE核心创新）
+     * 
+     * @param input 输入张量 [batch_size, seq_len, nEmbd]
+     * @return 共享专家输出的堆叠和
+     */
+    private Variable computeSharedExpertsOutput(Variable input) {
+        if (sharedExperts.isEmpty()) {
+            // 无共享专家时返回零张量
+            NdArray zeros = NdArray.zeros(input.getValue().getShape());
+            return new Variable(zeros);
+        }
+        // 所有共享专家输出直接相加（不需要编号，易于理解）
+        Variable sharedOut = sharedExperts.get(0).forward(input);
+        for (int i = 1; i < sharedExperts.size(); i++) {
+            sharedOut = sharedOut.add(sharedExperts.get(i).forward(input));
+        }
+        return sharedOut;
     }
     
     /**
@@ -413,37 +459,49 @@ public class DeepSeekV3MoELayer extends Module {
     }
     
     /**
-     * 专家网络内部类
-     * 每个专家是一个独立的两层前馈网络
+     * 专家网络内部类（SwiGLU FFN）
+     * 
+     * SwiGLU结构（对标DeepSeek-V3论文）：
+     * output = down_proj( SiLU(gate_proj(x)) ⊙ up_proj(x) )
+     * 
+     * 相比GELU-FFN的改进：
+     * - 门控机制过滤信息，训练更稳定
+     * - SiLU激活函数比GELU计算简单且效果相当
      */
     private static class ExpertNetwork extends Module {
-        private Linear fc1;
-        private GELU activation;
-        private Linear fc2;
+        private Linear gateProj;   // 门控投影: inputDim -> hiddenDim
+        private SiLU silu;         // SiLU激活函数
+        private Linear upProj;     // 上投影: inputDim -> hiddenDim
+        private Linear downProj;   // 下投影: hiddenDim -> inputDim
         
         public ExpertNetwork(String name, int inputDim, int hiddenDim) {
             super(name);
             
-            // 第一层：inputDim -> hiddenDim
-            fc1 = new Linear(name + "_fc1", inputDim, hiddenDim, true);
-            registerModule("fc1", fc1);
+            // 门控分支: inputDim -> hiddenDim
+            gateProj = new Linear(name + "_gate", inputDim, hiddenDim, true);
+            registerModule("gate", gateProj);
             
-            // 激活函数
-            activation = new GELU(name + "_gelu");
-            registerModule("gelu", activation);
+            // SiLU激活
+            silu = new SiLU(name + "_silu");
+            registerModule("silu", silu);
             
-            // 第二层：hiddenDim -> inputDim
-            fc2 = new Linear(name + "_fc2", hiddenDim, inputDim, true);
-            registerModule("fc2", fc2);
+            // 上分支: inputDim -> hiddenDim
+            upProj = new Linear(name + "_up", inputDim, hiddenDim, true);
+            registerModule("up", upProj);
+            
+            // 下投影: hiddenDim -> inputDim
+            downProj = new Linear(name + "_down", hiddenDim, inputDim, true);
+            registerModule("down", downProj);
         }
         
         @Override
         public Variable forward(Variable... inputs) {
             Variable x = inputs[0];
-            x = fc1.forward(x);
-            x = activation.forward(x);
-            x = fc2.forward(x);
-            return x;
+            // SwiGLU: down_proj( SiLU(gate_proj(x)) * up_proj(x) )
+            Variable gate = silu.forward(gateProj.forward(x));
+            Variable up = upProj.forward(x);
+            Variable hidden = gate.mul(up);
+            return downProj.forward(hidden);
         }
     }
     

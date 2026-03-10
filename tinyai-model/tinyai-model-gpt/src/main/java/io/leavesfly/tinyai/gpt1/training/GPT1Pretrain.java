@@ -109,7 +109,7 @@ public class GPT1Pretrain {
      * 设置检查点配置
      * 
      * @param checkpointDir 检查点目录
-     * @param saveInterval 保存间隔(步数)
+     * @param saveInterval 保存间隔(Epoch数), 每隔 saveInterval 个 Epoch 保存一次
      * @return this
      */
     public GPT1Pretrain setCheckpoint(String checkpointDir, int saveInterval) {
@@ -144,6 +144,11 @@ public class GPT1Pretrain {
         // 训练循环
         for (currentEpoch = 0; currentEpoch < maxEpochs; currentEpoch++) {
             trainOneEpoch();
+            
+            // 按 Epoch 间隔保存检查点
+            if ((currentEpoch + 1) % saveInterval == 0) {
+                saveCheckpoint("epoch_" + (currentEpoch + 1));
+            }
         }
         
         // 保存最终模型
@@ -182,11 +187,6 @@ public class GPT1Pretrain {
                 float avgLoss = getAverageLoss(logInterval);
                 System.out.printf("Epoch %d/%d | Step %d | Loss: %.4f | LR: %.6f%n",
                     currentEpoch + 1, maxEpochs, globalStep, avgLoss, currentLearningRate);
-            }
-            
-            // 保存检查点
-            if (globalStep % saveInterval == 0) {
-                saveCheckpoint("step_" + globalStep);
             }
         }
         

@@ -1,6 +1,7 @@
 package io.leavesfly.tinyai.deepseek.base.inference;
 
 import io.leavesfly.tinyai.ndarr.NdArray;
+import io.leavesfly.tinyai.ndarr.Shape;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -38,18 +39,18 @@ public abstract class DeepSeekBaseInference {
     // ========== 数据预处理方法 ==========
     
     /**
-     * 创建输入数组 [1, seq_len]
+     * 创建输入数组 [1, seq_len]，将int序列转换为float数组
      */
     protected NdArray createInputArray(int[] sequence) {
-        float[][] inputData = new float[1][sequence.length];
+        float[] data = new float[sequence.length];
         for (int i = 0; i < sequence.length; i++) {
-            inputData[0][i] = sequence[i];
+            data[i] = sequence[i];
         }
-        return NdArray.of(inputData);
+        return NdArray.of(data, Shape.of(1, sequence.length));
     }
     
     /**
-     * List转数组
+     * List转int数组
      */
     protected int[] toIntArray(List<Integer> list) {
         int[] arr = new int[list.size()];
@@ -67,14 +68,14 @@ public abstract class DeepSeekBaseInference {
      * @param logits logits数组 [1, seq_len, vocab_size]
      * @param batch batch索引
      * @param pos 位置索引
-     * @return 最大概率的token ID
+     * @return 最大概率的token ID，如果没有有效token返回-1
      */
     protected int argmax(NdArray logits, int batch, int pos) {
         int vocabSize = logits.getShape().getDimension(2);
-        int maxIdx = 1;  // 从1开始，跳过PAD
-        float maxVal = logits.get(batch, pos, 1);
+        int maxIdx = -1;
+        float maxVal = Float.NEGATIVE_INFINITY;
         
-        for (int i = 2; i < vocabSize; i++) {
+        for (int i = 1; i < vocabSize; i++) {
             float val = logits.get(batch, pos, i);
             if (val > maxVal) {
                 maxVal = val;
@@ -82,13 +83,15 @@ public abstract class DeepSeekBaseInference {
             }
         }
         
-        return maxIdx;
+        return maxIdx > 0 ? maxIdx : 1;
     }
     
     /**
      * 应用Softmax（跳过PAD token）
      * 
      * @param logits logits数组
+     * @param batch batch索引
+     * @param pos 位置索引
      * @param temperature 温度参数
      * @return 概率分布
      */
@@ -144,13 +147,70 @@ public abstract class DeepSeekBaseInference {
     }
     
     /**
+     * 从概率分布中采样（通用版，不跳过任何token）
+     */
+    protected int sampleFromProbs(float[] probs) {
+        float r = random.nextFloat();
+        float cumProb = 0.0f;
+        for (int i = 0; i < probs.length; i++) {
+            cumProb += probs[i];
+            if (r < cumProb) {
+                return i;
+            }
+        }
+        return probs.length - 1;
+    }
+    
+    /**
+     * 获取Top-K个最大值的索引
+     * 
+     * @param values 值数组
+     * @param k 保留前k个
+     * @return Top-K索引数组
+     */
+    protected int[] getTopKIndices(float[] values, int k) {
+        int[] indices = new int[k];
+        boolean[] used = new boolean[values.length];
+        
+        for (int i = 0; i < k; i++) {
+            int maxIdx = -1;
+            float maxVal = Float.NEGATIVE_INFINITY;
+            for (int j = 0; j < values.length; j++) {
+                if (!used[j] && values[j] > maxVal) {
+                    maxVal = values[j];
+                    maxIdx = j;
+                }
+            }
+            indices[i] = maxIdx;
+            used[maxIdx] = true;
+        }
+        
+        return indices;
+    }
+    
+    /**
+     * 按值升序排序，返回索引数组
+     */
+    protected int[] argsort(float[] array) {
+        Integer[] indices = new Integer[array.length];
+        for (int i = 0; i < array.length; i++) {
+            indices[i] = i;
+        }
+        java.util.Arrays.sort(indices, (a, b) -> Float.compare(array[a], array[b]));
+        int[] result = new int[array.length];
+        for (int i = 0; i < array.length; i++) {
+            result[i] = indices[i];
+        }
+        return result;
+    }
+    
+    /**
      * Top-K过滤
      * 
      * @param probs 概率分布
      * @param k 保留前k个最高概率的token
      */
     protected void applyTopK(float[] probs, int k) {
-        // 找到第k大的值
         List<Float> sortedProbs = new ArrayList<>();
         for (int i = 1; i < probs.length; i++) {  // 跳过PAD
             sortedProbs.add(probs[i]);
@@ -185,7 +245,6 @@ public abstract class DeepSeekBaseInference {
      * @param p 累积概率阈值
      */
     protected void applyTopP(float[] probs, float p) {
-        // 按概率降序排序
         List<Integer> indices = new ArrayList<>();
         for (int i = 1; i < probs.length; i++) {  // 跳过PAD
             indices.add(i);
@@ -217,36 +276,6 @@ public abstract class DeepSeekBaseInference {
             for (int i = 1; i < probs.length; i++) {
                 probs[i] /= sum;
             }
-        }
-    }
-    
-    // ========== 结果类 ==========
-    
-    /**
-     * 生成结果
-     */
-    public static class GenerationResult {
-        public final int[] tokenIds;
-        public final List<ReasoningStep> reasoningSteps;
-        
-        public GenerationResult(int[] tokenIds, List<ReasoningStep> reasoningSteps) {
-            this.tokenIds = tokenIds;
-            this.reasoningSteps = reasoningSteps;
-        }
-    }
-    
-    /**
-     * 推理步骤
-     */
-    public static class ReasoningStep {
-        public final int stepIndex;
-        public final double confidence;
-        public final double moeLoss;
-        
-        public ReasoningStep(int stepIndex, double confidence, double moeLoss) {
-            this.stepIndex = stepIndex;
-            this.confidence = confidence;
-            this.moeLoss = moeLoss;
         }
     }
 }

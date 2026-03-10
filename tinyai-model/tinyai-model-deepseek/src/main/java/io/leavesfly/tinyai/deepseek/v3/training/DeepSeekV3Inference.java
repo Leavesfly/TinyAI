@@ -1,14 +1,13 @@
 package io.leavesfly.tinyai.deepseek.v3.training;
 
 import io.leavesfly.tinyai.deepseek.base.TaskType;
+import io.leavesfly.tinyai.deepseek.base.inference.DeepSeekBaseInference;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Model;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.ndarr.Shape;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 
 /**
  * DeepSeek-V3推理引擎
@@ -24,27 +23,16 @@ import java.util.Random;
  * @author leavesfly
  * @version 1.0
  */
-public class DeepSeekV3Inference {
+public class DeepSeekV3Inference extends DeepSeekBaseInference {
     
     private final DeepSeekV3Model model;
-    private final Random random;
-    
-    /** PAD token ID，推理时需要排除 */
-    private static final int PAD_TOKEN_ID = 0;
     
     /**
      * 构造函数
      */
     public DeepSeekV3Inference(DeepSeekV3Model model) {
+        super();
         this.model = model;
-        this.random = new Random();
-    }
-    
-    /**
-     * 设置随机种子
-     */
-    public void setSeed(long seed) {
-        random.setSeed(seed);
     }
     
     // ==================== 贪婪解码 ====================
@@ -302,87 +290,7 @@ public class DeepSeekV3Inference {
         return new GenerationResult(toIntArray(generated), reasoningSteps);
     }
     
-    // ==================== 辅助方法 ====================
-    
-    private int argmax(NdArray array, int b, int t) {
-        int vocabSize = array.getShape().getDimension(2);
-        int maxIdx = -1;
-        float maxVal = Float.NEGATIVE_INFINITY;
-        // 跳过PAD token (id=0)，从1开始
-        for (int i = 1; i < vocabSize; i++) {
-            float val = array.get(b, t, i);
-            if (val > maxVal) {
-                maxVal = val;
-                maxIdx = i;
-            }
-        }
-        // 如果没找到有效token，返回1（避免返回0/PAD）
-        return maxIdx > 0 ? maxIdx : 1;
-    }
-    
-    private int[] getTopKIndices(float[] values, int k) {
-        int[] indices = new int[k];
-        boolean[] used = new boolean[values.length];
-        
-        for (int i = 0; i < k; i++) {
-            int maxIdx = -1;
-            float maxVal = Float.NEGATIVE_INFINITY;
-            for (int j = 0; j < values.length; j++) {
-                if (!used[j] && values[j] > maxVal) {
-                    maxVal = values[j];
-                    maxIdx = j;
-                }
-            }
-            indices[i] = maxIdx;
-            used[maxIdx] = true;
-        }
-        
-        return indices;
-    }
-    
-    private int[] argsort(float[] array) {
-        Integer[] indices = new Integer[array.length];
-        for (int i = 0; i < array.length; i++) {
-            indices[i] = i;
-        }
-        java.util.Arrays.sort(indices, (a, b) -> Float.compare(array[a], array[b]));
-        int[] result = new int[array.length];
-        for (int i = 0; i < array.length; i++) {
-            result[i] = indices[i];
-        }
-        return result;
-    }
-    
-    private int sampleFromProbs(float[] probs) {
-        float r = random.nextFloat();
-        float cumProb = 0.0f;
-        for (int i = 0; i < probs.length; i++) {
-            cumProb += probs[i];
-            if (r < cumProb) {
-                return i;
-            }
-        }
-        return probs.length - 1;
-    }
-    
-    private int[] toIntArray(List<Integer> list) {
-        int[] array = new int[list.size()];
-        for (int i = 0; i < list.size(); i++) {
-            array[i] = list.get(i);
-        }
-        return array;
-    }
-    
-    /**
-     * 创建输入数组 - 将int序列转换为float数组
-     */
-    private NdArray createInputArray(int[] sequence) {
-        float[] data = new float[sequence.length];
-        for (int i = 0; i < sequence.length; i++) {
-            data[i] = sequence[i];
-        }
-        return NdArray.of(data, Shape.of(1, sequence.length));
-    }
+    // ==================== 辅助方法（继承自DeepSeekBaseInference） ====================
     
     // ==================== 结果类 ====================
     

@@ -549,7 +549,7 @@ public class DeepSeekR1TrainDemoV2 {
             int vocabSize) {
         
         DeepSeekR1RLVRDataset dataset = new DeepSeekR1RLVRDataset(
-            batchSize, maxSeqLength, vocabSize
+            batchSize, maxSeqLength
         );
         
         for (String text : texts) {
@@ -567,15 +567,15 @@ public class DeepSeekR1TrainDemoV2 {
                 List<Integer> tokens = sharedTokenizer.encode(question);
                 
                 // 转换为数组
-                float[] tokenIds = new float[maxSeqLength];
-                Arrays.fill(tokenIds, (float) DeepSeekR1TokenizerUtil.PAD_TOKEN_ID);
+                int[] tokenIds = new int[maxSeqLength];
+                Arrays.fill(tokenIds, DeepSeekR1TokenizerUtil.PAD_TOKEN_ID);
                 int copyLen = Math.min(tokens.size(), maxSeqLength);
                 for (int i = 0; i < copyLen; i++) {
-                    tokenIds[i] = tokens.get(i).floatValue();
+                    tokenIds[i] = tokens.get(i);
                 }
                 
                 // 添加到数据集
-                dataset.addSample(tokenIds, groundTruth, verifierType);
+                dataset.addSample(tokenIds, question, groundTruth, verifierType);
             }
         }
         

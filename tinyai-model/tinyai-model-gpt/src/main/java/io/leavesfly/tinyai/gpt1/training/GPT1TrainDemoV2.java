@@ -530,7 +530,7 @@ public class GPT1TrainDemoV2 {
             1e-2f,
             5,
             1.0f
-        ).setCheckpoint(CHECKPOINT_DIR + "/pretrain", 100);
+        ).setCheckpoint(CHECKPOINT_DIR + "/pretrain", 10);
 
         System.out.println("  ✓ 最大轮次: 15");
         System.out.println("  ✓ 学习率: 1e-2");
@@ -605,7 +605,7 @@ public class GPT1TrainDemoV2 {
             10,
             1e-3f,
             3
-        ).setCheckpoint(CHECKPOINT_DIR + "/finetune", 50);
+        ).setCheckpoint(CHECKPOINT_DIR + "/finetune", 200);
 
         System.out.println("  ✓ 最大轮次: 10");
         System.out.println("  ✓ 学习率: 1e-3 (比预训练小)");

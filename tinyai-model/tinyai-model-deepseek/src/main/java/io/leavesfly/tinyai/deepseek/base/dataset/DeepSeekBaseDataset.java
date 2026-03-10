@@ -84,8 +84,15 @@ public abstract class DeepSeekBaseDataset<T> {
     /**
      * 创建输入和目标数据（通用逻辑）
      * 
+     * 每个 sequence 的长度应为 maxSeqLength+1，其中：
+     * - input: sequence[0 .. maxSeqLength-1]  (前 maxSeqLength 个token)
+     * - target: sequence[1 .. maxSeqLength]   (后 maxSeqLength 个token，右移一位)
+     * 
+     * 如果 sequence 长度不足 maxSeqLength+1，则有效部分按上述规则填充，
+     * 剩余位置补 0（padding）。
+     * 
      * @param actualBatchSize 实际批次大小
-     * @return [inputData, targetData]
+     * @return [inputData, targetData]，每个维度为 [actualBatchSize][maxSeqLength]
      */
     protected float[][][] createInputTargetData(int actualBatchSize) {
         float[][] inputData = new float[actualBatchSize][maxSeqLength];
@@ -95,18 +102,23 @@ public abstract class DeepSeekBaseDataset<T> {
             int dataIndex = indices.get(currentIndex + i);
             int[] sequence = sequences.get(dataIndex);
             
-            // 填充或截断序列
-            int seqLen = Math.min(sequence.length, maxSeqLength);
+            // 有效长度：sequence 中可用于构建 input/target 对的 token 数
+            int validLen = Math.min(sequence.length - 1, maxSeqLength);
+            if (validLen <= 0) {
+                continue;
+            }
             
-            // 输入：序列的前n-1个token
-            for (int j = 0; j < seqLen - 1; j++) {
+            // 输入: sequence[0 .. validLen-1]
+            for (int j = 0; j < validLen; j++) {
                 inputData[i][j] = sequence[j];
             }
             
-            // 目标：序列的后n-1个token（用于语言建模）
-            for (int j = 1; j < seqLen; j++) {
-                targetData[i][j - 1] = sequence[j];
+            // 目标: sequence[1 .. validLen] (右移一位)
+            for (int j = 0; j < validLen; j++) {
+                targetData[i][j] = sequence[j + 1];
             }
+            
+            // 剩余位置已由数组初始化为 0（padding）
         }
         
         return new float[][][] { inputData, targetData };

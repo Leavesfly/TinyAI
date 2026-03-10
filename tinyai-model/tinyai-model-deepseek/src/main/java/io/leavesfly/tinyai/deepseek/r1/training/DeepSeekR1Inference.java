@@ -1,9 +1,9 @@
 package io.leavesfly.tinyai.deepseek.r1.training;
 
+import io.leavesfly.tinyai.deepseek.base.inference.DeepSeekBaseInference;
 import io.leavesfly.tinyai.deepseek.r1.DeepSeekR1Model;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.ndarr.Shape;
 
 import java.util.*;
 
@@ -15,12 +15,13 @@ import java.util.*;
  * @author leavesfly
  * @version 1.0
  */
-public class DeepSeekR1Inference {
+public class DeepSeekR1Inference extends DeepSeekBaseInference {
     
     private final DeepSeekR1Model model;
     private final int maxSeqLen;
     
     public DeepSeekR1Inference(DeepSeekR1Model model) {
+        super();
         this.model = model;
         this.maxSeqLen = model.getConfig().getNPositions();
     }
@@ -37,7 +38,7 @@ public class DeepSeekR1Inference {
         for (int i = 0; i < maxNewTokens; i++) {
             if (generated.size() >= maxSeqLen) break;
             
-            int[] currentSeq = toArray(generated);
+            int[] currentSeq = toIntArray(generated);
             NdArray inputArray = createInputArray(currentSeq);
             Variable inputVar = new Variable(inputArray);
             
@@ -46,10 +47,7 @@ public class DeepSeekR1Inference {
             NdArray logits = result.logits.getValue();
             
             int lastPos = currentSeq.length - 1;
-            int nextToken = argmaxSkipPad(logits, 0, lastPos);  // 跳过PAD token
-            
-            // 如果没有有效token可选，终止生成
-            if (nextToken < 0) break;
+            int nextToken = argmax(logits, 0, lastPos);  // 跳过PAD token
             
             generated.add(nextToken);
             
@@ -62,7 +60,7 @@ public class DeepSeekR1Inference {
             ));
         }
         
-        return new GenerationResult(toArray(generated), reasoningSteps);
+        return new GenerationResult(toIntArray(generated), reasoningSteps);
     }
     
     /**
@@ -73,12 +71,11 @@ public class DeepSeekR1Inference {
         for (int id : promptIds) generated.add(id);
         
         List<ReasoningStep> reasoningSteps = new ArrayList<>();
-        Random random = new Random();
         
         for (int i = 0; i < maxNewTokens; i++) {
             if (generated.size() >= maxSeqLen) break;
             
-            int[] currentSeq = toArray(generated);
+            int[] currentSeq = toIntArray(generated);
             Variable inputVar = new Variable(createInputArray(currentSeq));
             
             DeepSeekR1Model.ReasoningResult result = model.performReasoning(inputVar);
@@ -111,8 +108,7 @@ public class DeepSeekR1Inference {
                 probs[j] /= sum;
             }
             
-            int nextToken = sampleSkipPad(probs, random);
-            if (nextToken <= 0) break;  // 没有有效token
+            int nextToken = sample(probs);
             
             generated.add(nextToken);
             
@@ -122,7 +118,7 @@ public class DeepSeekR1Inference {
             ));
         }
         
-        return new GenerationResult(toArray(generated), reasoningSteps);
+        return new GenerationResult(toIntArray(generated), reasoningSteps);
     }
     
     /**
@@ -141,85 +137,7 @@ public class DeepSeekR1Inference {
         return generateWithTemperature(promptIds, maxNewTokens, temperature);
     }
     
-    // ========== 辅助方法 ==========
-    
-    private NdArray createInputArray(int[] sequence) {
-        float[] data = new float[sequence.length];
-        for (int i = 0; i < sequence.length; i++) {
-            data[i] = sequence[i];
-        }
-        return NdArray.of(data, Shape.of(1, sequence.length));
-    }
-    
-    private int argmax(NdArray logits, int batchIdx, int seqIdx) {
-        int vocabSize = logits.getShape().getDimension(2);
-        int maxIdx = 0;
-        float maxVal = logits.get(batchIdx, seqIdx, 0);
-        
-        for (int i = 1; i < vocabSize; i++) {
-            float val = logits.get(batchIdx, seqIdx, i);
-            if (val > maxVal) {
-                maxVal = val;
-                maxIdx = i;
-            }
-        }
-        return maxIdx;
-    }
-    
-    /**
-     * argmax但跳过PAD token(id=0)
-     * 返回-1表示没有有效token
-     */
-    private int argmaxSkipPad(NdArray logits, int batchIdx, int seqIdx) {
-        int vocabSize = logits.getShape().getDimension(2);
-        int maxIdx = -1;
-        float maxVal = Float.NEGATIVE_INFINITY;
-        
-        // 从1开始，跳过PAD token(id=0)
-        for (int i = 1; i < vocabSize; i++) {
-            float val = logits.get(batchIdx, seqIdx, i);
-            if (val > maxVal) {
-                maxVal = val;
-                maxIdx = i;
-            }
-        }
-        return maxIdx;
-    }
-    
-    private int sample(float[] probs, Random random) {
-        float r = random.nextFloat();
-        float cumProb = 0.0f;
-        
-        for (int i = 0; i < probs.length; i++) {
-            cumProb += probs[i];
-            if (r < cumProb) return i;
-        }
-        return probs.length - 1;
-    }
-    
-    /**
-     * 采样但跳过PAD token(id=0)
-     */
-    private int sampleSkipPad(float[] probs, Random random) {
-        float r = random.nextFloat();
-        float cumProb = 0.0f;
-        
-        // 从1开始，跳过PAD
-        for (int i = 1; i < probs.length; i++) {
-            cumProb += probs[i];
-            if (r < cumProb) return i;
-        }
-        // 返回最后一个非PAD token
-        return probs.length - 1;
-    }
-    
-    private int[] toArray(List<Integer> list) {
-        int[] arr = new int[list.size()];
-        for (int i = 0; i < list.size(); i++) {
-            arr[i] = list.get(i);
-        }
-        return arr;
-    }
+    // ========== 辅助方法（继承自DeepSeekBaseInference） ==========
     
     /**
      * 推理步骤记录

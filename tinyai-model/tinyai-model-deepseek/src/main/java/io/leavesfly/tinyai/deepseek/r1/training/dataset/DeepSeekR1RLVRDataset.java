@@ -1,52 +1,44 @@
 package io.leavesfly.tinyai.deepseek.r1.training.dataset;
 
+import io.leavesfly.tinyai.deepseek.base.dataset.DeepSeekBaseDataset;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
  * DeepSeek-R1 RLVR数据集
  * 
  * RLVR (Reinforcement Learning from Verifiable Rewards) 数据集
+ * 继承 DeepSeekBaseDataset，复用通用的批次管理和索引打乱逻辑。
  * 
  * 与RLHF数据集的区别:
  * - RLHF: 需要人工标注的奖励分数 (0-1连续值)
  * - RLVR: 通过验证器自动获取奖励 (0或1二值)
  * 
- * 数据格式:
- * - 问题 (question)
- * - 标准答案/测试用例 (groundTruth)
- * - 验证器类型 (verifierType)
+ * 注意：RLVR 是强化学习场景，不做 next-token prediction，
+ * 因此不使用基类的 createInputTargetData，而是直接将 tokenIds 作为输入。
  * 
  * @author leavesfly
  * @version 1.0
  */
-public class DeepSeekR1RLVRDataset {
+public class DeepSeekR1RLVRDataset extends DeepSeekBaseDataset<DeepSeekR1RLVRDataset.Batch> {
     
-    private final List<RLVRSample> samples;
-    private final int batchSize;
-    private final int maxSeqLen;
-    private final int vocabSize;
-    
-    private int currentIndex;
-    private List<Integer> shuffledIndices;
+    private final List<String> questions;       // 问题文本
+    private final List<String> groundTruths;    // 标准答案
+    private final List<String> verifierTypes;   // 验证器类型
     
     /**
      * 构造函数
      * 
      * @param batchSize 批次大小
      * @param maxSeqLen 最大序列长度
-     * @param vocabSize 词汇表大小
      */
-    public DeepSeekR1RLVRDataset(int batchSize, int maxSeqLen, int vocabSize) {
-        this.samples = new ArrayList<>();
-        this.batchSize = batchSize;
-        this.maxSeqLen = maxSeqLen;
-        this.vocabSize = vocabSize;
-        this.currentIndex = 0;
-        this.shuffledIndices = new ArrayList<>();
+    public DeepSeekR1RLVRDataset(int batchSize, int maxSeqLen) {
+        super(new ArrayList<>(), maxSeqLen, batchSize, true);
+        this.questions = new ArrayList<>();
+        this.groundTruths = new ArrayList<>();
+        this.verifierTypes = new ArrayList<>();
     }
     
     /**
@@ -57,156 +49,110 @@ public class DeepSeekR1RLVRDataset {
      * @param verifierType 验证器类型 ("math", "code", "logic")
      */
     public void addSample(String question, String groundTruth, String verifierType) {
-        samples.add(new RLVRSample(question, groundTruth, verifierType));
+        int[] tokenIds = simpleTokenize(question);
+        sequences.add(tokenIds);
+        questions.add(question);
+        groundTruths.add(groundTruth);
+        verifierTypes.add(verifierType);
     }
     
     /**
      * 添加样本（带Token IDs）
      * 
      * @param tokenIds Token ID数组
+     * @param question 问题文本
      * @param groundTruth 标准答案
      * @param verifierType 验证器类型
      */
-    public void addSample(float[] tokenIds, String groundTruth, String verifierType) {
-        samples.add(new RLVRSample(tokenIds, groundTruth, verifierType));
+    public void addSample(int[] tokenIds, String question, String groundTruth, String verifierType) {
+        sequences.add(tokenIds);
+        questions.add(question);
+        groundTruths.add(groundTruth);
+        verifierTypes.add(verifierType);
     }
     
     /**
      * 准备数据集
      * 
-     * @param shuffle 是否打乱顺序
+     * 重写基类的 prepare 方法，在打乱前重新初始化索引列表，
+     * 因为 RLVR 支持动态添加样本。
+     * 
+     * @param shouldShuffle 是否打乱顺序
      */
-    public void prepare(boolean shuffle) {
-        currentIndex = 0;
-        shuffledIndices.clear();
-        
-        for (int i = 0; i < samples.size(); i++) {
-            shuffledIndices.add(i);
+    @Override
+    public void prepare(boolean shouldShuffle) {
+        // 重新初始化索引列表（因为可能动态添加了新样本）
+        indices.clear();
+        for (int i = 0; i < sequences.size(); i++) {
+            indices.add(i);
         }
-        
-        if (shuffle) {
-            Collections.shuffle(shuffledIndices);
-        }
-    }
-    
-    /**
-     * 是否还有下一批次
-     */
-    public boolean hasNext() {
-        return currentIndex < samples.size();
+        super.prepare(shouldShuffle);
     }
     
     /**
      * 获取下一批次
+     * 
+     * RLVR 不做 next-token prediction，直接将 tokenIds 作为输入，
+     * 附带 question、groundTruth、verifierType 元数据。
      */
+    @Override
     public Batch nextBatch() {
-        int actualBatchSize = Math.min(batchSize, samples.size() - currentIndex);
+        int actualBatchSize = calculateActualBatchSize();
         
-        float[][] inputIds = new float[actualBatchSize][maxSeqLen];
-        String[] questions = new String[actualBatchSize];
-        String[] groundTruths = new String[actualBatchSize];
-        String[] verifierTypes = new String[actualBatchSize];
+        float[][] inputIds = new float[actualBatchSize][maxSeqLength];
+        String[] batchQuestions = new String[actualBatchSize];
+        String[] batchGroundTruths = new String[actualBatchSize];
+        String[] batchVerifierTypes = new String[actualBatchSize];
+        
+        List<Integer> batchIndices = getCurrentBatchIndices(actualBatchSize);
         
         for (int i = 0; i < actualBatchSize; i++) {
-            int sampleIdx = shuffledIndices.get(currentIndex + i);
-            RLVRSample sample = samples.get(sampleIdx);
+            int dataIndex = batchIndices.get(i);
+            int[] tokenIds = sequences.get(dataIndex);
             
-            // 填充input IDs
-            float[] tokenIds = sample.getTokenIds();
-            System.arraycopy(tokenIds, 0, inputIds[i], 0, 
-                Math.min(tokenIds.length, maxSeqLen));
+            // 填充 input IDs，截断或补零
+            int copyLen = Math.min(tokenIds.length, maxSeqLength);
+            for (int j = 0; j < copyLen; j++) {
+                inputIds[i][j] = tokenIds[j];
+            }
             
-            questions[i] = sample.getQuestion();
-            groundTruths[i] = sample.getGroundTruth();
-            verifierTypes[i] = sample.getVerifierType();
+            batchQuestions[i] = questions.get(dataIndex);
+            batchGroundTruths[i] = groundTruths.get(dataIndex);
+            batchVerifierTypes[i] = verifierTypes.get(dataIndex);
         }
         
-        currentIndex += actualBatchSize;
+        advanceIndex(currentIndex + actualBatchSize);
         
         return new Batch(
             NdArray.of(inputIds),
-            questions,
-            groundTruths,
-            verifierTypes
+            batchQuestions,
+            batchGroundTruths,
+            batchVerifierTypes
         );
     }
     
     /**
-     * 重置数据集
+     * 简单的字符级 tokenization
+     * 将文本转换为 int[] 以适配基类的 sequences 结构
+     * 
+     * @param text 输入文本
+     * @return token ID 数组
      */
-    public void reset() {
-        currentIndex = 0;
-    }
-    
-    /**
-     * 获取样本数量
-     */
-    public int getSampleCount() {
-        return samples.size();
-    }
-    
-    /**
-     * 获取批次大小
-     */
-    public int getBatchSize() {
-        return batchSize;
+    private int[] simpleTokenize(String text) {
+        if (text == null || text.isEmpty()) {
+            return new int[]{0};
+        }
+        
+        char[] chars = text.toCharArray();
+        int length = Math.min(chars.length, 100);
+        int[] tokens = new int[length];
+        for (int i = 0; i < length; i++) {
+            tokens[i] = chars[i] % 1000;
+        }
+        return tokens;
     }
     
     // ==================== 内部类 ====================
-    
-    /**
-     * RLVR样本
-     */
-    public static class RLVRSample {
-        private final String question;
-        private final float[] tokenIds;
-        private final String groundTruth;
-        private final String verifierType;
-        
-        public RLVRSample(String question, String groundTruth, String verifierType) {
-            this.question = question;
-            this.tokenIds = simpleTokenize(question);
-            this.groundTruth = groundTruth;
-            this.verifierType = verifierType;
-        }
-        
-        public RLVRSample(float[] tokenIds, String groundTruth, String verifierType) {
-            this.question = "";
-            this.tokenIds = tokenIds;
-            this.groundTruth = groundTruth;
-            this.verifierType = verifierType;
-        }
-        
-        private float[] simpleTokenize(String text) {
-            // 简单的tokenization（实际应使用完整的tokenizer）
-            if (text == null || text.isEmpty()) {
-                return new float[1];
-            }
-            
-            char[] chars = text.toCharArray();
-            float[] tokens = new float[Math.min(chars.length, 100)];
-            for (int i = 0; i < tokens.length; i++) {
-                tokens[i] = (float) (chars[i] % 1000);
-            }
-            return tokens;
-        }
-        
-        public String getQuestion() {
-            return question;
-        }
-        
-        public float[] getTokenIds() {
-            return tokenIds;
-        }
-        
-        public String getGroundTruth() {
-            return groundTruth;
-        }
-        
-        public String getVerifierType() {
-            return verifierType;
-        }
-    }
     
     /**
      * 批次数据

@@ -88,48 +88,64 @@ public class GPT1Dataset {
     /**
      * 从文本列表加载数据
      * 
+     * 主流做法：将所有文本拼接成一个超长token序列，然后按固定长度连续切分。
+     * 这样每个样本都是满长度的，无需padding，数据利用率最高。
+     * 文档之间用EOS token分隔，模型可以学到文档边界。
+     * 
      * @param texts 文本列表
      * @param tokenizer 分词器
      */
     public void loadFromTexts(List<String> texts, SimpleTokenizer tokenizer) {
         samples.clear();
         
+        // 第一步：将所有文本编码后拼接成一个超长token序列
+        List<Integer> allTokenIds = new ArrayList<>();
         for (String text : texts) {
             if (text == null || text.trim().isEmpty()) {
                 continue;
             }
-            
-            // 编码文本
             List<Integer> tokenIds = tokenizer.encode(text);
-            
-            // 切分为固定长度序列
-            splitIntoSequences(tokenIds);
+            allTokenIds.addAll(tokenIds);
         }
         
-        System.out.println("数据加载完成,共 " + samples.size() + " 个训练样本");
+        // 第二步：按固定长度连续切分为训练样本
+        splitIntoSequences(allTokenIds);
+        
+        System.out.println("数据加载完成,共 " + allTokenIds.size() + " 个token, "
+                + samples.size() + " 个训练样本");
     }
     
     /**
-     * 将长序列切分为固定长度的训练样本
+     * 将拼接后的超长token序列按固定长度连续切分为训练样本
      * 
-     * @param tokenIds Token ID列表
+     * 每个样本长度为 maxSeqLen+1，其中前 maxSeqLen 个token作为输入，
+     * 后 maxSeqLen 个token作为目标（右移一位）。
+     * 末尾不足 maxSeqLen+1 的部分直接丢弃，避免引入padding。
+     * 
+     * @param allTokenIds 拼接后的完整Token ID列表
      */
-    private void splitIntoSequences(List<Integer> tokenIds) {
-        int totalLen = tokenIds.size();
+    private void splitIntoSequences(List<Integer> allTokenIds) {
+        int totalLen = allTokenIds.size();
+        int sampleLen = maxSeqLen + 1; // 每个样本需要 maxSeqLen+1 个token
         
-        if (totalLen < 2) {
+        if (totalLen < sampleLen) {
+            // 数据量太少，无法构建完整样本，降级为单个短样本
+            if (totalLen >= 2) {
+                int[] sequence = new int[totalLen];
+                for (int i = 0; i < totalLen; i++) {
+                    sequence[i] = allTokenIds.get(i);
+                }
+                samples.add(sequence);
+            }
             return;
         }
         
-        // 滑动窗口切分,步长为maxSeqLen
-        for (int i = 0; i < totalLen - 1; i += maxSeqLen) {
-            int end = Math.min(i + maxSeqLen + 1, totalLen);
-            int[] sequence = new int[end - i];
-            
-            for (int j = 0; j < sequence.length; j++) {
-                sequence[j] = tokenIds.get(i + j);
+        // 连续切分，不重叠，丢弃末尾不足一个完整样本的部分
+        for (int i = 0; i + sampleLen <= totalLen; i += sampleLen) {
+            int[] sequence = new int[sampleLen];
+            for (int j = 0; j < sampleLen; j++) {
+                sequence[j] = allTokenIds.get(i + j);
             }
-            
             samples.add(sequence);
         }
     }
@@ -162,46 +178,41 @@ public class GPT1Dataset {
     /**
      * 创建单个批次
      * 
+     * 由于样本已通过拼接+连续切分生成，绝大多数样本长度固定为 maxSeqLen+1，
+     * 无需大量padding。对每个样本取前 maxSeqLen 个token作为输入，
+     * 取后 maxSeqLen 个token（右移一位）作为目标。
+     * 
      * @param batchSamples 批次样本列表
      * @return 批次对象
      */
     private Batch createBatch(List<int[]> batchSamples) {
         int actualBatchSize = batchSamples.size();
-        
-        // 找到批次中最大的序列长度
-        int maxLen = 0;
-        for (int[] sample : batchSamples) {
-            maxLen = Math.max(maxLen, sample.length);
-        }
-        maxLen = Math.min(maxLen, maxSeqLen + 1);
+        int seqLen = maxSeqLen;
         
         // 初始化数组
-        int[][] inputData = new int[actualBatchSize][maxLen - 1];
-        int[][] targetData = new int[actualBatchSize][maxLen - 1];
+        int[][] inputData = new int[actualBatchSize][seqLen];
+        int[][] targetData = new int[actualBatchSize][seqLen];
         
-        // 填充数据
         for (int i = 0; i < actualBatchSize; i++) {
             int[] sample = batchSamples.get(i);
-            int seqLen = Math.min(sample.length, maxLen) - 1;
+            int validLen = Math.min(sample.length - 1, seqLen);
             
-            // 输入是前n个token
-            System.arraycopy(sample, 0, inputData[i], 0, seqLen);
+            // 输入: sample[0 .. validLen-1]
+            System.arraycopy(sample, 0, inputData[i], 0, validLen);
+            // 目标: sample[1 .. validLen] (右移一位)
+            System.arraycopy(sample, 1, targetData[i], 0, validLen);
             
-            // 目标是后n个token(右移1位)
-            System.arraycopy(sample, 1, targetData[i], 0, seqLen);
-            
-            // 填充剩余部分
-            for (int j = seqLen; j < maxLen - 1; j++) {
-                inputData[i][j] = 0; // PAD token
+            // 仅在极端降级情况下（数据不足一个完整样本）才需要padding
+            for (int j = validLen; j < seqLen; j++) {
+                inputData[i][j] = 0;
                 targetData[i][j] = 0;
             }
         }
         
-        // 转换为NdArray
-        NdArray inputArray = createNdArray(inputData, actualBatchSize, maxLen - 1);
-        NdArray targetArray = createNdArray(targetData, actualBatchSize, maxLen - 1);
+        NdArray inputArray = createNdArray(inputData, actualBatchSize, seqLen);
+        NdArray targetArray = createNdArray(targetData, actualBatchSize, seqLen);
         
-        return new Batch(inputArray, targetArray, actualBatchSize, maxLen - 1);
+        return new Batch(inputArray, targetArray, actualBatchSize, seqLen);
     }
     
     /**

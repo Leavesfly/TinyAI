@@ -1,31 +1,25 @@
 package io.leavesfly.tinyai.deepseek.r1.training.dataset;
 
+import io.leavesfly.tinyai.deepseek.base.dataset.DeepSeekBaseDataset;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
 /**
  * DeepSeek-R1数据集类
  * 
- * 支持预训练、后训练和强化学习三种模式的数据加载
+ * 继承 DeepSeekBaseDataset，复用通用的序列管理、批次迭代和 input/target 构建逻辑。
+ * 在此基础上扩展推理过程和奖励分数，支持 RLHF 训练模式。
  * 
  * @author leavesfly
  * @version 1.0
  */
-public class DeepSeekR1Dataset {
+public class DeepSeekR1Dataset extends DeepSeekBaseDataset<DeepSeekR1Dataset.Batch> {
     
-    private final List<int[]> sequences;      // 完整序列
     private final List<String> reasoning;     // 推理过程（RLHF用）
     private final List<Float> rewards;        // 奖励分数（RLHF用）
-    private final int maxSeqLength;
-    private final int batchSize;
-    private final boolean shuffle;
-    
-    private int currentIndex;
-    private List<Integer> indices;
     
     /**
      * 构造函数（预训练模式）
@@ -37,14 +31,9 @@ public class DeepSeekR1Dataset {
      */
     public DeepSeekR1Dataset(List<int[]> sequences, int maxSeqLength, 
                              int batchSize, boolean shuffle) {
-        this.sequences = sequences;
+        super(sequences, maxSeqLength, batchSize, shuffle);
         this.reasoning = new ArrayList<>();
         this.rewards = new ArrayList<>();
-        this.maxSeqLength = maxSeqLength;
-        this.batchSize = batchSize;
-        this.shuffle = shuffle;
-        this.currentIndex = 0;
-        initIndices();
     }
     
     /**
@@ -60,78 +49,35 @@ public class DeepSeekR1Dataset {
     public DeepSeekR1Dataset(List<int[]> sequences, List<String> reasoning,
                              List<Float> rewards, int maxSeqLength,
                              int batchSize, boolean shuffle) {
-        this.sequences = sequences;
+        super(sequences, maxSeqLength, batchSize, shuffle);
         this.reasoning = reasoning;
         this.rewards = rewards;
-        this.maxSeqLength = maxSeqLength;
-        this.batchSize = batchSize;
-        this.shuffle = shuffle;
-        this.currentIndex = 0;
-        initIndices();
-    }
-    
-    /**
-     * 初始化索引
-     */
-    private void initIndices() {
-        indices = new ArrayList<>();
-        for (int i = 0; i < sequences.size(); i++) {
-            indices.add(i);
-        }
-    }
-    
-    /**
-     * 准备数据集（打乱或重置）
-     * 
-     * @param shouldShuffle 是否打乱
-     */
-    public void prepare(boolean shouldShuffle) {
-        if (shouldShuffle && shuffle) {
-            Collections.shuffle(indices, new Random());
-        }
-        currentIndex = 0;
-    }
-    
-    /**
-     * 是否还有下一批数据
-     */
-    public boolean hasNext() {
-        return currentIndex < sequences.size();
     }
     
     /**
      * 获取下一批数据
      * 
+     * 复用基类的 createInputTargetData 构建 input/target，
+     * 并附加 R1 特有的推理过程和奖励分数信息。
+     * 
      * @return 批次数据
      */
+    @Override
     public Batch nextBatch() {
+        int actualBatchSize = calculateActualBatchSize();
         int endIndex = Math.min(currentIndex + batchSize, sequences.size());
-        int actualBatchSize = endIndex - currentIndex;
         
-        // 准备输入和目标
-        float[][] inputData = new float[actualBatchSize][maxSeqLength];
-        float[][] targetData = new float[actualBatchSize][maxSeqLength];
+        // 复用基类的 input/target 构建逻辑
+        float[][][] inputTarget = createInputTargetData(actualBatchSize);
+        
+        // 构建 R1 特有的推理过程和奖励分数
         String[] reasoningTexts = new String[actualBatchSize];
         float[] rewardScores = new float[actualBatchSize];
+        List<Integer> batchIndices = getCurrentBatchIndices(actualBatchSize);
         
         for (int i = 0; i < actualBatchSize; i++) {
-            int dataIndex = indices.get(currentIndex + i);
-            int[] sequence = sequences.get(dataIndex);
+            int dataIndex = batchIndices.get(i);
             
-            // 填充或截断序列
-            int seqLen = Math.min(sequence.length, maxSeqLength);
-            
-            // 输入：序列的前n-1个token
-            for (int j = 0; j < seqLen - 1; j++) {
-                inputData[i][j] = sequence[j];
-            }
-            
-            // 目标：序列的后n-1个token（用于语言建模）
-            for (int j = 1; j < seqLen; j++) {
-                targetData[i][j - 1] = sequence[j];
-            }
-            
-            // RLHF数据
             if (!reasoning.isEmpty() && dataIndex < reasoning.size()) {
                 reasoningTexts[i] = reasoning.get(dataIndex);
             }
@@ -140,33 +86,12 @@ public class DeepSeekR1Dataset {
             }
         }
         
-        currentIndex = endIndex;
+        advanceIndex(endIndex);
         
-        NdArray inputIds = NdArray.of(inputData);
-        NdArray targetIds = NdArray.of(targetData);
+        NdArray inputIds = NdArray.of(inputTarget[0]);
+        NdArray targetIds = NdArray.of(inputTarget[1]);
         
         return new Batch(inputIds, targetIds, reasoningTexts, rewardScores);
-    }
-    
-    /**
-     * 重置数据集
-     */
-    public void reset() {
-        currentIndex = 0;
-    }
-    
-    /**
-     * 获取样本数量
-     */
-    public int getSampleCount() {
-        return sequences.size();
-    }
-    
-    /**
-     * 获取批次数量
-     */
-    public int getBatchCount() {
-        return (sequences.size() + batchSize - 1) / batchSize;
     }
     
     /**

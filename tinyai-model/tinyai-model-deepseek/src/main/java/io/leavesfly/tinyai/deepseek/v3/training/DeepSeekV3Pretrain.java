@@ -227,6 +227,9 @@ public class DeepSeekV3Pretrain {
         float lmLossValue  = lmLoss.getValue().getNumber().floatValue();
         float moeLossValue = (float) result.avgMoELoss;
 
+        // 计算置信度：对 logits 做 softmax，取每个位置最大概率的平均值
+        float confidenceValue = computeConfidence(result.logits);
+
         // 反向传播：总损失 = LM损失 + MoE负载均衡损失
         Variable totalLoss = buildTotalLoss(lmLoss, moeLossValue);
         model.clearGrads();
@@ -235,7 +238,7 @@ public class DeepSeekV3Pretrain {
         optimizer.update();
         totalLoss.unChainBackward();
 
-        return new StepResult(lmLossValue, moeLossValue, 0.0f);
+        return new StepResult(lmLossValue, moeLossValue, confidenceValue);
     }
     
     /**
@@ -487,11 +490,50 @@ public class DeepSeekV3Pretrain {
         }
     }
     
+    /**
+     * 计算基于 softmax 最大概率的置信度
+     *
+     * 对 logits 沿词汇维度做 softmax 得到概率分布，
+     * 取每个 token 位置上最大概率值，再对所有位置求平均。
+     * 值域 [1/vocabSize, 1.0]，越接近 1 表示模型越"确信"。
+     *
+     * @param logits 模型输出 [batch_size, seq_len, vocab_size]
+     * @return 平均最大概率置信度
+     */
+    private float computeConfidence(Variable logits) {
+        NdArray probabilities = logits.getValue().softMax();
+        float[] probData = probabilities.getArray();
+        int[] dims = probabilities.getShape().getShapeDims();
+
+        int batchSize = dims[0];
+        int seqLen = dims[1];
+        int vocabSize = dims[2];
+
+        double sumMaxProb = 0.0;
+        int totalPositions = batchSize * seqLen;
+
+        for (int b = 0; b < batchSize; b++) {
+            for (int s = 0; s < seqLen; s++) {
+                int offset = (b * seqLen + s) * vocabSize;
+                float maxProb = Float.NEGATIVE_INFINITY;
+                for (int v = 0; v < vocabSize; v++) {
+                    float prob = probData[offset + v];
+                    if (prob > maxProb) {
+                        maxProb = prob;
+                    }
+                }
+                sumMaxProb += maxProb;
+            }
+        }
+
+        return (float) (sumMaxProb / totalPositions);
+    }
+
     /** 单步训练结果 */
     private static class StepResult {
         final float languageModelLoss;  // 语言模型（下一词预测）损失
         final float moeLoss;            // MoE 负载均衡损失
-        final float confidence;         // 推理置信度（预留字段，当前始终为 0）
+        final float confidence;         // 基于 softmax 最大概率的推理置信度
 
         StepResult(float languageModelLoss, float moeLoss, float confidence) {
             this.languageModelLoss = languageModelLoss;

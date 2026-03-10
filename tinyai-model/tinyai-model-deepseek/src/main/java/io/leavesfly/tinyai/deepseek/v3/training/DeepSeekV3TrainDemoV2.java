@@ -556,7 +556,7 @@ public class DeepSeekV3TrainDemoV2 {
             5e-4f,      // learningRate (提高学习率)
             10,         // warmupSteps (减少warmup步数，数据少时需快速进入正常训练)
             1.0f        // maxGradNorm
-        ).setCheckpoint(CHECKPOINT_DIR + "/pretrain", 100);
+        ).setCheckpoint(CHECKPOINT_DIR + "/pretrain", 500);
         
         System.out.println("  ✓ 最大轮次: 10 (小数据集需要更多轮次)");
         System.out.println("  ✓ 学习率: 5e-4 (提高学习率加速收敛)");

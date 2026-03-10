@@ -1,33 +1,26 @@
 package io.leavesfly.tinyai.deepseek.v3.training;
 
 import io.leavesfly.tinyai.deepseek.base.TaskType;
+import io.leavesfly.tinyai.deepseek.base.dataset.DeepSeekBaseDataset;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
 /**
  * DeepSeek-V3数据集类
  * 
- * 支持预训练、后训练两种模式的数据加载,
- * 特别支持任务类型标注,用于任务感知训练
+ * 继承 DeepSeekBaseDataset，复用通用的序列管理、批次迭代和 input/target 构建逻辑。
+ * 在此基础上扩展任务类型标注和代码语言标注，用于任务感知训练。
  * 
  * @author leavesfly
  * @version 1.0
  */
-public class DeepSeekV3Dataset {
+public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Batch> {
     
-    private final List<int[]> sequences;      // 完整序列
     private final List<TaskType> taskTypes;   // 任务类型（V3特有）
     private final List<String> codeLanguages; // 代码语言（代码任务专用）
-    private final int maxSeqLength;
-    private final int batchSize;
-    private final boolean shuffle;
-    
-    private int currentIndex;
-    private List<Integer> indices;
     
     /**
      * 构造函数（预训练模式）
@@ -39,14 +32,9 @@ public class DeepSeekV3Dataset {
      */
     public DeepSeekV3Dataset(List<int[]> sequences, int maxSeqLength, 
                              int batchSize, boolean shuffle) {
-        this.sequences = sequences;
+        super(sequences, maxSeqLength, batchSize, shuffle);
         this.taskTypes = new ArrayList<>();
         this.codeLanguages = new ArrayList<>();
-        this.maxSeqLength = maxSeqLength;
-        this.batchSize = batchSize;
-        this.shuffle = shuffle;
-        this.currentIndex = 0;
-        initIndices();
     }
     
     /**
@@ -60,14 +48,9 @@ public class DeepSeekV3Dataset {
      */
     public DeepSeekV3Dataset(List<int[]> sequences, List<TaskType> taskTypes,
                              int maxSeqLength, int batchSize, boolean shuffle) {
-        this.sequences = sequences;
+        super(sequences, maxSeqLength, batchSize, shuffle);
         this.taskTypes = taskTypes;
         this.codeLanguages = new ArrayList<>();
-        this.maxSeqLength = maxSeqLength;
-        this.batchSize = batchSize;
-        this.shuffle = shuffle;
-        this.currentIndex = 0;
-        initIndices();
     }
     
     /**
@@ -83,115 +66,52 @@ public class DeepSeekV3Dataset {
     public DeepSeekV3Dataset(List<int[]> sequences, List<TaskType> taskTypes,
                              List<String> codeLanguages, int maxSeqLength,
                              int batchSize, boolean shuffle) {
-        this.sequences = sequences;
+        super(sequences, maxSeqLength, batchSize, shuffle);
         this.taskTypes = taskTypes;
         this.codeLanguages = codeLanguages;
-        this.maxSeqLength = maxSeqLength;
-        this.batchSize = batchSize;
-        this.shuffle = shuffle;
-        this.currentIndex = 0;
-        initIndices();
-    }
-    
-    /**
-     * 初始化索引
-     */
-    private void initIndices() {
-        indices = new ArrayList<>();
-        for (int i = 0; i < sequences.size(); i++) {
-            indices.add(i);
-        }
-    }
-    
-    /**
-     * 准备数据集（打乱或重置）
-     */
-    public void prepare(boolean shouldShuffle) {
-        if (shouldShuffle && shuffle) {
-            Collections.shuffle(indices, new Random());
-        }
-        currentIndex = 0;
-    }
-    
-    /**
-     * 是否还有下一批数据
-     */
-    public boolean hasNext() {
-        return currentIndex < sequences.size();
     }
     
     /**
      * 获取下一批数据
      * 
+     * 复用基类的 createInputTargetData 构建 input/target，
+     * 并附加 V3 特有的任务类型和代码语言信息。
+     * 
      * @return 批次数据
      */
+    @Override
     public Batch nextBatch() {
+        int actualBatchSize = calculateActualBatchSize();
         int endIndex = Math.min(currentIndex + batchSize, sequences.size());
-        int actualBatchSize = endIndex - currentIndex;
         
-        // 准备输入和目标
-        float[][] inputData = new float[actualBatchSize][maxSeqLength];
-        float[][] targetData = new float[actualBatchSize][maxSeqLength];
+        // 复用基类的 input/target 构建逻辑
+        float[][][] inputTarget = createInputTargetData(actualBatchSize);
+        
+        // 构建 V3 特有的任务类型和代码语言
         TaskType[] batchTaskTypes = new TaskType[actualBatchSize];
         String[] batchLanguages = new String[actualBatchSize];
+        List<Integer> batchIndices = getCurrentBatchIndices(actualBatchSize);
         
         for (int i = 0; i < actualBatchSize; i++) {
-            int dataIndex = indices.get(currentIndex + i);
-            int[] sequence = sequences.get(dataIndex);
+            int dataIndex = batchIndices.get(i);
             
-            // 填充或截断序列
-            int seqLen = Math.min(sequence.length, maxSeqLength);
-            
-            // 输入：序列的前n-1个token
-            for (int j = 0; j < seqLen - 1; j++) {
-                inputData[i][j] = sequence[j];
-            }
-            
-            // 目标：序列的后n-1个token（用于语言建模）
-            for (int j = 1; j < seqLen; j++) {
-                targetData[i][j - 1] = sequence[j];
-            }
-            
-            // 任务类型
             if (!taskTypes.isEmpty() && dataIndex < taskTypes.size()) {
                 batchTaskTypes[i] = taskTypes.get(dataIndex);
             } else {
                 batchTaskTypes[i] = TaskType.GENERAL;
             }
             
-            // 代码语言
             if (!codeLanguages.isEmpty() && dataIndex < codeLanguages.size()) {
                 batchLanguages[i] = codeLanguages.get(dataIndex);
             }
         }
         
-        currentIndex = endIndex;
+        advanceIndex(endIndex);
         
-        NdArray inputIds = NdArray.of(inputData);
-        NdArray targetIds = NdArray.of(targetData);
+        NdArray inputIds = NdArray.of(inputTarget[0]);
+        NdArray targetIds = NdArray.of(inputTarget[1]);
         
         return new Batch(inputIds, targetIds, batchTaskTypes, batchLanguages);
-    }
-    
-    /**
-     * 重置数据集
-     */
-    public void reset() {
-        currentIndex = 0;
-    }
-    
-    /**
-     * 获取样本数量
-     */
-    public int getSampleCount() {
-        return sequences.size();
-    }
-    
-    /**
-     * 获取批次数量
-     */
-    public int getBatchCount() {
-        return (sequences.size() + batchSize - 1) / batchSize;
     }
     
     /**

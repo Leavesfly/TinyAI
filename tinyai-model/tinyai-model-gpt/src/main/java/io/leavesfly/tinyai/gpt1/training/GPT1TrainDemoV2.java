@@ -13,14 +13,14 @@ import java.util.List;
 
 /**
  * GPT-1完整训练演示 V2版本
- * 
+ * <p>
  * 改进点:
  * 1. 更大规模的教学数据集(pretrain和posttrain)
  * 2. 支持从文件加载数据
  * 3. 数据集自动生成功能
  * 4. 更详细的训练过程说明
  * 5. 完整的预训练-微调-推理流程
- * 
+ *
  * @author TinyAI
  * @since 2024
  */
@@ -53,7 +53,7 @@ public class GPT1TrainDemoV2 {
             System.out.println("\n" + "=".repeat(80));
             System.out.println("✅ 完整训练流程演示成功!");
             System.out.println("=".repeat(80));
-            
+
         } catch (Exception e) {
             System.err.println("❌ 训练过程出错: " + e.getMessage());
             e.printStackTrace();
@@ -155,31 +155,31 @@ public class GPT1TrainDemoV2 {
      */
     private static List<String> generateDeepLearningTexts() {
         return Arrays.asList(
-            "Deep learning is a subset of machine learning that uses neural networks with multiple layers",
-            "Deep learning models can automatically learn hierarchical representations from raw data",
-            "Deep learning has revolutionized fields like computer vision and natural language processing",
-            "Convolutional neural networks are the foundation of modern computer vision systems",
-            "Recurrent neural networks excel at processing sequential data like text and time series",
-            "Deep learning requires large amounts of labeled data for effective training",
-            "Transfer learning allows deep learning models to reuse knowledge from related tasks",
-            "Backpropagation is the fundamental algorithm for training deep neural networks",
-            "Gradient descent optimizes neural network parameters by minimizing the loss function",
-            "Deep learning frameworks like TensorFlow and PyTorch simplify model development",
-            "Activation functions introduce non linearity into neural network computations",
-            "Dropout is a regularization technique that prevents overfitting in deep networks",
-            "Batch normalization accelerates training and improves model generalization",
-            "Deep learning models can achieve superhuman performance on specific tasks",
-            "Pretrained models enable rapid development of AI applications with limited data",
-            "Deep neural networks can approximate any continuous function given enough capacity",
-            "Layer normalization stabilizes training in recurrent and transformer architectures",
-            "Residual connections help train very deep neural networks by avoiding vanishing gradients",
-            "Deep learning has enabled breakthroughs in speech recognition and synthesis",
-            "Attention mechanisms allow models to focus on relevant parts of the input",
-            "Deep learning systems learn features automatically without manual feature engineering",
-            "Convolutional layers extract spatial hierarchies from images and visual data",
-            "Pooling layers reduce spatial dimensions while preserving important features",
-            "Deep architectures can learn abstract concepts through multiple levels of representation",
-            "Neural networks trained on large datasets show emergent abilities on new tasks"
+                "Deep learning is a subset of machine learning that uses neural networks with multiple layers",
+                "Deep learning models can automatically learn hierarchical representations from raw data",
+                "Deep learning has revolutionized fields like computer vision and natural language processing",
+                "Convolutional neural networks are the foundation of modern computer vision systems",
+                "Recurrent neural networks excel at processing sequential data like text and time series",
+                "Deep learning requires large amounts of labeled data for effective training",
+                "Transfer learning allows deep learning models to reuse knowledge from related tasks",
+                "Backpropagation is the fundamental algorithm for training deep neural networks",
+                "Gradient descent optimizes neural network parameters by minimizing the loss function",
+                "Deep learning frameworks like TensorFlow and PyTorch simplify model development",
+                "Activation functions introduce non linearity into neural network computations",
+                "Dropout is a regularization technique that prevents overfitting in deep networks",
+                "Batch normalization accelerates training and improves model generalization",
+                "Deep learning models can achieve superhuman performance on specific tasks",
+                "Pretrained models enable rapid development of AI applications with limited data",
+                "Deep neural networks can approximate any continuous function given enough capacity",
+                "Layer normalization stabilizes training in recurrent and transformer architectures",
+                "Residual connections help train very deep neural networks by avoiding vanishing gradients",
+                "Deep learning has enabled breakthroughs in speech recognition and synthesis",
+                "Attention mechanisms allow models to focus on relevant parts of the input",
+                "Deep learning systems learn features automatically without manual feature engineering",
+                "Convolutional layers extract spatial hierarchies from images and visual data",
+                "Pooling layers reduce spatial dimensions while preserving important features",
+                "Deep architectures can learn abstract concepts through multiple levels of representation",
+                "Neural networks trained on large datasets show emergent abilities on new tasks"
         );
     }
 
@@ -188,31 +188,31 @@ public class GPT1TrainDemoV2 {
      */
     private static List<String> generateMachineLearningTexts() {
         return Arrays.asList(
-            "Machine learning enables computers to learn patterns from data without explicit programming",
-            "Supervised learning uses labeled examples to train predictive models",
-            "Unsupervised learning discovers hidden patterns in unlabeled data",
-            "Reinforcement learning agents learn optimal behaviors through trial and error",
-            "Feature engineering transforms raw data into representations suitable for learning",
-            "Cross validation assesses model performance and prevents overfitting",
-            "Hyperparameter tuning optimizes model settings for best performance",
-            "Ensemble methods combine multiple models to improve prediction accuracy",
-            "Overfitting occurs when models memorize training data instead of learning patterns",
-            "Regularization techniques like L1 and L2 prevent overfitting by constraining parameters",
-            "The bias variance tradeoff balances model simplicity and flexibility",
-            "Training data should be representative of the real world distribution",
-            "Data augmentation increases dataset diversity through transformations",
-            "Early stopping prevents overfitting by monitoring validation performance",
-            "Learning curves visualize model performance as training data increases",
-            "Model evaluation requires separate test data never seen during training",
-            "Classification assigns inputs to discrete categories or classes",
-            "Regression predicts continuous numerical values from input features",
-            "Clustering groups similar data points without predefined labels",
-            "Dimensionality reduction simplifies data while preserving important information",
-            "Decision trees partition feature space through recursive splits",
-            "Random forests aggregate multiple decision trees for robust predictions",
-            "Support vector machines find optimal hyperplanes for classification",
-            "K nearest neighbors classifies based on proximity in feature space",
-            "Principal component analysis reduces dimensions while retaining variance"
+                "Machine learning enables computers to learn patterns from data without explicit programming",
+                "Supervised learning uses labeled examples to train predictive models",
+                "Unsupervised learning discovers hidden patterns in unlabeled data",
+                "Reinforcement learning agents learn optimal behaviors through trial and error",
+                "Feature engineering transforms raw data into representations suitable for learning",
+                "Cross validation assesses model performance and prevents overfitting",
+                "Hyperparameter tuning optimizes model settings for best performance",
+                "Ensemble methods combine multiple models to improve prediction accuracy",
+                "Overfitting occurs when models memorize training data instead of learning patterns",
+                "Regularization techniques like L1 and L2 prevent overfitting by constraining parameters",
+                "The bias variance tradeoff balances model simplicity and flexibility",
+                "Training data should be representative of the real world distribution",
+                "Data augmentation increases dataset diversity through transformations",
+                "Early stopping prevents overfitting by monitoring validation performance",
+                "Learning curves visualize model performance as training data increases",
+                "Model evaluation requires separate test data never seen during training",
+                "Classification assigns inputs to discrete categories or classes",
+                "Regression predicts continuous numerical values from input features",
+                "Clustering groups similar data points without predefined labels",
+                "Dimensionality reduction simplifies data while preserving important information",
+                "Decision trees partition feature space through recursive splits",
+                "Random forests aggregate multiple decision trees for robust predictions",
+                "Support vector machines find optimal hyperplanes for classification",
+                "K nearest neighbors classifies based on proximity in feature space",
+                "Principal component analysis reduces dimensions while retaining variance"
         );
     }
 
@@ -221,31 +221,31 @@ public class GPT1TrainDemoV2 {
      */
     private static List<String> generateNeuralNetworkTexts() {
         return Arrays.asList(
-            "Neural networks consist of interconnected layers of artificial neurons",
-            "Each neuron computes a weighted sum of inputs and applies an activation function",
-            "The input layer receives raw features while the output layer produces predictions",
-            "Hidden layers learn increasingly abstract representations of the input",
-            "Feedforward networks process information in one direction from input to output",
-            "Weights and biases are the learnable parameters of a neural network",
-            "The sigmoid activation function maps values to a range between zero and one",
-            "ReLU activation is computationally efficient and helps avoid vanishing gradients",
-            "Softmax converts network outputs into a probability distribution over classes",
-            "Loss functions measure the difference between predictions and true labels",
-            "Mean squared error is commonly used for regression tasks",
-            "Cross entropy loss is standard for classification problems",
-            "Stochastic gradient descent updates parameters using small batches of data",
-            "Adam optimizer adapts learning rates for each parameter automatically",
-            "Learning rate controls the step size during gradient descent optimization",
-            "Mini batch training balances computational efficiency and gradient quality",
-            "Vanishing gradients make it difficult to train very deep networks",
-            "Exploding gradients can cause training instability and divergence",
-            "Gradient clipping prevents exploding gradients by limiting their magnitude",
-            "Neural networks can be viewed as universal function approximators",
-            "Weight initialization affects training speed and convergence",
-            "Momentum accelerates optimization by accumulating gradient history",
-            "Leaky ReLU allows small gradients for negative inputs",
-            "Tanh activation maps inputs to range between negative one and one",
-            "Network depth enables learning of complex hierarchical features"
+                "Neural networks consist of interconnected layers of artificial neurons",
+                "Each neuron computes a weighted sum of inputs and applies an activation function",
+                "The input layer receives raw features while the output layer produces predictions",
+                "Hidden layers learn increasingly abstract representations of the input",
+                "Feedforward networks process information in one direction from input to output",
+                "Weights and biases are the learnable parameters of a neural network",
+                "The sigmoid activation function maps values to a range between zero and one",
+                "ReLU activation is computationally efficient and helps avoid vanishing gradients",
+                "Softmax converts network outputs into a probability distribution over classes",
+                "Loss functions measure the difference between predictions and true labels",
+                "Mean squared error is commonly used for regression tasks",
+                "Cross entropy loss is standard for classification problems",
+                "Stochastic gradient descent updates parameters using small batches of data",
+                "Adam optimizer adapts learning rates for each parameter automatically",
+                "Learning rate controls the step size during gradient descent optimization",
+                "Mini batch training balances computational efficiency and gradient quality",
+                "Vanishing gradients make it difficult to train very deep networks",
+                "Exploding gradients can cause training instability and divergence",
+                "Gradient clipping prevents exploding gradients by limiting their magnitude",
+                "Neural networks can be viewed as universal function approximators",
+                "Weight initialization affects training speed and convergence",
+                "Momentum accelerates optimization by accumulating gradient history",
+                "Leaky ReLU allows small gradients for negative inputs",
+                "Tanh activation maps inputs to range between negative one and one",
+                "Network depth enables learning of complex hierarchical features"
         );
     }
 
@@ -254,31 +254,31 @@ public class GPT1TrainDemoV2 {
      */
     private static List<String> generateNLPTexts() {
         return Arrays.asList(
-            "Natural language processing enables computers to understand and generate human language",
-            "Tokenization splits text into smaller units like words or subwords",
-            "Word embeddings represent words as dense vectors in a continuous space",
-            "Word2Vec learns embeddings by predicting context words from target words",
-            "GloVe embeddings capture global statistical information from word co occurrences",
-            "Language models estimate the probability distribution over sequences of words",
-            "N gram models predict words based on previous n minus one words",
-            "Neural language models use recurrent networks to capture long range dependencies",
-            "Perplexity measures how well a language model predicts a test corpus",
-            "Text classification assigns documents to predefined categories",
-            "Sentiment analysis determines the emotional tone of text",
-            "Named entity recognition identifies and classifies entities in text",
-            "Machine translation converts text from one language to another",
-            "Question answering systems provide answers to natural language questions",
-            "Text summarization creates concise summaries of longer documents",
-            "Sequence to sequence models map input sequences to output sequences",
-            "Encoder decoder architectures are fundamental to many NLP tasks",
-            "Beam search finds high probability output sequences during generation",
-            "Byte pair encoding creates subword vocabularies for neural models",
-            "Contextualized embeddings like BERT capture word meaning based on context",
-            "Part of speech tagging identifies grammatical roles of words",
-            "Dependency parsing analyzes syntactic structure of sentences",
-            "Coreference resolution links pronouns to their referents",
-            "Semantic role labeling identifies predicate argument structures",
-            "Information extraction retrieves structured data from unstructured text"
+                "Natural language processing enables computers to understand and generate human language",
+                "Tokenization splits text into smaller units like words or subwords",
+                "Word embeddings represent words as dense vectors in a continuous space",
+                "Word2Vec learns embeddings by predicting context words from target words",
+                "GloVe embeddings capture global statistical information from word co occurrences",
+                "Language models estimate the probability distribution over sequences of words",
+                "N gram models predict words based on previous n minus one words",
+                "Neural language models use recurrent networks to capture long range dependencies",
+                "Perplexity measures how well a language model predicts a test corpus",
+                "Text classification assigns documents to predefined categories",
+                "Sentiment analysis determines the emotional tone of text",
+                "Named entity recognition identifies and classifies entities in text",
+                "Machine translation converts text from one language to another",
+                "Question answering systems provide answers to natural language questions",
+                "Text summarization creates concise summaries of longer documents",
+                "Sequence to sequence models map input sequences to output sequences",
+                "Encoder decoder architectures are fundamental to many NLP tasks",
+                "Beam search finds high probability output sequences during generation",
+                "Byte pair encoding creates subword vocabularies for neural models",
+                "Contextualized embeddings like BERT capture word meaning based on context",
+                "Part of speech tagging identifies grammatical roles of words",
+                "Dependency parsing analyzes syntactic structure of sentences",
+                "Coreference resolution links pronouns to their referents",
+                "Semantic role labeling identifies predicate argument structures",
+                "Information extraction retrieves structured data from unstructured text"
         );
     }
 
@@ -287,31 +287,31 @@ public class GPT1TrainDemoV2 {
      */
     private static List<String> generateTransformerTexts() {
         return Arrays.asList(
-            "Transformer architecture revolutionized natural language processing in 2017",
-            "Self attention allows models to weigh the importance of different input positions",
-            "Multi head attention captures different aspects of relationships between tokens",
-            "Positional encoding injects sequence order information into transformer models",
-            "The transformer consists of an encoder and decoder with stacked layers",
-            "Query key and value vectors are fundamental components of attention mechanisms",
-            "Scaled dot product attention computes attention weights efficiently",
-            "Feed forward networks process each position independently in transformers",
-            "Layer normalization is applied before or after transformer sublayers",
-            "Residual connections help train deep transformer models effectively",
-            "BERT uses bidirectional transformers for language understanding tasks",
-            "GPT models use decoder only transformers for text generation",
-            "Masked language modeling is the pretraining objective for BERT",
-            "Causal language modeling predicts the next token in autoregressive models",
-            "Transformers eliminate recurrence and enable parallel processing of sequences",
-            "Attention patterns can be visualized to understand model behavior",
-            "The transformer model achieves state of the art results across NLP tasks",
-            "Large scale pretraining of transformers requires significant computational resources",
-            "Fine tuning adapts pretrained transformers to downstream tasks efficiently",
-            "Transformer models scale effectively with increased data and parameters",
-            "Cross attention connects encoder and decoder in sequence to sequence models",
-            "Attention heads learn to focus on different linguistic phenomena",
-            "Positional embeddings can be learned or defined using sinusoidal functions",
-            "The transformer architecture is fully differentiable and trainable end to end",
-            "Sparse attention patterns improve efficiency for long sequences"
+                "Transformer architecture revolutionized natural language processing in 2017",
+                "Self attention allows models to weigh the importance of different input positions",
+                "Multi head attention captures different aspects of relationships between tokens",
+                "Positional encoding injects sequence order information into transformer models",
+                "The transformer consists of an encoder and decoder with stacked layers",
+                "Query key and value vectors are fundamental components of attention mechanisms",
+                "Scaled dot product attention computes attention weights efficiently",
+                "Feed forward networks process each position independently in transformers",
+                "Layer normalization is applied before or after transformer sublayers",
+                "Residual connections help train deep transformer models effectively",
+                "BERT uses bidirectional transformers for language understanding tasks",
+                "GPT models use decoder only transformers for text generation",
+                "Masked language modeling is the pretraining objective for BERT",
+                "Causal language modeling predicts the next token in autoregressive models",
+                "Transformers eliminate recurrence and enable parallel processing of sequences",
+                "Attention patterns can be visualized to understand model behavior",
+                "The transformer model achieves state of the art results across NLP tasks",
+                "Large scale pretraining of transformers requires significant computational resources",
+                "Fine tuning adapts pretrained transformers to downstream tasks efficiently",
+                "Transformer models scale effectively with increased data and parameters",
+                "Cross attention connects encoder and decoder in sequence to sequence models",
+                "Attention heads learn to focus on different linguistic phenomena",
+                "Positional embeddings can be learned or defined using sinusoidal functions",
+                "The transformer architecture is fully differentiable and trainable end to end",
+                "Sparse attention patterns improve efficiency for long sequences"
         );
     }
 
@@ -320,31 +320,31 @@ public class GPT1TrainDemoV2 {
      */
     private static List<String> generateTinyAITexts() {
         return Arrays.asList(
-            "TinyAI is a Java based deep learning framework for education and research",
-            "NdArray is the core multidimensional array abstraction in TinyAI",
-            "The autograd engine in TinyAI enables automatic differentiation",
-            "Variable wraps NdArray and tracks computational graphs for backpropagation",
-            "Module is the base class for all neural network layers in TinyAI",
-            "Parameter represents learnable weights in TinyAI neural networks",
-            "The forward method defines the computation performed by a module",
-            "Backward propagation computes gradients through the computational graph",
-            "SGD optimizer updates parameters using stochastic gradient descent",
-            "Linear layer performs affine transformation of input features",
-            "Embedding layer maps discrete tokens to continuous vector representations",
-            "MultiHeadAttention implements the attention mechanism for transformers",
-            "LayerNorm normalizes activations to stabilize training",
-            "Dropout randomly zeros elements during training for regularization",
-            "SoftmaxCrossEntropy combines softmax and cross entropy for classification",
-            "Dataset class handles data loading and batching in TinyAI",
-            "Trainer orchestrates the training loop and model optimization",
-            "Model class wraps modules and provides high level training interface",
-            "TinyAI supports both CPU and GPU computation for neural networks",
-            "The framework provides comprehensive examples for learning deep learning",
-            "Block abstraction allows composition of complex network architectures",
-            "Loss functions quantify prediction errors during training",
-            "Optimizer algorithms minimize loss by updating model parameters",
-            "TinyAI implements common activation functions like ReLU and GELU",
-            "The framework supports saving and loading trained model checkpoints"
+                "TinyAI is a Java based deep learning framework for education and research",
+                "NdArray is the core multidimensional array abstraction in TinyAI",
+                "The autograd engine in TinyAI enables automatic differentiation",
+                "Variable wraps NdArray and tracks computational graphs for backpropagation",
+                "Module is the base class for all neural network layers in TinyAI",
+                "Parameter represents learnable weights in TinyAI neural networks",
+                "The forward method defines the computation performed by a module",
+                "Backward propagation computes gradients through the computational graph",
+                "SGD optimizer updates parameters using stochastic gradient descent",
+                "Linear layer performs affine transformation of input features",
+                "Embedding layer maps discrete tokens to continuous vector representations",
+                "MultiHeadAttention implements the attention mechanism for transformers",
+                "LayerNorm normalizes activations to stabilize training",
+                "Dropout randomly zeros elements during training for regularization",
+                "SoftmaxCrossEntropy combines softmax and cross entropy for classification",
+                "Dataset class handles data loading and batching in TinyAI",
+                "Trainer orchestrates the training loop and model optimization",
+                "Model class wraps modules and provides high level training interface",
+                "TinyAI supports both CPU and GPU computation for neural networks",
+                "The framework provides comprehensive examples for learning deep learning",
+                "Block abstraction allows composition of complex network architectures",
+                "Loss functions quantify prediction errors during training",
+                "Optimizer algorithms minimize loss by updating model parameters",
+                "TinyAI implements common activation functions like ReLU and GELU",
+                "The framework supports saving and loading trained model checkpoints"
         );
     }
 
@@ -466,11 +466,11 @@ public class GPT1TrainDemoV2 {
         String pretrainPath = DATA_DIR + "/pretrain.txt";
         String finetuneTrainPath = DATA_DIR + "/finetune_train.txt";
         String finetuneValPath = DATA_DIR + "/finetune_val.txt";
-        
+
         List<String> pretrainTexts = readFromFile(pretrainPath);
         List<String> finetuneTrainTexts = readFromFile(finetuneTrainPath);
         List<String> finetuneValTexts = readFromFile(finetuneValPath);
-        
+
         System.out.println("  ✓ 预训练数据: " + pretrainTexts.size() + " 条");
         System.out.println("  ✓ 微调训练数据: " + finetuneTrainTexts.size() + " 条");
         System.out.println("  ✓ 微调验证数据: " + finetuneValTexts.size() + " 条");
@@ -482,16 +482,16 @@ public class GPT1TrainDemoV2 {
         allTexts.addAll(pretrainTexts);
         allTexts.addAll(finetuneTrainTexts);
         allTexts.addAll(finetuneValTexts);
-        
+
         // 遍历所有文本构建词汇表
         for (String text : allTexts) {
             sharedTokenizer.encode(text);
         }
         int vocabSize = sharedTokenizer.getVocabSize();
-        
+
         // 冻结词汇表,后续不再添加新词
         sharedTokenizer.freeze();
-        
+
         System.out.println("  ✓ 完整词汇表大小: " + vocabSize);
         System.out.println("  ✓ 词汇表已冻结,后续不再增加新词");
 
@@ -499,9 +499,9 @@ public class GPT1TrainDemoV2 {
         System.out.println("\n📝 创建GPT-1模型...");
         GPT1Config config = GPT1Config.createTinyConfig();
         config.setVocabSize(vocabSize);
-        
+
         GPT1Model model = new GPT1Model("gpt1-pretrain-v2", config);
-        
+
         System.out.println("  ✓ 模型配置: Tiny");
         System.out.println("  ✓ 词汇表大小: " + config.getVocabSize());
         System.out.println("  ✓ 隐藏维度: " + config.getNEmbd());
@@ -512,12 +512,12 @@ public class GPT1TrainDemoV2 {
         // 4. 准备数据集
         System.out.println("\n📝 准备训练数据集...");
         GPT1Dataset dataset = new GPT1Dataset(
-            config.getNPositions(),
-            4,
-            config.getVocabSize()
+                config.getNPositions(),
+                4,
+                config.getVocabSize()
         );
         dataset.loadFromTexts(pretrainTexts, sharedTokenizer);
-        
+
         System.out.println("  ✓ 训练样本: " + dataset.getSampleCount());
         System.out.println("  ✓ 批次大小: 4");
         System.out.println("  ✓ 序列长度: " + config.getNPositions());
@@ -526,13 +526,13 @@ public class GPT1TrainDemoV2 {
         System.out.println("\n📝 配置预训练器...");
         GPT1Pretrain trainer = new GPT1Pretrain(model, dataset);
         trainer.configure(
-            15,
-            1e-2f,
-            5,
-            1.0f
+                30,
+                1e-2f,
+                5,
+                1.0f
         ).setCheckpoint(CHECKPOINT_DIR + "/pretrain", 10);
 
-        System.out.println("  ✓ 最大轮次: 15");
+        System.out.println("  ✓ 最大轮次: 30");
         System.out.println("  ✓ 学习率: 1e-2");
         System.out.println("  ✓ Warmup步数: 5");
         System.out.println("  ✓ 梯度裁剪: 1.0");
@@ -565,28 +565,28 @@ public class GPT1TrainDemoV2 {
         System.out.println("\n📝 加载微调数据...");
         String trainPath = DATA_DIR + "/finetune_train.txt";
         String valPath = DATA_DIR + "/finetune_val.txt";
-        
+
         List<String> trainTexts = readFromFile(trainPath);
         List<String> valTexts = readFromFile(valPath);
-        
+
         System.out.println("  ✓ 训练集: " + trainTexts.size() + " 条");
         System.out.println("  ✓ 验证集: " + valTexts.size() + " 条");
 
         // 2. 准备数据集
         System.out.println("\n📝 准备微调数据集...");
         GPT1Config config = pretrainedModel.getConfig();
-        
+
         GPT1Dataset trainDataset = new GPT1Dataset(
-            config.getNPositions(),
-            2,
-            config.getVocabSize()
+                config.getNPositions(),
+                2,
+                config.getVocabSize()
         );
         trainDataset.loadFromTexts(trainTexts, sharedTokenizer);
 
         GPT1Dataset valDataset = new GPT1Dataset(
-            config.getNPositions(),
-            1,
-            config.getVocabSize()
+                config.getNPositions(),
+                1,
+                config.getVocabSize()
         );
         valDataset.loadFromTexts(valTexts, sharedTokenizer);
 
@@ -596,15 +596,15 @@ public class GPT1TrainDemoV2 {
         // 3. 配置微调训练器
         System.out.println("\n📝 配置微调训练器...");
         GPT1Finetune finetuner = new GPT1Finetune(
-            pretrainedModel,
-            trainDataset,
-            valDataset
+                pretrainedModel,
+                trainDataset,
+                valDataset
         );
-        
+
         finetuner.configure(
-            10,
-            1e-3f,
-            3
+                10,
+                1e-3f,
+                3
         ).setCheckpoint(CHECKPOINT_DIR + "/finetune", 200);
 
         System.out.println("  ✓ 最大轮次: 10");
@@ -643,9 +643,9 @@ public class GPT1TrainDemoV2 {
 
         // 2. 测试用例
         String[] prompts = {
-            "Deep learning is",
-            "Instruction: What is NLP? Response:",
-            "Transformer architecture"
+                "Deep learning is",
+                "Instruction: What is NLP? Response:",
+                "Transformer architecture"
         };
 
         System.out.println("\n📝 执行文本生成测试...\n");
@@ -692,7 +692,7 @@ public class GPT1TrainDemoV2 {
     private static List<String> readFromFile(String filePath) throws IOException {
         List<String> lines = new ArrayList<>();
         java.io.BufferedReader reader = new java.io.BufferedReader(
-            new java.io.FileReader(filePath)
+                new java.io.FileReader(filePath)
         );
         String line;
         while ((line = reader.readLine()) != null) {

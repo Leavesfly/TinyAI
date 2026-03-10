@@ -3,9 +3,9 @@ package io.leavesfly.tinyai.nl.memory;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.nl.core.AssociativeMemory;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.PriorityQueue;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * 基于惊异度的记忆系统（SurpriseBasedMemory）
@@ -47,7 +47,7 @@ public class SurpriseBasedMemory {
     }
     
     /**
-     * 底层关联记忆
+     * 底层关联记忆（用于相似度计算和检索）
      */
     private AssociativeMemory memory;
     
@@ -57,9 +57,9 @@ public class SurpriseBasedMemory {
     private PriorityQueue<MemoryEntry> priorityQueue;
     
     /**
-     * 记忆条目的索引映射
+     * 记忆条目列表（与底层 memory 保持同步）
      */
-    private Map<Integer, MemoryEntry> entryMap;
+    private List<MemoryEntry> entryList;
     
     /**
      * 惊异度阈值
@@ -101,7 +101,7 @@ public class SurpriseBasedMemory {
         this.decayRate = Math.max(0.0f, Math.min(1.0f, decayRate));
         this.memory = new AssociativeMemory(maxCapacity, surpriseThreshold);
         this.priorityQueue = new PriorityQueue<>();
-        this.entryMap = new HashMap<>();
+        this.entryList = new ArrayList<>();
         this.currentIndex = 0;
         this.enableDecay = true;
     }
@@ -147,32 +147,57 @@ public class SurpriseBasedMemory {
             return;
         }
         
-        // 创建记忆条目
         long timestamp = System.currentTimeMillis();
         MemoryEntry entry = new MemoryEntry(key, value, surprise, timestamp);
         
-        // 如果容量已满，替换最低惊异度的记忆
-        if (priorityQueue.size() >= maxCapacity) {
-            MemoryEntry lowest = priorityQueue.peek();
-            if (lowest != null && surprise > lowest.surpriseScore) {
-                // 移除最低惊异度的记忆
-                priorityQueue.poll();
+        if (entryList.size() >= maxCapacity) {
+            // 容量已满，找到最低惊异度的条目
+            int lowestIdx = findLowestSurpriseIndex();
+            if (lowestIdx >= 0 && surprise > entryList.get(lowestIdx).surpriseScore) {
+                // 移除最低惊异度的条目
+                MemoryEntry removed = entryList.remove(lowestIdx);
+                priorityQueue.remove(removed);
                 
-                // 添加新记忆
+                // 添加新条目
+                entryList.add(entry);
                 priorityQueue.offer(entry);
-                entryMap.put(currentIndex, entry);
                 
-                // 更新底层记忆
-                memory.store(key, value);
-                
-                currentIndex++;
+                // 重建底层 memory 以保持同步
+                rebuildMemory();
             }
         } else {
-            // 还有空间，直接添加
+            entryList.add(entry);
             priorityQueue.offer(entry);
-            entryMap.put(currentIndex, entry);
             memory.store(key, value);
             currentIndex++;
+        }
+    }
+    
+    /**
+     * 找到最低惊异度的条目索引
+     */
+    private int findLowestSurpriseIndex() {
+        if (entryList.isEmpty()) {
+            return -1;
+        }
+        int lowestIdx = 0;
+        float lowestScore = entryList.get(0).surpriseScore;
+        for (int i = 1; i < entryList.size(); i++) {
+            if (entryList.get(i).surpriseScore < lowestScore) {
+                lowestScore = entryList.get(i).surpriseScore;
+                lowestIdx = i;
+            }
+        }
+        return lowestIdx;
+    }
+    
+    /**
+     * 重建底层 AssociativeMemory 以保持与 entryList 同步
+     */
+    private void rebuildMemory() {
+        memory.clear();
+        for (MemoryEntry entry : entryList) {
+            memory.store(entry.key, entry.value);
         }
     }
     
@@ -211,25 +236,27 @@ public class SurpriseBasedMemory {
      * 随着时间推移降低记忆的惊异度
      */
     public void applyDecay() {
-        if (!enableDecay || priorityQueue.isEmpty()) {
+        if (!enableDecay || entryList.isEmpty()) {
             return;
         }
         
-        // 重建优先队列以应用衰减
+        // 应用衰减并移除低于阈值的记忆
         PriorityQueue<MemoryEntry> newQueue = new PriorityQueue<>();
+        List<MemoryEntry> newEntryList = new ArrayList<>();
         
-        while (!priorityQueue.isEmpty()) {
-            MemoryEntry entry = priorityQueue.poll();
-            // 应用衰减
+        for (MemoryEntry entry : entryList) {
             entry.surpriseScore *= (1.0f - decayRate);
-            
-            // 只保留超过阈值的记忆
             if (entry.surpriseScore >= surpriseThreshold) {
                 newQueue.offer(entry);
+                newEntryList.add(entry);
             }
         }
         
         this.priorityQueue = newQueue;
+        this.entryList = newEntryList;
+        
+        // 同步底层 memory
+        rebuildMemory();
     }
     
     /**
@@ -241,11 +268,9 @@ public class SurpriseBasedMemory {
     public void boostFrequentMemories(float boostFactor) {
         PriorityQueue<MemoryEntry> newQueue = new PriorityQueue<>();
         
-        while (!priorityQueue.isEmpty()) {
-            MemoryEntry entry = priorityQueue.poll();
-            // 根据访问次数增强惊异度
+        for (MemoryEntry entry : entryList) {
             float boost = 1.0f + (entry.accessCount * boostFactor);
-            entry.surpriseScore *= boost;
+            entry.surpriseScore = Math.min(1.0f, entry.surpriseScore * boost);
             newQueue.offer(entry);
         }
         
@@ -283,7 +308,7 @@ public class SurpriseBasedMemory {
     public void clear() {
         memory.clear();
         priorityQueue.clear();
-        entryMap.clear();
+        entryList.clear();
         currentIndex = 0;
     }
     

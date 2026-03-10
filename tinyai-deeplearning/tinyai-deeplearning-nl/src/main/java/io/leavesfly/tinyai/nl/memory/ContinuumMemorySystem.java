@@ -221,26 +221,41 @@ public class ContinuumMemorySystem {
     
     /**
      * 在两个记忆模块间执行整合
+     * 将源模块中惊异度低于阈值的稳定记忆迁移到目标模块
      * 
      * @param source 源模块
      * @param target 目标模块
      */
     private void consolidateBetween(MemoryModule source, MemoryModule target) {
-        // 获取源模块的所有记忆
         List<Variable> sourceKeys = source.getMemory().getKeys();
         List<Variable> sourceValues = source.getMemory().getValues();
         
-        // 检查每个记忆的惊异度
+        // 收集需要整合（迁移）的记忆索引
+        List<Integer> indicesToRemove = new ArrayList<>();
+        
         for (int i = 0; i < sourceKeys.size(); i++) {
             Variable key = sourceKeys.get(i);
             Variable value = sourceValues.get(i);
             
-            // 计算惊异度
             float surprise = source.computeSurprise(key);
             
-            // 如果惊异度低于阈值，说明是稳定记忆，可以整合
+            // 惊异度低于阈值的记忆是稳定记忆，应整合到更长期的模块
             if (surprise < consolidationThreshold) {
                 target.store(key, value);
+                indicesToRemove.add(i);
+            }
+        }
+        
+        // 从源模块中移除已整合的记忆
+        if (!indicesToRemove.isEmpty()) {
+            java.util.Set<Integer> removeSet = new java.util.HashSet<>(indicesToRemove);
+            List<Variable> keys = sourceKeys;
+            List<Variable> values = sourceValues;
+            source.getMemory().clear();
+            for (int i = 0; i < keys.size(); i++) {
+                if (!removeSet.contains(i)) {
+                    source.store(keys.get(i), values.get(i));
+                }
             }
         }
     }

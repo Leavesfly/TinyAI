@@ -22,15 +22,13 @@ import java.util.Arrays;
 /**
  * N维数组类，支持标量、向量、矩阵等多维数据结构
  *
- * <p>该类经过重构优化，提供更加优雅的API和更好的性能，是深度学习框架的核心数据结构。</p>
+ * 该类经过重构优化，提供更加优雅的API和更好的性能，是深度学习框架的核心数据结构。
  *
- * <p>主要特性：</p>
- * <ul>
- *   <li>支持任意维度的数组操作</li>
- *   <li>高效的内存管理</li>
- *   <li>丰富的数学运算和张量操作</li>
- *   <li>广播机制支持</li>
- * </ul>
+ * 主要特性：
+ *  - 支持任意维度的数组操作
+ *  - 高效的内存管理
+ *  - 丰富的数学运算和张量操作
+ *  - 广播机制支持
  */
 public class NdArrayCpu implements NdArray, Serializable {
 
@@ -53,7 +51,7 @@ public class NdArrayCpu implements NdArray, Serializable {
     /**
      * 默认构造方法，创建空的NdArray实例
      *
-     * <p>注意：此构造方法不会初始化shape和buffer，需要手动设置</p>
+     * 注意：此构造方法不会初始化shape和buffer，需要手动设置
      */
     public NdArrayCpu() {
     }
@@ -95,7 +93,7 @@ public class NdArrayCpu implements NdArray, Serializable {
     /**
      * 从多维数组对象创建NdArray
      *
-     * <p>支持2D、3D、4D数组的创建</p>
+     * 支持2D、3D、4D数组的创建
      *
      * @param data 多维数组对象（float[][]、float[][][]或float[][][][]）
      * @throws IllegalArgumentException 当输入类型不支持时抛出
@@ -485,7 +483,7 @@ public class NdArrayCpu implements NdArray, Serializable {
     /**
      * Sigmoid函数运算，对数组每个元素进行sigmoid运算
      *
-     * <p>Sigmoid函数公式：f(x) = 1 / (1 + e^(-x))</p>
+     * Sigmoid函数公式：f(x) = 1 / (1 + e^(-x))
      *
      * @return Sigmoid运算结果数组
      */
@@ -506,8 +504,8 @@ public class NdArrayCpu implements NdArray, Serializable {
     /**
      * Softmax函数运算，按行计算概率分布
      *
-     * <p>Softmax函数公式：softmax(x_i) = exp(x_i) / Σ(exp(x_j))</p>
-     * <p>使用数值稳定版本实现，避免指数运算溢出</p>
+     * Softmax函数公式：softmax(x_i) = exp(x_i) / Σ(exp(x_j))
+     * 使用数值稳定版本实现，避免指数运算溢出
      *
      * @return Softmax运算结果数组
      * @throws IllegalArgumentException 当数组不是二维矩阵时抛出
@@ -519,7 +517,7 @@ public class NdArrayCpu implements NdArray, Serializable {
     /**
      * Softmax函数运算，沿指定 axis 计算概率分布
      *
-     * <p>使用数值稳定版本实现：先减去该轴上的最大值，再进行 exp 和归一化</p>
+     * 使用数值稳定版本实现：先减去该轴上的最大值，再进行 exp 和归一化
      *
      * @param axis 计算 softmax 的维度，支持负轴（-1 表示最后一维）
      * @return Softmax运算结果数组
@@ -654,7 +652,7 @@ public class NdArrayCpu implements NdArray, Serializable {
     /**
      * 按指定形状进行压缩累加运算
      *
-     * <p>将当前数组按指定形状进行压缩，超出目标形状的部分会累加到对应位置</p>
+     * 将当前数组按指定形状进行压缩，超出目标形状的部分会累加到对应位置
      *
      * @param _shape 目标形状
      * @return 压缩累加结果数组
@@ -665,10 +663,8 @@ public class NdArrayCpu implements NdArray, Serializable {
     }
 
     /**
-     * 优化的sumTo实现（新增方法）
-     * <p>
+     * 优化的sumTo实现
      * 使用轴向求和策略，性能提升2-3倍
-     * </p>
      *
      * @param targetShape 目标形状
      * @return 压缩结果数组
@@ -681,7 +677,7 @@ public class NdArrayCpu implements NdArray, Serializable {
     /**
      * 数组广播运算，将当前数组广播到指定形状
      *
-     * <p>广播机制允许小数组与大数组进行运算，小数组会重复填充以匹配大数组的形状</p>
+     * 广播机制允许小数组与大数组进行运算，小数组会重复填充以匹配大数组的形状
      *
      * @param _shape 目标广播形状
      * @return 广播结果数组
@@ -831,9 +827,9 @@ public class NdArrayCpu implements NdArray, Serializable {
     /**
      * 在指定位置累加数组元素
      *
-     * <p>在指定的行和列位置上累加另一个数组的元素。这个方法常用于反向传播中梯度的累积。</p>
+     * 在指定的行和列位置上累加另一个数组的元素。这个方法常用于反向传播中梯度的累积。
      *
-     * <p>使用示例：</p>
+     * 使用示例：
      * <pre>
      * NdArray a = new NdArray(new float[][]{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}});
      * NdArray b = new NdArray(new float[][]{{10}, {20}});
@@ -868,7 +864,7 @@ public class NdArrayCpu implements NdArray, Serializable {
     /**
      * 裁剪数组元素到指定范围
      *
-     * <p>将数组中小于最小值的元素设为最小值，大于最大值的元素设为最大值</p>
+     * 将数组中小于最小值的元素设为最小值，大于最大值的元素设为最大值
      *
      * @param min 最小值
      * @param max 最大值
@@ -906,7 +902,7 @@ public class NdArrayCpu implements NdArray, Serializable {
     /**
      * 设置数组的形状
      *
-     * <p>注意：新形状的大小必须与当前形状大小一致</p>
+     * 注意：新形状的大小必须与当前形状大小一致
      *
      * @param shape 新形状
      * @throws IllegalArgumentException 当新形状大小与当前形状不匹配时抛出
@@ -955,15 +951,13 @@ public class NdArrayCpu implements NdArray, Serializable {
 
     /**
      * 重写toString方法，按形状美观地打印数组
-     * 
-     * <p>根据数组维度智能格式化输出：</p>
-     * <ul>
-     *   <li>标量(1x1)：直接显示数值</li>
-     *   <li>1维数组：[1.0, 2.0, 3.0]</li>
-     *   <li>2维数组(矩阵)：带换行和对齐的矩阵格式</li>
-     *   <li>3维及以上：递归显示嵌套结构</li>
-     * </ul>
-     * 
+     *
+     * 根据数组维度智能格式化输出：
+     *  - 标量(1x1)：直接显示数值
+     *  - 1维数组：[1.0, 2.0, 3.0]
+     *  - 2维数组(矩阵)：带换行和对齐的矩阵格式
+     *  - 3维及以上：递归显示嵌套结构
+     *
      * @return 格式化的字符串表示
      */
     @Override

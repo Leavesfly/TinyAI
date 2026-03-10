@@ -107,7 +107,7 @@ public class NestedOptimizationLevel {
     }
     
     /**
-     * 计算该层级的局部误差
+     * 计算该层级的局部误差（均方误差）
      * 
      * @param input 输入数据
      * @param target 目标数据
@@ -118,16 +118,15 @@ public class NestedOptimizationLevel {
             return null;
         }
         
-        // 简化实现：计算均方误差
         Variable diff = input.sub(target);
         Variable squared = diff.mul(diff);
-        
-        // 计算平均误差
         return squared.mean(0, true);
     }
     
     /**
      * 更新该层级的参数
+     * 注意：参数通过替换列表中的引用来更新。外部持有参数引用的代码
+     * 应通过 getParameters() 重新获取最新引用。
      * 
      * @param gradients 梯度列表
      */
@@ -136,10 +135,8 @@ public class NestedOptimizationLevel {
             return;
         }
         
-        // 确保梯度数量与参数数量匹配
         int count = Math.min(parameters.size(), gradients.size());
         
-        // 使用简单的SGD更新
         for (int i = 0; i < count; i++) {
             Variable param = parameters.get(i);
             Variable grad = gradients.get(i);
@@ -149,10 +146,16 @@ public class NestedOptimizationLevel {
                 Variable update = grad.mul(new Variable(learningRate));
                 Variable newParam = param.sub(update);
                 
-                // 更新参数（这里简化处理，实际需要in-place更新）
+                // 通过替换列表中的引用来更新参数
+                // 如果原参数有名称，保留到新参数上
+                if (param.getName() != null) {
+                    newParam.setName(param.getName());
+                }
                 parameters.set(i, newParam);
             }
         }
+        
+        lastUpdateStep = Math.max(lastUpdateStep, 0);
     }
     
     /**

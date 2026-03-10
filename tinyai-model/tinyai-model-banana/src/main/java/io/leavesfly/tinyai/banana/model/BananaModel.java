@@ -62,6 +62,9 @@ public class BananaModel extends Model {
     public static BananaModel create(String name, String preset) {
         BananaConfig config;
         switch (preset.toLowerCase()) {
+            case "nano":
+                config = BananaConfig.createNanoConfig();
+                break;
             case "tiny":
                 config = BananaConfig.createTinyConfig();
                 break;

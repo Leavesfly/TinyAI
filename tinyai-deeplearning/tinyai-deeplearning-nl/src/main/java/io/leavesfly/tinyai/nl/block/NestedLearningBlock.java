@@ -7,6 +7,7 @@ import io.leavesfly.tinyai.nl.core.ContextFlow;
 import io.leavesfly.tinyai.nl.core.FlowDirection;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import java.util.Collection;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -121,23 +122,43 @@ public class NestedLearningBlock extends Module {
     
     /**
      * 将参数分配到不同的优化层级
+     * 策略：将子模块均匀分配到各个优化层级，
+     * 每个子模块的所有参数归属于同一个层级
      */
     private void distributeParametersToLevels() {
         if (subModules.isEmpty()) {
             return;
         }
         
-        // 简化策略：将子模块均匀分配到各个优化层级
+        // 先清空所有层级的参数
+        for (NestedOptimizationLevel level : optimizationLevels) {
+            level.getParameters().clear();
+        }
+        
         int modulesPerLevel = Math.max(1, subModules.size() / numLevels);
         
         for (int i = 0; i < subModules.size(); i++) {
             int levelIndex = Math.min(i / modulesPerLevel, numLevels - 1);
             NestedOptimizationLevel level = optimizationLevels.get(levelIndex);
             
-            // 获取模块的参数并添加到优化层级
             Module module = subModules.get(i);
-            // 注意：这里简化处理，实际应该将Parameter转换为Variable
-            // 由于Parameter继承自Variable，这里可以直接使用
+            // Parameter 继承自 Variable，可以直接添加到优化层级
+            for (Parameter param : module.parameters()) {
+                level.addParameter(param);
+            }
+        }
+    }
+    
+    /**
+     * 添加子模块并注册到 Module 系统
+     * 
+     * @param moduleName 模块名称
+     * @param module 子模块
+     */
+    public void addSubModule(String moduleName, Module module) {
+        if (module != null) {
+            subModules.add(module);
+            registerModule(moduleName, module);
         }
     }
     

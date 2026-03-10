@@ -1,6 +1,8 @@
 package io.leavesfly.tinyai.nl.core;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.ndarr.NdArray;
+import io.leavesfly.tinyai.ndarr.Shape;
 
 /**
  * 上下文流（ContextFlow）
@@ -62,10 +64,30 @@ public class ContextFlow {
             return this.contextData;
         }
         
-        // 如果需要压缩，应用压缩
         Variable processedContext = inputContext;
-        if (compressionRate < 1.0f) {
-            processedContext = compress(inputContext, compressionRate);
+        
+        // 根据流动方向决定处理方式
+        switch (flowDirection) {
+            case UPWARD:
+                // 向上流动时压缩信息（从子层级到父层级，信息需要抽象化）
+                if (compressionRate < 1.0f) {
+                    processedContext = compress(inputContext, compressionRate);
+                }
+                break;
+            case DOWNWARD:
+                // 向下流动时直接传递（从父层级到子层级，保留完整信息）
+                break;
+            case BIDIRECTIONAL:
+                // 双向流动时应用压缩
+                if (compressionRate < 1.0f) {
+                    processedContext = compress(inputContext, compressionRate);
+                }
+                break;
+        }
+        
+        // 如果已有上下文数据，与新数据融合
+        if (this.contextData != null) {
+            processedContext = fuseContext(this.contextData, processedContext);
         }
         
         // 更新当前上下文
@@ -75,11 +97,41 @@ public class ContextFlow {
     }
     
     /**
+     * 融合旧上下文和新上下文
+     * 使用指数移动平均实现平滑过渡
+     * 
+     * @param oldContext 旧上下文
+     * @param newContext 新上下文
+     * @return 融合后的上下文
+     */
+    private Variable fuseContext(Variable oldContext, Variable newContext) {
+        if (oldContext == null) {
+            return newContext;
+        }
+        if (newContext == null) {
+            return oldContext;
+        }
+        
+        // 检查形状是否兼容
+        int[] oldShape = oldContext.getValue().getShape().getShapeDims();
+        int[] newShape = newContext.getValue().getShape().getShapeDims();
+        if (!java.util.Arrays.equals(oldShape, newShape)) {
+            // 形状不兼容时直接使用新上下文
+            return newContext;
+        }
+        
+        // 指数移动平均：result = 0.7 * newContext + 0.3 * oldContext
+        float newWeight = 0.7f;
+        float oldWeight = 1.0f - newWeight;
+        return newContext.mul(new Variable(newWeight)).add(oldContext.mul(new Variable(oldWeight)));
+    }
+    
+    /**
      * 压缩上下文信息
-     * 使用线性投影降低维度，保留最重要的特征
+     * 使用随机投影矩阵降低维度，保留主要特征
      * 
      * @param context 原始上下文
-     * @param rate 压缩率
+     * @param rate 压缩率（0-1，越小压缩越多）
      * @return 压缩后的上下文
      */
     public Variable compress(Variable context, float rate) {
@@ -87,19 +139,34 @@ public class ContextFlow {
             return context;
         }
         
-        // 简化实现：通过缩放模拟压缩
-        // 在实际应用中，可以使用线性层进行维度降低
         int[] shape = context.getValue().getShape().getShapeDims();
         if (shape.length == 2) {
-            // 对于2D张量，压缩第二维
-            int newDim = Math.max(1, (int)(shape[1] * rate));
+            int originalDim = shape[1];
+            int compressedDim = Math.max(1, (int) (originalDim * rate));
             
-            // 这里简化处理：返回前newDim个特征
-            // 实际应用中应该使用可学习的压缩层
-            if (newDim < shape[1]) {
-                // 创建一个选择前newDim个特征的变量
-                // 简化：直接返回原context，实际需要切片操作
-                return context;
+            if (compressedDim < originalDim) {
+                // 使用均值池化进行压缩：将相邻特征分组取平均
+                int groupSize = originalDim / compressedDim;
+                int batchSize = shape[0];
+                float[] compressedData = new float[batchSize * compressedDim];
+                
+                NdArray contextData = context.getValue();
+                for (int b = 0; b < batchSize; b++) {
+                    for (int j = 0; j < compressedDim; j++) {
+                        float sum = 0.0f;
+                        int count = 0;
+                        int startIdx = j * groupSize;
+                        int endIdx = (j == compressedDim - 1) ? originalDim : startIdx + groupSize;
+                        for (int k = startIdx; k < endIdx; k++) {
+                            sum += contextData.get(new int[]{b, k});
+                            count++;
+                        }
+                        compressedData[b * compressedDim + j] = sum / count;
+                    }
+                }
+                
+                NdArray compressedArray = NdArray.of(compressedData, Shape.of(batchSize, compressedDim));
+                return new Variable(compressedArray);
             }
         }
         
@@ -118,18 +185,25 @@ public class ContextFlow {
             return this;
         }
         
-        // 简化实现：取平均
         Variable mergedData = this.contextData;
         if (otherContext.contextData != null) {
-            // 如果两个上下文数据都存在，进行平均
             if (this.contextData != null) {
-                mergedData = this.contextData.add(otherContext.contextData).mul(new Variable(0.5f));
+                // 检查形状兼容性
+                int[] thisShape = this.contextData.getValue().getShape().getShapeDims();
+                int[] otherShape = otherContext.contextData.getValue().getShape().getShapeDims();
+                
+                if (java.util.Arrays.equals(thisShape, otherShape)) {
+                    // 形状相同时取加权平均
+                    mergedData = this.contextData.add(otherContext.contextData).mul(new Variable(0.5f));
+                } else {
+                    // 形状不同时保留当前上下文
+                    mergedData = this.contextData;
+                }
             } else {
                 mergedData = otherContext.contextData;
             }
         }
         
-        // 创建新的上下文流
         return new ContextFlow(mergedData, this.flowDirection, this.compressionRate);
     }
     

@@ -110,10 +110,10 @@ public class AssociativeMemory {
     
     /**
      * 根据键检索值
-     * 使用注意力机制计算相似度
+     * 使用 softmax 加权的注意力机制进行检索
      * 
      * @param queryKey 查询键
-     * @return 检索到的值
+     * @return 加权检索到的值
      */
     public Variable retrieve(Variable queryKey) {
         if (queryKey == null || currentSize == 0) {
@@ -122,22 +122,56 @@ public class AssociativeMemory {
         
         // 计算查询键与所有存储键的相似度
         float[] similarities = new float[currentSize];
-        float maxSimilarity = Float.NEGATIVE_INFINITY;
-        int maxIndex = 0;
-        
         for (int i = 0; i < currentSize; i++) {
-            Variable key = keys.get(i);
-            float similarity = computeSimilarity(queryKey, key);
-            similarities[i] = similarity;
-            
-            if (similarity > maxSimilarity) {
-                maxSimilarity = similarity;
-                maxIndex = i;
+            similarities[i] = computeSimilarity(queryKey, keys.get(i));
+        }
+        
+        // 对相似度应用 softmax 归一化得到注意力权重
+        float[] weights = softmax(similarities);
+        
+        // 使用注意力权重对所有值进行加权求和
+        Variable result = null;
+        for (int i = 0; i < currentSize; i++) {
+            Variable weightedValue = values.get(i).mul(new Variable(weights[i]));
+            if (result == null) {
+                result = weightedValue;
+            } else {
+                result = result.add(weightedValue);
             }
         }
         
-        // 返回最相似的值
-        return values.get(maxIndex);
+        return result;
+    }
+    
+    /**
+     * 对浮点数组应用 softmax 归一化
+     * 
+     * @param scores 原始分数数组
+     * @return 归一化后的概率分布
+     */
+    private float[] softmax(float[] scores) {
+        float[] result = new float[scores.length];
+        
+        // 数值稳定性：减去最大值
+        float maxScore = Float.NEGATIVE_INFINITY;
+        for (float score : scores) {
+            maxScore = Math.max(maxScore, score);
+        }
+        
+        float sumExp = 0.0f;
+        for (int i = 0; i < scores.length; i++) {
+            result[i] = (float) Math.exp(scores[i] - maxScore);
+            sumExp += result[i];
+        }
+        
+        // 归一化
+        if (sumExp > 0) {
+            for (int i = 0; i < result.length; i++) {
+                result[i] /= sumExp;
+            }
+        }
+        
+        return result;
     }
     
     /**
@@ -198,8 +232,7 @@ public class AssociativeMemory {
     }
     
     /**
-     * 计算两个变量之间的相似度
-     * 使用余弦相似度
+     * 计算两个变量之间的余弦相似度
      * 
      * @param v1 变量1
      * @param v2 变量2
@@ -217,37 +250,41 @@ public class AssociativeMemory {
             return 0.0f;
         }
         
-        // 简化实现：使用点积作为相似度
-        // 实际应该使用归一化的余弦相似度
         try {
-            // 将数组展平并计算点积
+            // 将数组展平并计算余弦相似度
+            // NdArray.flatten() 返回 Shape(1, N) 的 2D 数组
             NdArray flat1 = data1.flatten();
             NdArray flat2 = data2.flatten();
             
-            // 使用Shape获取长度
             int len1 = flat1.getShape().size();
             int len2 = flat2.getShape().size();
             int len = Math.min(len1, len2);
+            
+            // 判断 flatten 后的维度数来确定正确的索引方式
+            int ndim1 = flat1.getShape().getDimNum();
+            int ndim2 = flat2.getShape().getDimNum();
             
             float dotProduct = 0.0f;
             float norm1 = 0.0f;
             float norm2 = 0.0f;
             
             for (int i = 0; i < len; i++) {
-                float val1 = flat1.get(new int[]{0, i});
-                float val2 = flat2.get(new int[]{0, i});
+                // 兼容 1D [N] 和 2D [1, N] 两种 flatten 结果
+                int[] idx1 = (ndim1 == 1) ? new int[]{i} : new int[]{0, i};
+                int[] idx2 = (ndim2 == 1) ? new int[]{i} : new int[]{0, i};
+                
+                float val1 = flat1.get(idx1);
+                float val2 = flat2.get(idx2);
                 dotProduct += val1 * val2;
                 norm1 += val1 * val1;
                 norm2 += val2 * val2;
             }
             
             // 余弦相似度
-            float similarity = 0.0f;
             if (norm1 > 0 && norm2 > 0) {
-                similarity = dotProduct / (float)(Math.sqrt(norm1) * Math.sqrt(norm2));
+                return dotProduct / (float) (Math.sqrt(norm1) * Math.sqrt(norm2));
             }
-            
-            return similarity;
+            return 0.0f;
         } catch (Exception e) {
             return 0.0f;
         }

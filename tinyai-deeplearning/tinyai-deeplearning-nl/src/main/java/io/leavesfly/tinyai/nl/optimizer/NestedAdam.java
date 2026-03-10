@@ -45,24 +45,24 @@ public class NestedAdam extends DeepOptimizer {
     private boolean amsgrad;
     
     /**
-     * 一阶动量缓存（m_t）
+     * 一阶动量缓存（m_t），使用 "levelIndex_paramIndex" 作为 key
      */
-    private Map<Variable, Variable> firstMoments;
+    private Map<String, Variable> firstMoments;
     
     /**
-     * 二阶动量缓存（v_t）
+     * 二阶动量缓存（v_t），使用 "levelIndex_paramIndex" 作为 key
      */
-    private Map<Variable, Variable> secondMoments;
+    private Map<String, Variable> secondMoments;
     
     /**
      * AMSGrad的最大二阶动量缓存
      */
-    private Map<Variable, Variable> maxSecondMoments;
+    private Map<String, Variable> maxSecondMoments;
     
     /**
      * 每个参数的时间步
      */
-    private Map<Variable, Integer> timeSteps;
+    private Map<String, Integer> timeSteps;
     
     /**
      * 构造函数
@@ -117,12 +117,10 @@ public class NestedAdam extends DeepOptimizer {
         List<Variable> parameters = level.getParameters();
         float levelLearningRate = level.getLearningRate();
         
-        // 如果层级学习率为0，使用全局学习率
         if (levelLearningRate == 0.0f) {
             levelLearningRate = globalLearningRate;
         }
         
-        // 更新每个参数
         int count = Math.min(parameters.size(), gradients.size());
         for (int i = 0; i < count; i++) {
             Variable param = parameters.get(i);
@@ -132,42 +130,46 @@ public class NestedAdam extends DeepOptimizer {
                 continue;
             }
             
-            // 应用权重衰减
+            // 应用权重衰减: grad = grad + weightDecay * param
             if (weightDecay > 0.0f) {
                 grad = grad.add(param.mul(new Variable(weightDecay)));
             }
             
-            // 执行Adam更新
-            Variable newParam = adamUpdate(param, grad, levelLearningRate);
-            
-            // 更新参数
+            // 使用 (levelIndex, paramIndex) 作为 key 执行 Adam 更新
+            Variable newParam = adamUpdate(level.getLevelIndex(), i, param, grad, levelLearningRate);
             parameters.set(i, newParam);
         }
     }
     
     /**
-     * 执行Adam更新
+     * 执行 Adam 更新
+     * 使用 (levelIndex, paramIndex) 作为动量状态的 key，避免参数引用丢失
      * 
+     * @param levelIndex 层级索引
+     * @param paramIndex 参数索引
      * @param param 参数
      * @param grad 梯度
      * @param learningRate 学习率
      * @return 更新后的参数
      */
-    private Variable adamUpdate(Variable param, Variable grad, float learningRate) {
+    private Variable adamUpdate(int levelIndex, int paramIndex, 
+                                 Variable param, Variable grad, float learningRate) {
+        String stateKey = levelIndex + "_" + paramIndex;
+        
         // 获取或初始化时间步
-        int t = timeSteps.getOrDefault(param, 0) + 1;
-        timeSteps.put(param, t);
+        int t = timeSteps.getOrDefault(stateKey, 0) + 1;
+        timeSteps.put(stateKey, t);
         
         // 获取或初始化一阶动量
-        Variable m = firstMoments.get(param);
+        Variable m = firstMoments.get(stateKey);
         if (m == null) {
-            m = grad.mul(new Variable(0.0f)); // 初始化为0
+            m = new Variable(NdArray.zeros(param.getValue().getShape()));
         }
         
         // 获取或初始化二阶动量
-        Variable v = secondMoments.get(param);
+        Variable v = secondMoments.get(stateKey);
         if (v == null) {
-            v = grad.mul(new Variable(0.0f)); // 初始化为0
+            v = new Variable(NdArray.zeros(param.getValue().getShape()));
         }
         
         // 更新一阶动量：m_t = beta1 * m_{t-1} + (1 - beta1) * grad
@@ -178,8 +180,8 @@ public class NestedAdam extends DeepOptimizer {
         v = v.mul(new Variable(beta2)).add(gradSquared.mul(new Variable(1.0f - beta2)));
         
         // 保存更新后的动量
-        firstMoments.put(param, m);
-        secondMoments.put(param, v);
+        firstMoments.put(stateKey, m);
+        secondMoments.put(stateKey, v);
         
         // 偏差修正
         float biasCorrection1 = 1.0f - (float) Math.pow(beta1, t);
@@ -188,16 +190,15 @@ public class NestedAdam extends DeepOptimizer {
         Variable mHat = m.mul(new Variable(1.0f / biasCorrection1));
         Variable vHat = v.mul(new Variable(1.0f / biasCorrection2));
         
-        // AMSGrad变体
+        // AMSGrad 变体
         if (amsgrad) {
-            Variable vMax = maxSecondMoments.get(param);
+            Variable vMax = maxSecondMoments.get(stateKey);
             if (vMax == null) {
                 vMax = vHat;
             } else {
-                // vMax = max(vMax, vHat)
                 vMax = elementwiseMax(vMax, vHat);
             }
-            maxSecondMoments.put(param, vMax);
+            maxSecondMoments.put(stateKey, vMax);
             vHat = vMax;
         }
         
@@ -206,7 +207,7 @@ public class NestedAdam extends DeepOptimizer {
         Variable denominator = sqrtV.add(new Variable(epsilon));
         Variable update = mHat.mul(new Variable(learningRate)).div(denominator);
         
-        // 更新参数：param = param - update
+        // param = param - update
         return param.sub(update);
     }
     
@@ -223,17 +224,19 @@ public class NestedAdam extends DeepOptimizer {
         
         NdArray data = v.getValue();
         int[] shape = data.getShape().getShapeDims();
-        float[] result = new float[data.getShape().size()];
+        int totalSize = data.getShape().size();
+        float[] result = new float[totalSize];
         
-        // 展平并计算平方根
         NdArray flat = data.flatten();
-        for (int i = 0; i < result.length; i++) {
-            float val = flat.get(new int[]{0, i});
+        int ndim = flat.getShape().getDimNum();
+        
+        for (int i = 0; i < totalSize; i++) {
+            int[] idx = (ndim == 1) ? new int[]{i} : new int[]{0, i};
+            float val = flat.get(idx);
             result[i] = (float) Math.sqrt(Math.max(0.0f, val));
         }
         
-        // 重新构造为原形状
-        NdArray sqrtData = NdArray.of(result).reshape(io.leavesfly.tinyai.ndarr.Shape.of(shape));
+        NdArray sqrtData = NdArray.of(result, io.leavesfly.tinyai.ndarr.Shape.of(shape));
         return new Variable(sqrtData);
     }
     
@@ -251,20 +254,21 @@ public class NestedAdam extends DeepOptimizer {
         NdArray data1 = v1.getValue();
         NdArray data2 = v2.getValue();
         int[] shape = data1.getShape().getShapeDims();
-        float[] result = new float[data1.getShape().size()];
+        int totalSize = data1.getShape().size();
+        float[] result = new float[totalSize];
         
-        // 展平并计算最大值
         NdArray flat1 = data1.flatten();
         NdArray flat2 = data2.flatten();
+        int ndim1 = flat1.getShape().getDimNum();
+        int ndim2 = flat2.getShape().getDimNum();
         
-        for (int i = 0; i < result.length; i++) {
-            float val1 = flat1.get(new int[]{0, i});
-            float val2 = flat2.get(new int[]{0, i});
-            result[i] = Math.max(val1, val2);
+        for (int i = 0; i < totalSize; i++) {
+            int[] idx1 = (ndim1 == 1) ? new int[]{i} : new int[]{0, i};
+            int[] idx2 = (ndim2 == 1) ? new int[]{i} : new int[]{0, i};
+            result[i] = Math.max(flat1.get(idx1), flat2.get(idx2));
         }
         
-        // 重新构造为原形状
-        NdArray maxData = NdArray.of(result).reshape(io.leavesfly.tinyai.ndarr.Shape.of(shape));
+        NdArray maxData = NdArray.of(result, io.leavesfly.tinyai.ndarr.Shape.of(shape));
         return new Variable(maxData);
     }
     

@@ -1,6 +1,7 @@
 package io.leavesfly.tinyai.nl.optimizer;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.nl.core.NestedOptimizationLevel;
 
 import java.util.HashMap;
@@ -34,9 +35,9 @@ public class NestedSGD extends DeepOptimizer {
     private boolean nesterov;
     
     /**
-     * 动量缓存：存储每个参数的动量
+     * 动量缓存：使用 "levelIndex_paramIndex" 作为 key，避免 Variable 引用丢失
      */
-    private Map<Variable, Variable> velocities;
+    private Map<String, Variable> velocities;
     
     /**
      * 构造函数
@@ -82,12 +83,10 @@ public class NestedSGD extends DeepOptimizer {
         List<Variable> parameters = level.getParameters();
         float levelLearningRate = level.getLearningRate();
         
-        // 如果层级学习率为0，使用全局学习率
         if (levelLearningRate == 0.0f) {
             levelLearningRate = globalLearningRate;
         }
         
-        // 更新每个参数
         int count = Math.min(parameters.size(), gradients.size());
         for (int i = 0; i < count; i++) {
             Variable param = parameters.get(i);
@@ -97,60 +96,61 @@ public class NestedSGD extends DeepOptimizer {
                 continue;
             }
             
-            // 应用权重衰减（L2正则化）
+            // 应用权重衰减（L2正则化）: grad = grad + weightDecay * param
             if (weightDecay > 0.0f) {
-                // grad = grad + weightDecay * param
-                Variable decayTerm = param.mul(new Variable(weightDecay));
-                grad = grad.add(decayTerm);
+                grad = grad.add(param.mul(new Variable(weightDecay)));
             }
             
-            // 应用动量
+            Variable newParam;
             if (momentum > 0.0f) {
-                grad = applyMomentum(param, grad, levelLearningRate);
+                // 使用动量更新
+                newParam = applyMomentumUpdate(level.getLevelIndex(), i, param, grad, levelLearningRate);
+            } else {
+                // 无动量的标准 SGD: param = param - lr * grad
+                newParam = param.sub(grad.mul(new Variable(levelLearningRate)));
             }
             
-            // 执行参数更新：param = param - learningRate * grad
-            Variable update = grad.mul(new Variable(levelLearningRate));
-            Variable newParam = param.sub(update);
-            
-            // 更新参数
             parameters.set(i, newParam);
         }
     }
     
     /**
-     * 应用动量
+     * 使用动量进行参数更新
+     * 标准动量公式: v = μ * v + lr * grad; param = param - v
+     * Nesterov 动量: v = μ * v + lr * grad; param = param - (μ * v + lr * grad)
      * 
-     * @param param 参数
+     * @param levelIndex 层级索引
+     * @param paramIndex 参数索引
+     * @param param 当前参数
      * @param grad 梯度
      * @param learningRate 学习率
-     * @return 应用动量后的梯度
+     * @return 更新后的参数
      */
-    private Variable applyMomentum(Variable param, Variable grad, float learningRate) {
-        // 获取或初始化速度
-        Variable velocity = velocities.get(param);
+    private Variable applyMomentumUpdate(int levelIndex, int paramIndex, 
+                                          Variable param, Variable grad, float learningRate) {
+        // 使用 (levelIndex, paramIndex) 作为 key，避免 Variable 引用丢失
+        String velocityKey = levelIndex + "_" + paramIndex;
+        
+        Variable velocity = velocities.get(velocityKey);
         if (velocity == null) {
-            // 初始化为零（简化：使用梯度乘以0）
-            velocity = grad.mul(new Variable(0.0f));
+            velocity = new Variable(NdArray.zeros(param.getValue().getShape()));
         }
+        
+        // v = μ * v + lr * grad
+        Variable scaledGrad = grad.mul(new Variable(learningRate));
+        velocity = velocity.mul(new Variable(momentum)).add(scaledGrad);
+        
+        // 保存速度
+        velocities.put(velocityKey, velocity);
         
         if (nesterov) {
-            // Nesterov动量：v = momentum * v + grad
-            //              grad_new = grad + momentum * v
-            velocity = velocity.mul(new Variable(momentum)).add(grad);
-            Variable momentumTerm = velocity.mul(new Variable(momentum));
-            grad = grad.add(momentumTerm);
+            // Nesterov: param = param - (μ * v + lr * grad)
+            Variable nesterovUpdate = velocity.mul(new Variable(momentum)).add(scaledGrad);
+            return param.sub(nesterovUpdate);
         } else {
-            // 标准动量：v = momentum * v + grad
-            //          grad_new = v
-            velocity = velocity.mul(new Variable(momentum)).add(grad);
-            grad = velocity;
+            // 标准动量: param = param - v
+            return param.sub(velocity);
         }
-        
-        // 更新速度缓存
-        velocities.put(param, velocity);
-        
-        return grad;
     }
     
     @Override
@@ -203,7 +203,7 @@ public class NestedSGD extends DeepOptimizer {
         this.nesterov = nesterov;
     }
     
-    public Map<Variable, Variable> getVelocities() {
+    public Map<String, Variable> getVelocities() {
         return new HashMap<>(velocities);
     }
 }

@@ -1,5 +1,7 @@
 package io.leavesfly.tinyai.banana.config;
 
+import java.io.Serializable;
+
 /**
  * Gemini Nano Banana模型配置类
  * 
@@ -16,7 +18,9 @@ package io.leavesfly.tinyai.banana.config;
  * @author leavesfly
  * @version 1.0
  */
-public class BananaConfig {
+public class BananaConfig implements Serializable {
+
+    private static final long serialVersionUID = 1L;
     
     // ==================== 基础模型配置 ====================
     
@@ -109,6 +113,27 @@ public class BananaConfig {
     
     // ==================== 预设配置工厂方法 ====================
     
+    /**
+     * 创建Nano配置（演示用，极小规模，低内存占用）
+     * 配置：128维, 2层, 4头, 64x64图像, 16x16 patch → 16个patches
+     */
+    public static BananaConfig createNanoConfig() {
+        BananaConfig config = new BananaConfig();
+        config.setHiddenSize(128);
+        config.setNumLayers(2);
+        config.setNumHeads(4);
+        config.setFfnHiddenSize(256);
+        config.setImageSize(64);
+        config.setPatchSize(16);
+        config.setNumEncoderLayers(2);
+        config.setCrossModalHeads(4);
+        config.setDropoutRate(0.0);
+        config.setAttentionDropout(0.0);
+        config.setEmbeddingDropout(0.0);
+        config.updateNumPatches();
+        return config;
+    }
+
     /**
      * 创建Tiny配置（教学用，最小规模）
      * 配置：512维, 8层, 8头, 256x256图像, 16x16 patch

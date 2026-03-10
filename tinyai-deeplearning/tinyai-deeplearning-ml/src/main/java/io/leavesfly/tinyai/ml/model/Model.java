@@ -101,7 +101,7 @@ public class Model implements Serializable {
              ObjectOutputStream out = new ObjectOutputStream(fileOut)) {
             out.writeObject(this);
         } catch (Exception e) {
-            throw new RuntimeException("Model save error!");
+            throw new RuntimeException("Model save error! Caused by: " + e.getMessage(), e);
         }
     }
 

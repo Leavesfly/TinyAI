@@ -253,8 +253,14 @@ public class FinetuneTrainer {
             textFeatures, imageFeatures, TaskType.TEXT_TO_IMAGE
         );
         
+        // 对齐形状：对序列维度进行平均池化
+        // fusedResult: [batch, text_len, hidden_size] -> [batch, hidden_size]
+        // imageFeatures: [batch, num_patches, hidden_size] -> [batch, hidden_size]
+        Variable fusedPooled = fusedResult.mean(1, false);
+        Variable imagePooled = imageFeatures.mean(1, false);
+        
         // 计算损失
-        Variable loss = computeLoss(fusedResult, imageFeatures);
+        Variable loss = computeLoss(fusedPooled, imagePooled);
         float lossValue = loss.getValue().getNumber().floatValue();
         
         // 清除梯度
@@ -306,8 +312,12 @@ public class FinetuneTrainer {
                 textFeatures, imageFeatures, TaskType.TEXT_TO_IMAGE
             );
             
+            // 对齐形状：对序列维度进行平均池化
+            Variable fusedPooled = fusedResult.mean(1, false);
+            Variable imagePooled = imageFeatures.mean(1, false);
+            
             // 计算损失
-            Variable loss = computeLoss(fusedResult, imageFeatures);
+            Variable loss = computeLoss(fusedPooled, imagePooled);
             totalLoss += loss.getValue().getNumber().floatValue();
             batchCount++;
         }

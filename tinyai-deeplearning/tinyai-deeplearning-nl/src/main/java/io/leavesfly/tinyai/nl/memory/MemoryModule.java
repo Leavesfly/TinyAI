@@ -3,6 +3,10 @@ package io.leavesfly.tinyai.nl.memory;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.nl.core.AssociativeMemory;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 /**
  * 记忆模块（MemoryModule）
  * 封装记忆存储和检索的基本功能
@@ -139,11 +143,37 @@ public class MemoryModule {
      * 基于惊异度阈值修剪低优先级记忆
      */
     private void applyForgetting() {
-        // 计算遗忘阈值
-        float threshold = memory.getSurpriseThreshold() * forgettingRate;
+        // 遗忘阈值：使用 forgettingRate 直接作为阈值
+        // forgettingRate 越高，遗忘越激进（更多低惊异度的记忆被移除）
+        memory.prune(forgettingRate);
+    }
+    
+    /**
+     * 移除指定索引的记忆
+     * 用于记忆整合时从源模块中移除已迁移的记忆
+     * 
+     * @param indices 要移除的记忆索引列表（无需排序）
+     */
+    public void removeMemories(List<Integer> indices) {
+        if (indices == null || indices.isEmpty()) {
+            return;
+        }
         
-        // 执行记忆修剪
-        memory.prune(threshold);
+        // 从大到小排序，避免删除时索引偏移
+        indices.sort((a, b) -> Integer.compare(b, a));
+        
+        List<Variable> keys = memory.getKeys();
+        List<Variable> values = memory.getValues();
+        
+        // 重建记忆：排除指定索引
+        Set<Integer> removeSet = new HashSet<>(indices);
+        memory.clear();
+        
+        for (int i = 0; i < keys.size(); i++) {
+            if (!removeSet.contains(i)) {
+                memory.store(keys.get(i), values.get(i));
+            }
+        }
     }
     
     /**

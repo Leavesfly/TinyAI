@@ -54,9 +54,9 @@ public class TrainDemo {
         System.out.println("\n【演示一：多模态预训练】");
         System.out.println("-".repeat(80));
         
-        // 1. 创建Tiny模型(教学用)
-        System.out.println("\n1. 创建Banana Tiny模型...");
-        BananaModel model = BananaModel.create("banana_tiny_pretrain", "tiny");
+        // 1. 创建Nano模型(演示用,低内存)
+        System.out.println("\n1. 创建Banana Nano模型...");
+        BananaModel model = BananaModel.create("banana_nano_pretrain", "nano");
         System.out.println(model.getConfigSummary());
         
         // 2. 准备合成训练数据
@@ -104,7 +104,7 @@ public class TrainDemo {
         
         // 1. 加载预训练模型(这里为演示创建新模型)
         System.out.println("\n1. 加载预训练模型...");
-        BananaModel model = BananaModel.create("banana_tiny_finetune", "tiny");
+        BananaModel model = BananaModel.create("banana_nano_finetune", "nano");
         System.out.println(model.getConfigSummary());
         
         // 2. 准备微调数据集
@@ -150,7 +150,7 @@ public class TrainDemo {
         
         // 阶段一: 预训练
         System.out.println("\n【阶段一：多模态预训练】");
-        BananaModel model = BananaModel.create("banana_tiny", "tiny");
+        BananaModel model = BananaModel.create("banana_nano", "nano");
         BananaConfig config = model.getConfig();
         
         System.out.println("创建模型: " + model.getName());

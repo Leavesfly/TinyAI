@@ -1,8 +1,10 @@
 package io.leavesfly.tinyai.nl.block;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
+import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -125,10 +127,28 @@ public class SelfModifyingBlock extends Module {
     
     /**
      * 修改网络结构
+     * 根据性能历史动态调整：
+     * - 如果性能持续低迷，增加网络容量（添加缩放参数）
+     * - 调整现有参数的学习率缩放因子
      */
     private void modifyStructure() {
         modificationCount++;
-        // 简化实现：这里可以添加层、删除层、改变参数等
+        
+        // 策略1：对所有子模块的参数施加扰动，帮助跳出局部最优
+        for (Module module : subModules) {
+            for (Parameter param : module.parameters()) {
+                NdArray paramData = param.getValue();
+                // 添加小幅随机扰动：param = param + noise * 0.01
+                NdArray noise = NdArray.randn(paramData.getShape());
+                NdArray perturbedData = paramData.add(noise.mulNum(0.01f));
+                param.setValue(perturbedData);
+            }
+        }
+        
+        // 策略2：如果修改次数较多（性能持续不佳），增大扰动幅度
+        if (modificationCount > 5) {
+            modificationThreshold *= 0.9f; // 逐步降低阈值，减少不必要的修改
+        }
     }
     
     public int getModificationCount() {

@@ -1,0 +1,367 @@
+package io.leavesfly.tinyai.gpt3.training;
+
+import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.gpt3.GPT3Model;
+import io.leavesfly.tinyai.ndarr.NdArray;
+import io.leavesfly.tinyai.ndarr.Shape;
+
+import java.util.*;
+
+/**
+ * GPT-3推理引擎
+ *
+ * 提供多种文本生成策略，并充分利用GPT-3特有的KV Cache机制加速推理：
+ * 1. 贪婪解码 (Greedy Decoding) - 最简单，速度最快
+ * 2. Temperature采样 - 控制生成随机性
+ * 3. Top-K采样 - 截断低概率词汇
+ * 4. Top-P采样 (Nucleus Sampling) - 动态截断，业界主流
+ * 5. Beam Search - 更高质量但更慢
+ * 6. 带KV Cache的加速推理 - GPT-3特有优化，O(n)效率
+ *
+ * @author TinyAI
+ * @since 2024
+ */
+public class GPT3Inference {
+
+    private final GPT3Model model;
+    private final int maxSeqLen;
+
+    /**
+     * 构造函数
+     *
+     * @param model GPT-3模型
+     */
+    public GPT3Inference(GPT3Model model) {
+        this.model = model;
+        this.maxSeqLen = model.getConfig().getNPositions();
+    }
+
+    /**
+     * 贪婪解码生成（每步选最大概率token）
+     *
+     * @param promptIds    提示词token序列
+     * @param maxNewTokens 最大生成token数
+     * @return 生成的完整序列（含提示词）
+     */
+    public int[] generateGreedy(int[] promptIds, int maxNewTokens) {
+        List<Integer> generated = toList(promptIds);
+
+        for (int i = 0; i < maxNewTokens; i++) {
+            if (generated.size() >= maxSeqLen) break;
+
+            int[] currentSeq = toArray(generated);
+            Variable logits = model.predict(new Variable(createInputArray(currentSeq)));
+            NdArray logitsArray = logits.getValue();
+
+            int lastPos = currentSeq.length - 1;
+            generated.add(argmax(logitsArray, 0, lastPos));
+        }
+
+        return toArray(generated);
+    }
+
+    /**
+     * 带KV Cache的贪婪解码（GPT-3特有，O(n)效率 vs 无Cache的O(n²)）
+     *
+     * Phase1: 处理完整Prompt，填充KV Cache
+     * Phase2: 每步只输入1个Token，复用历史K/V，显著加速长序列生成
+     *
+     * @param promptIds    提示词token序列
+     * @param maxNewTokens 最大生成token数
+     * @return 生成的完整序列（含提示词）
+     */
+    public int[] generateGreedyWithCache(int[] promptIds, int maxNewTokens) {
+        NdArray promptArray = createInputArray(promptIds);
+        NdArray resultArray = model.generateWithCache(promptArray, maxNewTokens);
+
+        int batchSize = resultArray.getShape().getDimension(0);
+        int seqLen    = resultArray.getShape().getDimension(1);
+        int[] result  = new int[seqLen];
+        for (int i = 0; i < seqLen; i++) {
+            result[i] = (int) resultArray.get(0, i);
+        }
+        return result;
+    }
+
+    /**
+     * Temperature采样生成
+     *
+     * @param promptIds    提示词token序列
+     * @param maxNewTokens 最大生成token数
+     * @param temperature  温度参数（越小越确定，越大越随机）
+     * @return 生成的完整序列
+     */
+    public int[] generateWithTemperature(int[] promptIds, int maxNewTokens, float temperature) {
+        List<Integer> generated = toList(promptIds);
+        Random random = new Random();
+
+        for (int i = 0; i < maxNewTokens; i++) {
+            if (generated.size() >= maxSeqLen) break;
+
+            int[] currentSeq = toArray(generated);
+            Variable logits = model.predict(new Variable(createInputArray(currentSeq)));
+            NdArray logitsArray = logits.getValue();
+
+            int lastPos  = currentSeq.length - 1;
+            int vocabSize = logitsArray.getShape().getDimension(2);
+
+            float[] probs = new float[vocabSize];
+            float maxLogit = Float.NEGATIVE_INFINITY;
+            for (int j = 0; j < vocabSize; j++) {
+                probs[j] = logitsArray.get(0, lastPos, j) / temperature;
+                maxLogit = Math.max(maxLogit, probs[j]);
+            }
+
+            float sum = 0.0f;
+            for (int j = 0; j < vocabSize; j++) {
+                probs[j] = (float) Math.exp(probs[j] - maxLogit);
+                sum += probs[j];
+            }
+            for (int j = 0; j < vocabSize; j++) probs[j] /= sum;
+
+            generated.add(sample(probs, random));
+        }
+
+        return toArray(generated);
+    }
+
+    /**
+     * Top-K采样生成（只保留概率最高的K个token参与采样）
+     *
+     * @param promptIds    提示词token序列
+     * @param maxNewTokens 最大生成token数
+     * @param topK         保留的top-K个token数量
+     * @param temperature  温度参数
+     * @return 生成的完整序列
+     */
+    public int[] generateTopK(int[] promptIds, int maxNewTokens, int topK, float temperature) {
+        List<Integer> generated = toList(promptIds);
+        Random random = new Random();
+
+        for (int i = 0; i < maxNewTokens; i++) {
+            if (generated.size() >= maxSeqLen) break;
+
+            int[] currentSeq = toArray(generated);
+            Variable logits = model.predict(new Variable(createInputArray(currentSeq)));
+            NdArray logitsArray = logits.getValue();
+
+            int lastPos   = currentSeq.length - 1;
+            int vocabSize = logitsArray.getShape().getDimension(2);
+
+            float[] logitsArr = new float[vocabSize];
+            for (int j = 0; j < vocabSize; j++) {
+                logitsArr[j] = logitsArray.get(0, lastPos, j) / temperature;
+            }
+
+            int[] topKIndices = getTopKIndices(logitsArr, topK);
+
+            float[] topKProbs = new float[topK];
+            float maxLogit = Float.NEGATIVE_INFINITY;
+            for (int j = 0; j < topK; j++) {
+                topKProbs[j] = logitsArr[topKIndices[j]];
+                maxLogit = Math.max(maxLogit, topKProbs[j]);
+            }
+
+            float sum = 0.0f;
+            for (int j = 0; j < topK; j++) {
+                topKProbs[j] = (float) Math.exp(topKProbs[j] - maxLogit);
+                sum += topKProbs[j];
+            }
+            for (int j = 0; j < topK; j++) topKProbs[j] /= sum;
+
+            int sampledIdx = sample(topKProbs, random);
+            generated.add(topKIndices[sampledIdx]);
+        }
+
+        return toArray(generated);
+    }
+
+    /**
+     * Top-P (Nucleus) 采样生成（动态截断累积概率达到topP的最小词汇集）
+     *
+     * @param promptIds    提示词token序列
+     * @param maxNewTokens 最大生成token数
+     * @param topP         累积概率阈值（通常0.9或0.95）
+     * @param temperature  温度参数
+     * @return 生成的完整序列
+     */
+    public int[] generateTopP(int[] promptIds, int maxNewTokens, float topP, float temperature) {
+        List<Integer> generated = toList(promptIds);
+        Random random = new Random();
+
+        for (int i = 0; i < maxNewTokens; i++) {
+            if (generated.size() >= maxSeqLen) break;
+
+            int[] currentSeq = toArray(generated);
+            Variable logits = model.predict(new Variable(createInputArray(currentSeq)));
+            NdArray logitsArray = logits.getValue();
+
+            int lastPos   = currentSeq.length - 1;
+            int vocabSize = logitsArray.getShape().getDimension(2);
+
+            float[] logitsArr = new float[vocabSize];
+            for (int j = 0; j < vocabSize; j++) {
+                logitsArr[j] = logitsArray.get(0, lastPos, j) / temperature;
+            }
+
+            // 计算softmax概率
+            float maxLogit = Float.NEGATIVE_INFINITY;
+            for (float v : logitsArr) maxLogit = Math.max(maxLogit, v);
+
+            float[] probs = new float[vocabSize];
+            float sum = 0.0f;
+            for (int j = 0; j < vocabSize; j++) {
+                probs[j] = (float) Math.exp(logitsArr[j] - maxLogit);
+                sum += probs[j];
+            }
+            for (int j = 0; j < vocabSize; j++) probs[j] /= sum;
+
+            // 按概率降序排列索引
+            Integer[] indices = new Integer[vocabSize];
+            for (int j = 0; j < vocabSize; j++) indices[j] = j;
+            Arrays.sort(indices, (a, b) -> Float.compare(probs[b], probs[a]));
+
+            // 找到累积概率达到topP的nucleus
+            float cumProb = 0.0f;
+            int nucleusSize = 0;
+            for (int j = 0; j < vocabSize; j++) {
+                cumProb += probs[indices[j]];
+                nucleusSize++;
+                if (cumProb >= topP) break;
+            }
+
+            // 重新归一化nucleus内的概率
+            float[] nucleusProbs = new float[nucleusSize];
+            sum = 0.0f;
+            for (int j = 0; j < nucleusSize; j++) {
+                nucleusProbs[j] = probs[indices[j]];
+                sum += nucleusProbs[j];
+            }
+            for (int j = 0; j < nucleusSize; j++) nucleusProbs[j] /= sum;
+
+            int sampledIdx = sample(nucleusProbs, random);
+            generated.add(indices[sampledIdx]);
+        }
+
+        return toArray(generated);
+    }
+
+    /**
+     * Beam Search生成（更高质量，适合翻译/摘要等确定性任务）
+     *
+     * @param promptIds    提示词token序列
+     * @param maxNewTokens 最大生成token数
+     * @param beamSize     beam宽度
+     * @return 得分最高的序列
+     */
+    public int[] generateBeamSearch(int[] promptIds, int maxNewTokens, int beamSize) {
+        List<Beam> beams = new ArrayList<>();
+        Beam initialBeam = new Beam();
+        for (int id : promptIds) initialBeam.tokens.add(id);
+        initialBeam.score = 0.0f;
+        beams.add(initialBeam);
+
+        for (int step = 0; step < maxNewTokens; step++) {
+            List<Beam> candidates = new ArrayList<>();
+
+            for (Beam beam : beams) {
+                if (beam.tokens.size() >= maxSeqLen) {
+                    candidates.add(beam);
+                    continue;
+                }
+
+                int[] currentSeq = toArray(beam.tokens);
+                Variable logits = model.predict(new Variable(createInputArray(currentSeq)));
+                NdArray logitsArray = logits.getValue();
+
+                int lastPos   = currentSeq.length - 1;
+                int vocabSize = logitsArray.getShape().getDimension(2);
+
+                // 计算log概率
+                float[] logProbs = new float[vocabSize];
+                float maxLogit = Float.NEGATIVE_INFINITY;
+                for (int j = 0; j < vocabSize; j++) {
+                    logProbs[j] = logitsArray.get(0, lastPos, j);
+                    maxLogit = Math.max(maxLogit, logProbs[j]);
+                }
+
+                float logSumExp = 0.0f;
+                for (float v : logProbs) logSumExp += Math.exp(v - maxLogit);
+                logSumExp = maxLogit + (float) Math.log(logSumExp);
+                for (int j = 0; j < vocabSize; j++) logProbs[j] -= logSumExp;
+
+                int[] topKIndices = getTopKIndices(logProbs, beamSize);
+                for (int idx : topKIndices) {
+                    Beam newBeam = new Beam();
+                    newBeam.tokens.addAll(beam.tokens);
+                    newBeam.tokens.add(idx);
+                    newBeam.score = beam.score + logProbs[idx];
+                    candidates.add(newBeam);
+                }
+            }
+
+            candidates.sort((a, b) -> Float.compare(b.score, a.score));
+            beams = candidates.subList(0, Math.min(beamSize, candidates.size()));
+        }
+
+        return toArray(beams.get(0).tokens);
+    }
+
+    // ==================== 辅助方法 ====================
+
+    private static class Beam {
+        List<Integer> tokens = new ArrayList<>();
+        float score = 0.0f;
+    }
+
+    private NdArray createInputArray(int[] sequence) {
+        float[] data = new float[sequence.length];
+        for (int i = 0; i < sequence.length; i++) data[i] = sequence[i];
+        return NdArray.of(data, Shape.of(1, sequence.length));
+    }
+
+    private int argmax(NdArray logits, int batchIdx, int seqIdx) {
+        int vocabSize = logits.getShape().getDimension(2);
+        int maxIdx = 0;
+        float maxVal = logits.get(batchIdx, seqIdx, 0);
+        for (int i = 1; i < vocabSize; i++) {
+            float val = logits.get(batchIdx, seqIdx, i);
+            if (val > maxVal) {
+                maxVal = val;
+                maxIdx = i;
+            }
+        }
+        return maxIdx;
+    }
+
+    private int[] getTopKIndices(float[] values, int k) {
+        Integer[] indices = new Integer[values.length];
+        for (int i = 0; i < values.length; i++) indices[i] = i;
+        Arrays.sort(indices, (a, b) -> Float.compare(values[b], values[a]));
+        int[] topK = new int[Math.min(k, indices.length)];
+        for (int i = 0; i < topK.length; i++) topK[i] = indices[i];
+        return topK;
+    }
+
+    private int sample(float[] probs, Random random) {
+        float r = random.nextFloat();
+        float cumProb = 0.0f;
+        for (int i = 0; i < probs.length; i++) {
+            cumProb += probs[i];
+            if (r < cumProb) return i;
+        }
+        return probs.length - 1;
+    }
+
+    private List<Integer> toList(int[] arr) {
+        List<Integer> list = new ArrayList<>();
+        for (int v : arr) list.add(v);
+        return list;
+    }
+
+    private int[] toArray(List<Integer> list) {
+        int[] arr = new int[list.size()];
+        for (int i = 0; i < list.size(); i++) arr[i] = list.get(i);
+        return arr;
+    }
+}

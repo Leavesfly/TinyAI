@@ -8,22 +8,15 @@ import io.leavesfly.tinyai.rl.Environment;
 
 /**
  * 算法对比分析演示 - 并排比较不同强化学习算法
- * 
- * <p>本演示对比:
- * <ul>
- *   <li>ε-贪心 vs UCB vs 汤普森采样</li>
- *   <li>不同探索策略的学习曲线</li>
- *   <li>累积遗憾(Cumulative Regret)对比</li>
- *   <li>收敛速度分析</li>
- * </ul>
- * 
- * <p><b>运行方式:</b>
- * <pre>
- * mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.AlgorithmComparisonDemo" \
- *   -pl tinyai-deeplearning-rl
- * </pre>
- * 
- * @author TinyAI Team
+ *
+ * 本演示对比:
+ * - ε-贪心 vs UCB vs 汤普森采样
+ * - 不同探索策略的学习曲线
+ * - 累积遗憾(Cumulative Regret)对比
+ * - 收敛速度分析
+ *
+ * 运行方式:
+ *   mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.AlgorithmComparisonDemo" -pl tinyai-deeplearning-rl
  */
 public class AlgorithmComparisonDemo {
 

@@ -103,7 +103,8 @@ public class CartPoleEnvironment extends Environment {
 
         // 检查是否结束
         boolean terminated = isTerminated();
-        done = terminated || currentStep >= maxSteps;
+        boolean truncated = !terminated && currentStep >= maxSteps;
+        done = terminated || truncated;
 
         // 计算奖励
         float reward = done ? 0.0f : 1.0f; // 每存活一步得1分
@@ -116,9 +117,9 @@ public class CartPoleEnvironment extends Environment {
         info.put("x", x);
         info.put("theta", theta);
         info.put("terminated", terminated);
-        info.put("truncated", currentStep >= maxSteps);
+        info.put("truncated", truncated);
 
-        return new StepResult(currentState, reward, done, info);
+        return new StepResult(currentState, reward, terminated, truncated, info);
     }
 
     /**

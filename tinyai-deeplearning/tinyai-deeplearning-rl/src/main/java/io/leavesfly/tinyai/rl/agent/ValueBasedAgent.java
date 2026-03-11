@@ -5,7 +5,7 @@ import io.leavesfly.tinyai.ml.loss.Loss;
 import io.leavesfly.tinyai.ml.loss.MeanSquaredLoss;
 import io.leavesfly.tinyai.ml.model.Model;
 import io.leavesfly.tinyai.ml.optimize.Optimizer;
-import io.leavesfly.tinyai.rl.Agent;
+import io.leavesfly.tinyai.rl.AbstractAgent;
 import io.leavesfly.tinyai.rl.Experience;
 import io.leavesfly.tinyai.rl.ReplayBuffer;
 import io.leavesfly.tinyai.rl.policy.EpsilonGreedyPolicy;
@@ -56,7 +56,7 @@ import io.leavesfly.tinyai.rl.util.TrainingStatistics;
  * - 目标网络的必要性
  * - 不同算法仅在目标Q值计算上有差异
  */
-public abstract class ValueBasedAgent extends Agent {
+public abstract class ValueBasedAgent extends AbstractAgent {
     
     // ========== 核心组件 ==========
     
@@ -102,6 +102,16 @@ public abstract class ValueBasedAgent extends Agent {
      */
     protected final int targetUpdateFreq;
     
+    /**
+     * 探索率衰减率
+     */
+    protected float epsilonDecayRate = 0.995f;
+    
+    /**
+     * 最小探索率
+     */
+    protected float minEpsilon = 0.01f;
+    
     // ========== 训练统计 ==========
     
     /**
@@ -134,6 +144,24 @@ public abstract class ValueBasedAgent extends Agent {
         this.stats = new TrainingStatistics();
         
         // targetModel, optimizer, policy由子类在super()后初始化
+    }
+    
+    /**
+     * 设置探索率衰减率
+     * 
+     * @param decayRate 衰减率
+     */
+    public void setEpsilonDecayRate(float decayRate) {
+        this.epsilonDecayRate = decayRate;
+    }
+    
+    /**
+     * 设置最小探索率
+     * 
+     * @param minEpsilon 最小探索率
+     */
+    public void setMinEpsilon(float minEpsilon) {
+        this.minEpsilon = minEpsilon;
     }
     
     /**
@@ -232,7 +260,7 @@ public abstract class ValueBasedAgent extends Agent {
         }
         
         // 7. 衰减探索率
-        policy.decayEpsilon(0.995f, 0.01f);
+        policy.decayEpsilon(epsilonDecayRate, minEpsilon);
     }
     
     /**

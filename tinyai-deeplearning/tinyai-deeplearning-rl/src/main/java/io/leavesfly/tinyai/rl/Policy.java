@@ -3,44 +3,26 @@ package io.leavesfly.tinyai.rl;
 import io.leavesfly.tinyai.func.Variable;
 
 /**
- * 强化学习策略抽象基类
+ * 强化学习策略接口
  * 
  * @author leavesfly
- * @version 0.01
+ * @version 0.02
  * 
- * Policy类定义了强化学习中策略的标准接口。
+ * 【设计说明】
+ * Policy定义了强化学习中策略的标准行为契约。
  * 策略负责根据状态选择动作，可以是确定性策略或随机策略。
- * 支持不同类型的策略实现，如ε-贪婪策略、Softmax策略、高斯策略等。
+ * 
+ * 将Policy设计为接口而非抽象类，使其可以被灵活组合到不同的Agent中:
+ * - ValueBasedAgent通过组合EpsilonGreedyPolicy实现探索
+ * - PolicyBasedAgent直接通过神经网络输出策略分布
+ * - BanditAgent使用各自特有的选择策略
+ * 
+ * 支持的策略类型:
+ * - ε-贪婪策略(EpsilonGreedyPolicy): 概率探索
+ * - Softmax策略: 温度参数控制
+ * - 高斯策略: 连续动作空间
  */
-public abstract class Policy {
-    
-    /**
-     * 策略名称
-     */
-    protected String name;
-    
-    /**
-     * 状态空间维度
-     */
-    protected int stateDim;
-    
-    /**
-     * 动作空间维度
-     */
-    protected int actionDim;
-    
-    /**
-     * 构造函数
-     * 
-     * @param name 策略名称
-     * @param stateDim 状态空间维度
-     * @param actionDim 动作空间维度
-     */
-    public Policy(String name, int stateDim, int actionDim) {
-        this.name = name;
-        this.stateDim = stateDim;
-        this.actionDim = actionDim;
-    }
+public interface Policy {
     
     /**
      * 根据状态选择动作
@@ -48,7 +30,7 @@ public abstract class Policy {
      * @param state 当前状态
      * @return 选择的动作
      */
-    public abstract Variable selectAction(Variable state);
+    Variable selectAction(Variable state);
     
     /**
      * 计算动作概率分布
@@ -56,7 +38,7 @@ public abstract class Policy {
      * @param state 当前状态
      * @return 动作概率分布
      */
-    public abstract Variable getActionProbabilities(Variable state);
+    Variable getActionProbabilities(Variable state);
     
     /**
      * 计算特定状态-动作对的概率
@@ -65,7 +47,7 @@ public abstract class Policy {
      * @param action 动作
      * @return 动作概率
      */
-    public abstract float getActionProbability(Variable state, Variable action);
+    float getActionProbability(Variable state, Variable action);
     
     /**
      * 计算策略的对数概率（用于策略梯度）
@@ -74,32 +56,26 @@ public abstract class Policy {
      * @param action 动作
      * @return 对数概率
      */
-    public abstract Variable getLogProbability(Variable state, Variable action);
+    Variable getLogProbability(Variable state, Variable action);
     
     /**
      * 获取策略名称
      * 
      * @return 策略名称
      */
-    public String getName() {
-        return name;
-    }
+    String getName();
     
     /**
      * 获取状态空间维度
      * 
      * @return 状态空间维度
      */
-    public int getStateDim() {
-        return stateDim;
-    }
+    int getStateDim();
     
     /**
      * 获取动作空间维度
      * 
      * @return 动作空间维度
      */
-    public int getActionDim() {
-        return actionDim;
-    }
+    int getActionDim();
 }

@@ -128,7 +128,8 @@ public class MultiArmedBanditEnvironment extends Environment {
         totalRegret += regret;
         
         currentStep++;
-        done = currentStep >= maxSteps;
+        boolean truncated = currentStep >= maxSteps;
+        done = truncated;
         
         // 返回结果信息
         Map<String, Object> info = new HashMap<>();
@@ -142,7 +143,7 @@ public class MultiArmedBanditEnvironment extends Environment {
         info.put("optimalArm", optimalArm);
         info.put("isOptimal", armIndex == optimalArm);
         
-        return new StepResult(currentState, reward, done, info);
+        return new StepResult(currentState, reward, false, truncated, info);
     }
     
     /**

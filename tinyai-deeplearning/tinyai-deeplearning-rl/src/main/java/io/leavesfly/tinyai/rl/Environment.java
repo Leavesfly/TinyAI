@@ -184,6 +184,18 @@ public abstract class Environment {
     }
     
     /**
+     * 校验Agent与本环境的维度兼容性
+     * 
+     * 等价于 agent.validateCompatibility(this)，提供从Environment侧调用的便捷方式。
+     * 
+     * @param agent 要校验的智能体
+     * @throws IllegalArgumentException 如果维度不匹配
+     */
+    public void validateAgent(Agent agent) {
+        agent.validateCompatibility(this);
+    }
+    
+    /**
      * 随机采样一个动作（用于探索）
      * 
      * @return 随机动作
@@ -200,35 +212,72 @@ public abstract class Environment {
     
     /**
      * 步骤结果类，封装环境step方法的返回值
+     * 
+     * 【terminated vs truncated vs done】
+     * 遵循OpenAI Gym v26+规范,区分两种结束原因:
+     * - terminated: 环境自然结束(如到达目标、倒下等),此时bootstrap target应为0
+     * - truncated: 因超时/步数限制被截断,此时仍应使用bootstrap估计未来回报
+     * - done: terminated || truncated,向后兼容的便捷属性
+     * 
+     * 这一区分对值函数估计的正确性至关重要:
+     * - terminated时: target = reward (无后续回报)
+     * - truncated时: target = reward + γ * V(s') (仍有后续回报,只是被截断)
      */
     public static class StepResult {
         /** 下一状态 */
         private final Variable nextState;
         /** 奖励 */
         private final float reward;
-        /** 是否结束 */
-        private final boolean done;
+        /** 环境是否自然终止（如到达目标、失败等） */
+        private final boolean terminated;
+        /** 是否因步数限制等外部原因被截断 */
+        private final boolean truncated;
         /** 附加信息 */
         private final Map<String, Object> info;
         
         /**
-         * 构造函数
+         * 完整构造函数（推荐使用）
          * 
          * @param nextState 下一状态
          * @param reward 奖励
-         * @param done 是否结束
+         * @param terminated 是否自然终止
+         * @param truncated 是否被截断
+         * @param info 附加信息
+         */
+        public StepResult(Variable nextState, float reward, boolean terminated, 
+                          boolean truncated, Map<String, Object> info) {
+            this.nextState = nextState;
+            this.reward = reward;
+            this.terminated = terminated;
+            this.truncated = truncated;
+            this.info = info;
+        }
+        
+        /**
+         * 向后兼容的构造函数
+         * 当done=true时默认视为terminated（保持旧代码行为不变）
+         * 
+         * @param nextState 下一状态
+         * @param reward 奖励
+         * @param done 是否结束（等同于terminated）
          * @param info 附加信息
          */
         public StepResult(Variable nextState, float reward, boolean done, Map<String, Object> info) {
-            this.nextState = nextState;
-            this.reward = reward;
-            this.done = done;
-            this.info = info;
+            this(nextState, reward, done, false, info);
         }
         
         public Variable getNextState() { return nextState; }
         public float getReward() { return reward; }
-        public boolean isDone() { return done; }
+        
+        /** 是否自然终止 */
+        public boolean isTerminated() { return terminated; }
+        
+        /** 是否被截断 */
+        public boolean isTruncated() { return truncated; }
+        
+        /** 是否结束（terminated || truncated），向后兼容 */
+        public boolean isDone() { return terminated || truncated; }
+        
         public Map<String, Object> getInfo() { return info; }
     }
 }

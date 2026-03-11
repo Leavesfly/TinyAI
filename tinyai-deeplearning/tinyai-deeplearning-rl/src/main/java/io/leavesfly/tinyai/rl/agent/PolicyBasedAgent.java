@@ -2,7 +2,7 @@ package io.leavesfly.tinyai.rl.agent;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.optimize.Optimizer;
-import io.leavesfly.tinyai.rl.Agent;
+import io.leavesfly.tinyai.rl.AbstractAgent;
 import io.leavesfly.tinyai.rl.Experience;
 import io.leavesfly.tinyai.rl.util.TrainingStatistics;
 
@@ -56,7 +56,7 @@ import java.util.List;
  * - 策略梯度定理的应用
  * - 不同算法仅在优势函数估计和损失形式上有差异
  */
-public abstract class PolicyBasedAgent extends Agent {
+public abstract class PolicyBasedAgent extends AbstractAgent {
     
     // ========== 核心组件 ==========
     
@@ -174,14 +174,22 @@ public abstract class PolicyBasedAgent extends Agent {
      * 【说明】
      * Policy-Based算法通常基于单回合或多回合更新,
      * 而不是像DQN那样从缓冲区随机采样批次。
-     * 这里提供默认实现,子类可按需重写。
+     * 
+     * 【多回合数据处理问题】
+     * 如果 batch 包含多个回合的数据,逐个调用 learn(exp) 会导致:
+     * - 中间某个 done=true 的经验会提前触发 learnFromEpisode()
+     * - 后续属于同一回合的经验会被丢弃
+     * - 回合数据不完整,影响策略梯度计算
+     * 
+     * 因此,Policy-Based 算法应使用 learn() 方法逐步收集完整的回合数据。
      */
     @Override
     public void learnBatch(Experience[] experiences) {
-        // 默认实现: 逐个处理经验
-        for (Experience exp : experiences) {
-            learn(exp);
-        }
+        throw new UnsupportedOperationException(
+            "Policy-Based 算法不支持批量学习。请使用 learn() 方法逐步收集完整的回合数据。" +
+            "Policy-Based algorithms require complete episode data for Monte Carlo return calculation. " +
+            "Use learn() method to collect experiences episode by episode."
+        );
     }
     
     /**

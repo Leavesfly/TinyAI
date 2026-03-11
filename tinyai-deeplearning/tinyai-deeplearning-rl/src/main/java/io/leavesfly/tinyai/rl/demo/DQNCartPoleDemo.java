@@ -8,28 +8,22 @@ import io.leavesfly.tinyai.rl.Environment;
 
 /**
  * DQN算法完整演示 - CartPole环境
- * 
- * <p>本演示展示如何使用DQN(Deep Q-Network)算法解决CartPole倒立摆问题:
- * <ul>
- *   <li>DQN核心组件: Q网络、目标网络、经验回放</li>
- *   <li>训练过程: 探索率衰减、批量学习、网络更新</li>
- *   <li>性能评估: 平均奖励、成功率、学习曲线</li>
- * </ul>
- * 
- * <p><b>运行方式:</b>
- * <pre>
- * mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.DQNCartPoleDemo" \
- *   -pl tinyai-deeplearning-rl
- * </pre>
- * 
- * @author TinyAI Team
+ *
+ * 本演示展示如何使用DQN(Deep Q-Network)算法解决CartPole倒立摆问题:
+ * - DQN核心组件: Q网络、目标网络、经验回放
+ * - 训练过程: 探索率衰减、批量学习、网络更新
+ * - 性能评估: 平均奖励、成功率、学习曲线
+ *
+ * 运行方式:
+ *   mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.DQNCartPoleDemo" -pl tinyai-deeplearning-rl
  */
 public class DQNCartPoleDemo {
 
-    // 训练超参数
     private static final int MAX_EPISODES = 300;
     private static final int EVAL_INTERVAL = 50;
     private static final int EVAL_EPISODES = 10;
+    private static final int MAX_STEPS_PER_EPISODE = 500;
+    private static final float SUCCESS_REWARD_THRESHOLD = 195f;
     
     public static void main(String[] args) {
         System.out.println("==========================================");
@@ -148,8 +142,7 @@ public class DQNCartPoleDemo {
             float episodeReward = 0;
             int steps = 0;
             
-            // 回合循环
-            while (!env.isDone() && steps < 500) {
+            while (!env.isDone() && steps < MAX_STEPS_PER_EPISODE) {
                 // 选择动作
                 Variable action = agent.selectAction(state);
                 
@@ -193,9 +186,8 @@ public class DQNCartPoleDemo {
                 System.out.printf("评估 | %6.1f | (当前性能评估)\n", avgReward);
                 System.out.println("─────|────────|───────|────────|───────");
                 
-                // 判断是否已经学会
-                if (avgReward >= 195) {
-                    System.out.println("\n✓ 智能体已学会控制倒立摆!(平均奖励≥195)");
+                if (avgReward >= SUCCESS_REWARD_THRESHOLD) {
+                    System.out.println("\n✓ 智能体已学会控制倒立摆!(平均奖励≥" + (int) SUCCESS_REWARD_THRESHOLD + ")");
                     System.out.println("  在第 " + (episode + 1) + " 回合达成目标");
                     break;
                 }
@@ -217,18 +209,15 @@ public class DQNCartPoleDemo {
             float episodeReward = 0;
             int steps = 0;
             
-            while (!env.isDone() && steps < 500) {
+            while (!env.isDone() && steps < MAX_STEPS_PER_EPISODE) {
                 Variable action = agent.selectAction(state);
                 Environment.StepResult result = env.step(action);
-                
                 state = result.getNextState();
                 episodeReward += result.getReward();
                 steps++;
             }
-            
             totalReward += episodeReward;
         }
-        
         agent.setTraining(true);
         return totalReward / episodes;
     }
@@ -253,17 +242,15 @@ public class DQNCartPoleDemo {
             float episodeReward = 0;
             int steps = 0;
             
-            while (!env.isDone() && steps < 500) {
+            while (!env.isDone() && steps < MAX_STEPS_PER_EPISODE) {
                 Variable action = agent.selectAction(state);
                 Environment.StepResult result = env.step(action);
-                
                 state = result.getNextState();
                 episodeReward += result.getReward();
                 steps++;
             }
-            
             totalReward += episodeReward;
-            if (episodeReward >= 195) {
+            if (episodeReward >= SUCCESS_REWARD_THRESHOLD) {
                 successCount++;
             }
             
@@ -271,7 +258,7 @@ public class DQNCartPoleDemo {
                 episode + 1,
                 steps,
                 episodeReward,
-                episodeReward >= 195 ? "成功✓" : "失败✗"
+                episodeReward >= SUCCESS_REWARD_THRESHOLD ? "成功✓" : "失败✗"
             );
         }
         
@@ -284,7 +271,7 @@ public class DQNCartPoleDemo {
             successRate, successCount, EVAL_EPISODES));
         System.out.println("  最大可能奖励: 500");
         
-        if (avgReward >= 195) {
+        if (avgReward >= SUCCESS_REWARD_THRESHOLD) {
             System.out.println("\n🎉 恭喜!DQN成功学会控制倒立摆!");
         } else if (avgReward >= 100) {
             System.out.println("\n👍 表现不错,但还有提升空间");

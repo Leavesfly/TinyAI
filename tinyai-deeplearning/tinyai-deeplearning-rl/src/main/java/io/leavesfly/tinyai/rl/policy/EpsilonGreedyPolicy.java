@@ -17,7 +17,22 @@ import java.util.Random;
  * 以1-ε的概率选择当前最优动作（贪婪），以ε的概率随机选择动作（探索）。
  * 支持动态调整ε值，通常在训练过程中逐渐减小ε以减少探索。
  */
-public class EpsilonGreedyPolicy extends Policy {
+public class EpsilonGreedyPolicy implements Policy {
+
+    /**
+     * 策略名称
+     */
+    private final String name;
+
+    /**
+     * 状态空间维度
+     */
+    private final int stateDim;
+
+    /**
+     * 动作空间维度
+     */
+    private final int actionDim;
 
     /**
      * 探索率
@@ -43,10 +58,27 @@ public class EpsilonGreedyPolicy extends Policy {
      * @param qFunction Q值函数
      */
     public EpsilonGreedyPolicy(int stateDim, int actionDim, float epsilon, QFunction qFunction) {
-        super("EpsilonGreedy", stateDim, actionDim);
+        this.name = "EpsilonGreedy";
+        this.stateDim = stateDim;
+        this.actionDim = actionDim;
         this.epsilon = epsilon;
         this.qFunction = qFunction;
         this.random = new Random();
+    }
+
+    @Override
+    public String getName() {
+        return name;
+    }
+
+    @Override
+    public int getStateDim() {
+        return stateDim;
+    }
+
+    @Override
+    public int getActionDim() {
+        return actionDim;
     }
 
     @Override

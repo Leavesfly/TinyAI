@@ -2,7 +2,6 @@ package io.leavesfly.tinyai.rl.demo;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.rl.*;
 import io.leavesfly.tinyai.rl.agent.BanditAgent;
 
@@ -12,28 +11,19 @@ import java.util.Random;
 
 /**
  * 自定义开发完整演示
- * 
- * <p>本演示展示如何扩展TinyAI RL框架:
- * <ul>
- *   <li>自定义环境: 创建新的强化学习环境</li>
- *   <li>自定义智能体: 实现新的学习算法</li>
- *   <li>集成使用: 将自定义组件整合到框架中</li>
- * </ul>
- * 
- * <p><b>场景</b>: 简单的迷宫寻宝游戏
- * <ul>
- *   <li>5x5网格迷宫</li>
- *   <li>智能体需要找到宝藏</li>
- *   <li>避开陷阱</li>
- * </ul>
- * 
- * <p><b>运行方式:</b>
- * <pre>
- * mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.CustomDevelopmentDemo" \
- *   -pl tinyai-deeplearning-rl
- * </pre>
- * 
- * @author TinyAI Team
+ *
+ * 本演示展示如何扩展TinyAI RL框架:
+ * - 自定义环境: 创建新的强化学习环境
+ * - 自定义智能体: 实现新的学习算法
+ * - 集成使用: 将自定义组件整合到框架中
+ *
+ * 场景: 简单的迷宫寻宝游戏
+ * - 5x5网格迷宫
+ * - 智能体需要找到宝藏
+ * - 避开陷阱
+ *
+ * 运行方式:
+ *   mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.CustomDevelopmentDemo" -pl tinyai-deeplearning-rl
  */
 public class CustomDevelopmentDemo {
 
@@ -181,7 +171,7 @@ public class CustomDevelopmentDemo {
 
         System.out.println("\n2. 自定义智能体模板:");
         System.out.println("```java");
-        System.out.println("public class CustomAgent extends Agent {");
+        System.out.println("public class CustomAgent implements Agent {");
         System.out.println("    @Override");
         System.out.println("    public Variable selectAction(Variable state) {");
         System.out.println("        // 实现动作选择逻辑");
@@ -311,13 +301,28 @@ public class CustomDevelopmentDemo {
     /**
      * 自定义智能体: Q-Learning
      */
-    private static class QLearningAgent extends Agent {
+    private static class QLearningAgent implements Agent {
+        private final String name;
+        private final int stateDim;
+        private final int actionDim;
+        private final float learningRate;
+        private float epsilon;
+        private final float gamma;
+        private int trainingStep;
+        private boolean training;
         private Map<String, float[]> qTable;
         private Random random;
 
         public QLearningAgent(String name, int stateDim, int actionDim,
                             float learningRate, float epsilon, float gamma) {
-            super(name, stateDim, actionDim, learningRate, epsilon, gamma);
+            this.name = name;
+            this.stateDim = stateDim;
+            this.actionDim = actionDim;
+            this.learningRate = learningRate;
+            this.epsilon = epsilon;
+            this.gamma = gamma;
+            this.trainingStep = 0;
+            this.training = true;
             this.qTable = new HashMap<>();
             this.random = new Random();
         }
@@ -394,6 +399,42 @@ public class CustomDevelopmentDemo {
         public void saveModel(String modelPath) {
             // Q-Learning不支持模型保存
             throw new UnsupportedOperationException("Q-Learning不支持模型保存");
+        }
+
+        @Override
+        public void setTraining(boolean training) {
+            this.training = training;
+        }
+
+        @Override
+        public boolean isTraining() {
+            return training;
+        }
+
+        @Override
+        public String getName() {
+            return name;
+        }
+
+        @Override
+        public int getStateDim() {
+            return stateDim;
+        }
+
+        @Override
+        public int getActionDim() {
+            return actionDim;
+        }
+
+        @Override
+        public int getTrainingStep() {
+            return trainingStep;
+        }
+
+        @Override
+        public void reset() {
+            this.qTable.clear();
+            this.trainingStep = 0;
         }
 
         private String getStateKey(Variable state) {

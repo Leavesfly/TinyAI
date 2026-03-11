@@ -14,7 +14,32 @@ import java.util.Arrays;
  * 
  * @author leavesfly
  */
-public abstract class BanditAgent extends Agent {
+public abstract class BanditAgent implements Agent {
+    
+    /**
+     * 智能体名称
+     */
+    protected String name;
+    
+    /**
+     * 状态维度（多臂老虎机为1）
+     */
+    protected int stateDim;
+    
+    /**
+     * 动作维度（臂的数量）
+     */
+    protected int actionDim;
+    
+    /**
+     * 训练步数
+     */
+    protected int trainingStep;
+    
+    /**
+     * 是否处于训练模式
+     */
+    protected boolean training;
     
     /**
      * 每个臂被选择的次数
@@ -43,7 +68,11 @@ public abstract class BanditAgent extends Agent {
      * @param numArms 臂的数量
      */
     public BanditAgent(String name, int numArms) {
-        super(name, 1, numArms, 0.0f, 0.0f, 0.0f); // 多臂老虎机不需要学习率、探索率、折扣因子
+        this.name = name;
+        this.stateDim = 1;
+        this.actionDim = numArms;
+        this.trainingStep = 0;
+        this.training = true;
         
         this.actionCounts = new int[numArms];
         this.totalRewards = new float[numArms];
@@ -199,7 +228,6 @@ public abstract class BanditAgent extends Agent {
      */
     @Override
     public void reset() {
-        super.reset();
         Arrays.fill(actionCounts, 0);
         Arrays.fill(totalRewards, 0.0f);
         Arrays.fill(estimatedRewards, 0.0f);
@@ -226,8 +254,7 @@ public abstract class BanditAgent extends Agent {
      */
     @Override
     public void storeExperience(Experience experience) {
-        // 多臂老虎机通常不需要存储经验，可以直接学习
-        learn(experience);
+        // 多臂老虎机不需要经验回放，学习通过 learn() 方法即时完成
     }
     
     /**
@@ -270,5 +297,44 @@ public abstract class BanditAgent extends Agent {
                              ", 累积奖励=" + String.format("%.4f", totalRewards[i]));
         }
         System.out.println("===================");
+    }
+    
+    // ========== Agent 接口方法实现 ==========
+    
+    @Override
+    public void setTraining(boolean training) {
+        this.training = training;
+    }
+    
+    @Override
+    public boolean isTraining() {
+        return training;
+    }
+    
+    @Override
+    public String getName() {
+        return name;
+    }
+    
+    @Override
+    public int getStateDim() {
+        return stateDim;
+    }
+    
+    @Override
+    public int getActionDim() {
+        return actionDim;
+    }
+    
+    @Override
+    public int getTrainingStep() {
+        return trainingStep;
+    }
+    
+    /**
+     * 增加训练步数
+     */
+    protected void incrementTrainingStep() {
+        this.trainingStep++;
     }
 }

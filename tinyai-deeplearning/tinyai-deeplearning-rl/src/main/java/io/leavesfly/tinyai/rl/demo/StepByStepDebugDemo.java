@@ -12,27 +12,20 @@ import java.util.Scanner;
 
 /**
  * 逐步调试演示 - 详细展示DQN算法的每一步计算过程
- * 
- * <p>本演示逐步展示:
- * <ul>
- *   <li>Q值计算过程</li>
- *   <li>目标Q值计算</li>
- *   <li>损失函数计算</li>
- *   <li>反向传播更新</li>
- *   <li>经验回放采样</li>
- * </ul>
- * 
- * <p><b>运行方式:</b>
- * <pre>
- * mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.StepByStepDebugDemo" \
- *   -pl tinyai-deeplearning-rl
- * </pre>
- * 
- * @author TinyAI Team
+ *
+ * 本演示逐步展示:
+ * - Q值计算过程
+ * - 目标Q值计算
+ * - 损失函数计算
+ * - 反向传播更新
+ * - 经验回放采样
+ *
+ * 运行方式:
+ *   mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.StepByStepDebugDemo" -pl tinyai-deeplearning-rl
  */
 public class StepByStepDebugDemo {
 
-    private static Scanner scanner = new Scanner(System.in);
+    private static final Scanner SCANNER = new Scanner(System.in);
     private static boolean autoMode = false;
     private static int delayMs = 1000;
 
@@ -284,7 +277,7 @@ public class StepByStepDebugDemo {
         }
         
         System.out.print("\n按 Enter 继续...");
-        String input = scanner.nextLine().trim().toLowerCase();
+        String input = SCANNER.nextLine().trim().toLowerCase();
         
         if (input.equals("auto")) {
             autoMode = true;

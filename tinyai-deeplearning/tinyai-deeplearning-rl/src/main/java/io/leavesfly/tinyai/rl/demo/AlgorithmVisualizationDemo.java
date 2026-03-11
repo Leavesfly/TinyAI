@@ -8,34 +8,26 @@ import io.leavesfly.tinyai.rl.Environment;
 
 /**
  * 算法可视化演示 - 展示DQN算法的内部工作原理
- * 
- * <p>本演示通过可视化展示:
- * <ul>
- *   <li>Q值的变化过程</li>
- *   <li>经验回放缓冲区的状态</li>
- *   <li>目标网络与主网络的差异</li>
- *   <li>损失函数的变化曲线</li>
- *   <li>探索率的衰减过程</li>
- * </ul>
- * 
- * <p><b>运行方式:</b>
- * <pre>
- * mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.AlgorithmVisualizationDemo" \
- *   -pl tinyai-deeplearning-rl
- * </pre>
- * 
- * @author TinyAI Team
+ *
+ * 本演示通过可视化展示:
+ * - Q值的变化过程
+ * - 经验回放缓冲区的状态
+ * - 目标网络与主网络的差异
+ * - 损失函数的变化曲线
+ * - 探索率的衰减过程
+ *
+ * 运行方式:
+ *   mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.AlgorithmVisualizationDemo" -pl tinyai-deeplearning-rl
  */
 public class AlgorithmVisualizationDemo {
 
     private static final int MAX_EPISODES = 100;
     private static final int VISUALIZATION_INTERVAL = 10;
-    
-    // 存储训练数据用于可视化
-    private static float[] episodeRewards = new float[MAX_EPISODES];
-    private static float[] episodeLosses = new float[MAX_EPISODES];
-    private static float[] epsilonHistory = new float[MAX_EPISODES];
-    private static int currentEpisode = 0;
+    private static final int MAX_STEPS_PER_EPISODE = 500;
+    private static final int BAR_LENGTH = 30;
+
+    private static final float[] episodeRewards = new float[MAX_EPISODES];
+    private static final float[] epsilonHistory = new float[MAX_EPISODES];
 
     public static void main(String[] args) {
         System.out.println("==========================================");
@@ -50,7 +42,6 @@ public class AlgorithmVisualizationDemo {
         System.out.println("\n开始训练并可视化...\n");
         
         for (int episode = 0; episode < MAX_EPISODES; episode++) {
-            currentEpisode = episode;
             float reward = trainEpisode(agent, env, episode);
             episodeRewards[episode] = reward;
             epsilonHistory[episode] = agent.getCurrentEpsilon();
@@ -115,7 +106,7 @@ public class AlgorithmVisualizationDemo {
         float episodeLoss = 0;
         int lossCount = 0;
 
-        while (!env.isDone() && steps < 500) {
+        while (!env.isDone() && steps < MAX_STEPS_PER_EPISODE) {
             Variable action = agent.selectAction(state);
             Environment.StepResult result = env.step(action);
             
@@ -171,7 +162,7 @@ public class AlgorithmVisualizationDemo {
         float maxReward = 500;
         
         for (int i = start; i <= episode; i++) {
-            int barLength = (int) (episodeRewards[i] / maxReward * 30);
+            int barLength = (int) (episodeRewards[i] / maxReward * BAR_LENGTH);
             String bar = "█".repeat(barLength);
             System.out.printf("   回合%3d: %s %.0f%n", i + 1, bar, episodeRewards[i]);
         }
@@ -193,7 +184,7 @@ public class AlgorithmVisualizationDemo {
         int start = Math.max(0, episode - 9);
         
         for (int i = start; i <= episode; i++) {
-            int barLength = (int) (epsilonHistory[i] * 30);
+            int barLength = (int) (epsilonHistory[i] * BAR_LENGTH);
             String bar = "█".repeat(barLength);
             System.out.printf("   回合%3d: %s %.3f%n", i + 1, bar, epsilonHistory[i]);
         }
@@ -205,8 +196,8 @@ public class AlgorithmVisualizationDemo {
     private static void visualizeBufferUsage(DQNAgent agent) {
         java.util.Map<String, Object> stats = agent.getTrainingStats();
         float usage = ((Number) stats.get("buffer_usage")).floatValue();
-        int filled = (int) (usage * 30);
-        int empty = 30 - filled;
+        int filled = (int) (usage * BAR_LENGTH);
+        int empty = BAR_LENGTH - filled;
         
         String bar = "█".repeat(filled) + "░".repeat(empty);
         System.out.printf("   [%s] %.1f%%%n", bar, usage * 100);
@@ -248,8 +239,10 @@ public class AlgorithmVisualizationDemo {
         System.out.printf("最低奖励: %.0f%n", minReward);
         System.out.printf("前10回合平均: %.1f%n", first10Avg);
         System.out.printf("后10回合平均: %.1f%n", last10Avg);
-        System.out.printf("学习进步: %.1f%% (%+.1f)%n", 
-            (last10Avg - first10Avg) / first10Avg * 100, last10Avg - first10Avg);
+        float progressPercent = first10Avg != 0
+            ? (last10Avg - first10Avg) / first10Avg * 100
+            : (last10Avg > 0 ? 100f : 0f);
+        System.out.printf("学习进步: %.1f%% (%+.1f)%n", progressPercent, last10Avg - first10Avg);
         
         System.out.println("\n💡 学习洞察:");
         if (last10Avg > first10Avg * 1.5) {

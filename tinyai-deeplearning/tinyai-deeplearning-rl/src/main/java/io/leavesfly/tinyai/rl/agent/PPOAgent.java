@@ -4,7 +4,7 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.model.Model;
 import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.ml.optimize.Optimizer;
-import io.leavesfly.tinyai.rl.Agent;
+import io.leavesfly.tinyai.rl.AbstractAgent;
 import io.leavesfly.tinyai.rl.Experience;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
@@ -30,7 +30,7 @@ import java.util.Map;
  * 3. 结合价值函数减少方差
  * 4. 训练稳定，适用范围广
  */
-public class PPOAgent extends Agent {
+public class PPOAgent extends AbstractAgent {
 
     // PPO特有参数
     private final float clipEpsilon;           // PPO裁剪参数

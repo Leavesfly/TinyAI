@@ -3,30 +3,22 @@ package io.leavesfly.tinyai.rl.demo;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.rl.Experience;
-import io.leavesfly.tinyai.rl.ReplayBuffer;
 import io.leavesfly.tinyai.rl.agent.DQNAgent;
 import io.leavesfly.tinyai.rl.environment.CartPoleEnvironment;
 import io.leavesfly.tinyai.rl.Environment;
 
 /**
  * 强化学习核心概念演示
- * 
- * <p>本演示详细讲解强化学习的5个核心概念:
- * <ol>
- *   <li><b>状态(State)</b> - 环境的当前情况</li>
- *   <li><b>动作(Action)</b> - 智能体的决策选择</li>
- *   <li><b>奖励(Reward)</b> - 动作的即时反馈</li>
- *   <li><b>策略(Policy)</b> - 从状态到动作的映射</li>
- *   <li><b>价值函数(Value Function)</b> - 长期回报的估计</li>
- * </ol>
- * 
- * <p><b>运行方式:</b>
- * <pre>
- * mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.BasicConceptsDemo" \
- *   -pl tinyai-deeplearning-rl
- * </pre>
- * 
- * @author TinyAI Team
+ *
+ * 本演示详细讲解强化学习的5个核心概念:
+ * 1. 状态(State) - 环境的当前情况
+ * 2. 动作(Action) - 智能体的决策选择
+ * 3. 奖励(Reward) - 动作的即时反馈
+ * 4. 策略(Policy) - 从状态到动作的映射
+ * 5. 价值函数(Value Function) - 长期回报的估计
+ *
+ * 运行方式:
+ *   mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.BasicConceptsDemo" -pl tinyai-deeplearning-rl
  */
 public class BasicConceptsDemo {
 
@@ -275,10 +267,10 @@ public class BasicConceptsDemo {
 
             System.out.printf(" %2d  | [%.2f..] |  %d   | %.1f  | [%.2f..]\n",
                 step + 1,
-                state.getValue().get(0),
+                state.getValue().getArray()[0],
                 (int) action.getValue().getNumber().floatValue(),
                 result.getReward(),
-                result.getNextState().getValue().get(0)
+                result.getNextState().getValue().getArray()[0]
             );
 
             state = result.getNextState();

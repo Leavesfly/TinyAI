@@ -149,6 +149,10 @@ public class GridWorldEnvironment extends Environment {
                 break;
         }
         
+        // 初始化终止和截断标志
+        boolean terminated = false;
+        boolean truncated = false;
+        
         // 计算奖励并更新位置
         float reward = REWARD_STEP; // 基础步骤惩罚
         
@@ -166,7 +170,7 @@ public class GridWorldEnvironment extends Environment {
             // 检查是否到达目标
             if (agentX == goalX && agentY == goalY) {
                 reward = REWARD_GOAL;
-                done = true;
+                terminated = true;
             }
         }
         
@@ -174,8 +178,11 @@ public class GridWorldEnvironment extends Environment {
         
         // 检查是否超过最大步数
         if (currentStep >= maxSteps) {
-            done = true;
+            truncated = true;
         }
+        
+        // 更新 done 标志
+        done = terminated || truncated;
         
         // 更新当前状态
         currentState = getStateVariable();
@@ -187,7 +194,7 @@ public class GridWorldEnvironment extends Environment {
         info.put("goal_reached", (agentX == goalX && agentY == goalY));
         info.put("action_name", getActionName(actionValue));
         
-        return new StepResult(currentState, reward, done, info);
+        return new StepResult(currentState, reward, terminated, truncated, info);
     }
     
     /**

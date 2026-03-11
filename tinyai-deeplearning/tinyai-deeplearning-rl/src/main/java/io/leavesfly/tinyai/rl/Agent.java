@@ -1,17 +1,12 @@
 package io.leavesfly.tinyai.rl;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.ml.model.Model;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
-
-import java.util.HashMap;
-import java.util.Map;
 
 /**
- * 强化学习智能体抽象基类
+ * 强化学习智能体接口
  * 
  * @author leavesfly
- * @version 0.01
+ * @version 0.02
  * 
  * 【强化学习核心概念 - Agent】
  * Agent(智能体)是强化学习系统的核心决策者,负责:
@@ -22,125 +17,41 @@ import java.util.Map;
  * 
  * 【MDP框架中的Agent】
  * 在马尔可夫决策过程(MDP)中,Agent与Environment形成交互循环:
- * ```
+ * {@code
  * t=0: s0 ----[Agent选择a0]----> Environment
  *             <----[返回r1,s1]---- Environment
  * t=1: s1 ----[Agent选择a1]----> Environment
  *             <----[返回r2,s2]---- Environment
- * ...
- * ```
+ * }
  * 
- * 【设计模式应用】
- * 1. 模板方法模式: learn()定义学习流程,子类实现具体算法
- *    - ValueBasedAgent: 经验回放 + TD学习
- *    - PolicyBasedAgent: 回合采样 + 蒙特卡罗回报
+ * 【设计说明 - 接口 vs 抽象类】
+ * Agent被设计为接口而非抽象类,因为不同类型的Agent差异很大:
+ * - 基于神经网络的Agent(DQN/PPO)需要model、optimizer等字段
+ * - 多臂老虎机Agent(Bandit)不需要神经网络,只需统计信息
+ * - 使用接口可以让各分支自由选择继承体系,避免被迫继承无用字段
  * 
- * 2. 策略模式: selectAction()支持不同的动作选择策略
- *    - ε-贪婪策略: 概率探索
- *    - Softmax策略: 温度参数控制
- *    - 确定性策略: DDPG等
+ * 通用的神经网络Agent实现请参见 {@link io.leavesfly.tinyai.rl.AbstractAgent}
  * 
  * 【算法分类体系】
  * TinyAI强化学习模块按算法类型组织Agent层次:
- * 
- * ```
- * Agent (抽象基类)
- *  ├── ValueBasedAgent (基于值函数)
- *  │    ├── DQNAgent: 深度Q网络
- *  │    ├── DoubleDQNAgent: 双Q网络(解决过估计)
- *  │    └── DuelingDQNAgent: 对偶网络(分离V和A)
+ * {@code
+ * Agent (接口)
+ *  ├── AbstractAgent (基于神经网络的通用基类)
+ *  │    ├── ValueBasedAgent (基于值函数)
+ *  │    │    ├── DQNAgent: 深度Q网络
+ *  │    │    └── DoubleDQNAgent: 双Q网络(解决过估计)
+ *  │    │
+ *  │    └── PolicyBasedAgent (基于策略)
+ *  │         ├── REINFORCEAgent: 策略梯度
+ *  │         └── PPOAgent: 近端策略优化
  *  │
- *  ├── PolicyBasedAgent (基于策略)
- *  │    ├── REINFORCEAgent: 策略梯度
- *  │    ├── A2CAgent: Actor-Critic
- *  │    └── PPOAgent: 近端策略优化
- *  │
- *  └── BanditAgent (多臂老虎机)
+ *  └── BanditAgent (多臂老虎机,直接实现Agent接口)
  *       ├── EpsilonGreedyBanditAgent
  *       ├── UCBBanditAgent
  *       └── ThompsonSamplingBanditAgent
- * ```
- * 
- * 【教学价值】
- * 通过这个分类体系,学习者可以:
- * - 理解Value-Based vs Policy-Based的本质区别
- * - 看到不同算法共享的通用模式
- * - 快速定位算法差异点(如DQN vs DoubleDQN)
- * - 轻松扩展新算法(只需继承并实现2-3个方法)
- * 
- * 【关键方法说明】
- * - selectAction(): 根据当前状态选择动作
- * - learn(): 从单个经验中学习
- * - learnBatch(): 从批量经验中学习(提高效率)
- * - storeExperience(): 存储经验到缓冲区
+ * }
  */
-public abstract class Agent {
-    
-    /**
-     * 智能体名称
-     */
-    protected String name;
-    
-    /**
-     * 状态空间维度
-     */
-    protected int stateDim;
-    
-    /**
-     * 动作空间维度
-     */
-    protected int actionDim;
-    
-    /**
-     * 主要的神经网络模型
-     */
-    protected Model model;
-    
-    /**
-     * 学习率
-     */
-    protected float learningRate;
-    
-    /**
-     * 探索率（epsilon-greedy策略中的epsilon）
-     */
-    protected float epsilon;
-    
-    /**
-     * 折扣因子
-     */
-    protected float gamma;
-    
-    /**
-     * 训练步数计数器
-     */
-    protected int trainingStep;
-    
-    /**
-     * 是否处于训练模式
-     */
-    protected boolean training;
-    
-    /**
-     * 构造函数
-     * 
-     * @param name 智能体名称
-     * @param stateDim 状态空间维度
-     * @param actionDim 动作空间维度
-     * @param learningRate 学习率
-     * @param epsilon 初始探索率
-     * @param gamma 折扣因子
-     */
-    public Agent(String name, int stateDim, int actionDim, float learningRate, float epsilon, float gamma) {
-        this.name = name;
-        this.stateDim = stateDim;
-        this.actionDim = actionDim;
-        this.learningRate = learningRate;
-        this.epsilon = epsilon;
-        this.gamma = gamma;
-        this.trainingStep = 0;
-        this.training = true;
-    }
+public interface Agent {
     
     /**
      * 根据当前状态选择动作
@@ -148,223 +59,126 @@ public abstract class Agent {
      * @param state 当前状态
      * @return 选择的动作
      */
-    public abstract Variable selectAction(Variable state);
+    Variable selectAction(Variable state);
     
     /**
      * 从经验中学习更新模型
      * 
-     * 【学习机制差异】
-     * 不同类型的Agent有不同的学习方式:
-     * 
-     * 1. ValueBasedAgent (如DQN):
-     *    - 经验回放: 存入ReplayBuffer,随机采样打破相关性
-     *    - TD学习: L = (r + γ*max Q_target(s',a') - Q(s,a))^2
-     *    - 批量更新: 每次从buffer采样batch_size个经验
-     * 
-     * 2. PolicyBasedAgent (如REINFORCE):
-     *    - 回合采样: 收集完整回合的(s,a,r)序列
-     *    - 蒙特卡罗回报: G_t = Σ γ^k * r_{t+k}
-     *    - 回合结束后更新: ∇θ J = Σ ∇log π(a|s) * G_t
-     * 
-     * 3. BanditAgent (如UCB):
-     *    - 增量更新: Q_new = Q_old + α * (r - Q_old)
-     *    - 无状态依赖: 直接更新动作价值估计
-     * 
-     * 【为什么需要不同的学习方式】
-     * - ValueBased需要稳定的训练目标 → 经验回放+目标网络
-     * - PolicyBased需要完整轨迹的回报 → 回合采样+蒙特卡罗
-     * - Bandit无时序依赖 → 增量式更新即可
-     * 
      * @param experience 经验数据(s, a, r, s', done)
      */
-    public abstract void learn(Experience experience);
+    void learn(Experience experience);
     
     /**
      * 批量学习更新模型
      * 
      * @param experiences 经验批次
      */
-    public abstract void learnBatch(Experience[] experiences);
+    void learnBatch(Experience[] experiences);
     
     /**
      * 存储经验（用于经验回放）
      * 
      * @param experience 要存储的经验
      */
-    public abstract void storeExperience(Experience experience);
-    
-    /**
-     * 获取模型的所有参数
-     * 
-     * @return 参数映射
-     */
-    public Map<String, Parameter> getAllParams() {
-        if (model != null) {
-            return model.getAllParams();
-        }
-        return new HashMap<>();
-    }
-    
-    /**
-     * 清空梯度
-     */
-    public void clearGrads() {
-        if (model != null) {
-            model.clearGrads();
-        }
-    }
+    void storeExperience(Experience experience);
     
     /**
      * 设置训练模式
      * 
      * @param training 是否为训练模式
      */
-    public void setTraining(boolean training) {
-        this.training = training;
-    }
-    
-    /**
-     * 设置评估模式（禁用探索，使用确定性策略）
-     * 等同于 setTraining(false)
-     */
-    public void eval() {
-        this.training = false;
-    }
-    
-    /**
-     * 设置训练模式（启用探索）
-     * 等同于 setTraining(true)
-     */
-    public void train() {
-        this.training = true;
-    }
+    void setTraining(boolean training);
     
     /**
      * 检查是否处于训练模式
      * 
      * @return 是否为训练模式
      */
-    public boolean isTraining() {
-        return training;
-    }
-    
-    /**
-     * 获取当前探索率
-     * 
-     * @return 当前探索率
-     */
-    public float getEpsilon() {
-        return epsilon;
-    }
-    
-    /**
-     * 设置探索率
-     * 
-     * @param epsilon 新的探索率
-     */
-    public void setEpsilon(float epsilon) {
-        this.epsilon = epsilon;
-    }
-    
-    /**
-     * 衰减探索率
-     * 
-     * @param decayRate 衰减率
-     */
-    public void decayEpsilon(float decayRate) {
-        this.epsilon = Math.max(0.01f, this.epsilon * decayRate);
-    }
-    
-    /**
-     * 获取训练步数
-     * 
-     * @return 训练步数
-     */
-    public int getTrainingStep() {
-        return trainingStep;
-    }
-    
-    /**
-     * 增加训练步数
-     */
-    protected void incrementTrainingStep() {
-        this.trainingStep++;
-    }
+    boolean isTraining();
     
     /**
      * 获取智能体名称
      * 
      * @return 智能体名称
      */
-    public String getName() {
-        return name;
-    }
+    String getName();
     
     /**
      * 获取状态空间维度
      * 
      * @return 状态空间维度
      */
-    public int getStateDim() {
-        return stateDim;
-    }
+    int getStateDim();
     
     /**
      * 获取动作空间维度
      * 
      * @return 动作空间维度
      */
-    public int getActionDim() {
-        return actionDim;
-    }
+    int getActionDim();
     
     /**
-     * 获取学习率
+     * 获取训练步数
      * 
-     * @return 学习率
+     * @return 训练步数
      */
-    public float getLearningRate() {
-        return learningRate;
-    }
-    
-    /**
-     * 设置学习率
-     * 
-     * @param learningRate 新的学习率
-     */
-    public void setLearningRate(float learningRate) {
-        this.learningRate = learningRate;
-    }
-    
-    /**
-     * 获取折扣因子
-     * 
-     * @return 折扣因子
-     */
-    public float getGamma() {
-        return gamma;
-    }
+    int getTrainingStep();
     
     /**
      * 重置智能体状态
      */
-    public void reset() {
-        if (model != null) {
-            model.resetState();
-        }
-    }
+    void reset();
     
     /**
      * 保存模型参数
      * 
      * @param filepath 保存路径
      */
-    public abstract void saveModel(String filepath);
+    void saveModel(String filepath);
     
     /**
      * 加载模型参数
      * 
      * @param filepath 加载路径
      */
-    public abstract void loadModel(String filepath);
+    void loadModel(String filepath);
+    
+    /**
+     * 设置评估模式（禁用探索，使用确定性策略）
+     */
+    default void eval() {
+        setTraining(false);
+    }
+    
+    /**
+     * 设置训练模式（启用探索）
+     */
+    default void train() {
+        setTraining(true);
+    }
+    
+    /**
+     * 校验Agent与Environment的维度兼容性
+     * 
+     * Agent的stateDim必须等于Environment的stateDim（神经网络输入维度 = 状态向量维度），
+     * Agent的actionDim必须等于Environment的actionDim（神经网络输出维度 = 动作空间维度）。
+     * 维度不匹配会导致运行时矩阵运算错误，此方法提供提前检测能力。
+     * 
+     * @param environment 要校验的环境
+     * @throws IllegalArgumentException 如果维度不匹配
+     */
+    default void validateCompatibility(Environment environment) {
+        if (getStateDim() != environment.getStateDim()) {
+            throw new IllegalArgumentException(String.format(
+                "Agent '%s' 的 stateDim(%d) 与 Environment 的 stateDim(%d) 不匹配。" +
+                "Agent 的神经网络输入维度必须等于环境的状态向量维度。",
+                getName(), getStateDim(), environment.getStateDim()));
+        }
+        if (getActionDim() != environment.getActionDim()) {
+            throw new IllegalArgumentException(String.format(
+                "Agent '%s' 的 actionDim(%d) 与 Environment 的 actionDim(%d) 不匹配。" +
+                "Agent 的神经网络输出维度必须等于环境的动作空间维度。",
+                getName(), getActionDim(), environment.getActionDim()));
+        }
+    }
 }

@@ -8,21 +8,14 @@ import io.leavesfly.tinyai.rl.Environment;
 
 /**
  * 快速入门演示 - 3分钟了解强化学习
- * 
- * <p>本演示通过一个简单的多臂老虎机问题,帮助您快速理解:
- * <ul>
- *   <li>什么是强化学习</li>
- *   <li>智能体-环境交互模式</li>
- *   <li>如何使用TinyAI RL模块</li>
- * </ul>
- * 
- * <p><b>运行方式:</b>
- * <pre>
- * mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.QuickStartDemo" \
- *   -pl tinyai-deeplearning-rl
- * </pre>
- * 
- * @author TinyAI Team
+ *
+ * 本演示通过一个简单的多臂老虎机问题,帮助您快速理解:
+ * - 什么是强化学习
+ * - 智能体-环境交互模式
+ * - 如何使用TinyAI RL模块
+ *
+ * 运行方式:
+ *   mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.QuickStartDemo" -pl tinyai-deeplearning-rl
  */
 public class QuickStartDemo {
 

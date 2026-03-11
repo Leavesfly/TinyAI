@@ -10,27 +10,21 @@ import java.util.*;
 
 /**
  * 多臂老虎机算法对比演示
- * 
- * <p>本演示对比三种经典多臂老虎机算法:
- * <ul>
- *   <li><b>ε-贪心</b> - 固定概率探索</li>
- *   <li><b>UCB</b> - 置信区间探索</li>
- *   <li><b>汤普森采样</b> - 贝叶斯采样</li>
- * </ul>
- * 
- * <p><b>运行方式:</b>
- * <pre>
- * mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.BanditAlgorithmsDemo" \
- *   -pl tinyai-deeplearning-rl
- * </pre>
- * 
- * @author TinyAI Team
+ *
+ * 本演示对比三种经典多臂老虎机算法:
+ * - ε-贪心: 固定概率探索
+ * - UCB: 置信区间探索
+ * - 汤普森采样: 贝叶斯采样
+ *
+ * 运行方式:
+ *   mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.BanditAlgorithmsDemo" -pl tinyai-deeplearning-rl
  */
 public class BanditAlgorithmsDemo {
 
     private static final int NUM_ARMS = 5;
     private static final int NUM_STEPS = 500;
     private static final int NUM_RUNS = 5;
+    private static final int OPTIMAL_ARM_INDEX = 2;  // 对应 trueRewards 中 0.8 的老虎机
 
     public static void main(String[] args) {
         System.out.println("==========================================");
@@ -87,7 +81,7 @@ public class BanditAlgorithmsDemo {
                 printRunSummary(runResult);
             }
         }
-        
+        results.computeStatistics();
         return results;
     }
 
@@ -111,7 +105,7 @@ public class BanditAlgorithmsDemo {
                 printRunSummary(runResult);
             }
         }
-        
+        results.computeStatistics();
         return results;
     }
 
@@ -135,7 +129,7 @@ public class BanditAlgorithmsDemo {
                 printRunSummary(runResult);
             }
         }
-        
+        results.computeStatistics();
         return results;
     }
 
@@ -157,8 +151,7 @@ public class BanditAlgorithmsDemo {
             float reward = result.getReward();
             totalReward += reward;
             
-            // 统计最优选择次数(臂2是最优的)
-            if (selectedArm == 2) {
+            if (selectedArm == OPTIMAL_ARM_INDEX) {
                 optimalActions++;
             }
             
@@ -311,10 +304,4 @@ public class BanditAlgorithmsDemo {
         }
     }
     
-    static {
-        // 计算统计信息
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            // 在程序结束前计算统计
-        }));
-    }
 }

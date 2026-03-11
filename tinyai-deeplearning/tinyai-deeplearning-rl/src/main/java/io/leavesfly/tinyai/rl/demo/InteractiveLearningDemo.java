@@ -10,26 +10,19 @@ import java.util.Scanner;
 
 /**
  * 交互式学习演示 - 让用户调整参数观察学习效果
- * 
- * <p>本演示允许用户:
- * <ul>
- *   <li>调整探索率(ε)观察探索-利用权衡</li>
- *   <li>设置不同的奖励分布</li>
- *   <li>实时观察学习过程</li>
- *   <li>对比不同参数的效果</li>
- * </ul>
- * 
- * <p><b>运行方式:</b>
- * <pre>
- * mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.InteractiveLearningDemo" \
- *   -pl tinyai-deeplearning-rl
- * </pre>
- * 
- * @author TinyAI Team
+ *
+ * 本演示允许用户:
+ * - 调整探索率(ε)观察探索-利用权衡
+ * - 设置不同的奖励分布
+ * - 实时观察学习过程
+ * - 对比不同参数的效果
+ *
+ * 运行方式:
+ *   mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.rl.demo.InteractiveLearningDemo" -pl tinyai-deeplearning-rl
  */
 public class InteractiveLearningDemo {
 
-    private static Scanner scanner = new Scanner(System.in);
+    private static final Scanner SCANNER = new Scanner(System.in);
     
     public static void main(String[] args) {
         System.out.println("==========================================");
@@ -45,7 +38,7 @@ public class InteractiveLearningDemo {
             runExperiment();
             
             System.out.print("\n是否进行新的实验? (y/n): ");
-            String choice = scanner.nextLine().trim().toLowerCase();
+            String choice = SCANNER.nextLine().trim().toLowerCase();
             continueExperiment = choice.equals("y") || choice.equals("yes");
         }
         
@@ -251,7 +244,7 @@ public class InteractiveLearningDemo {
     private static int getIntInput(String prompt, int min, int max, int defaultValue) {
         while (true) {
             System.out.print(prompt);
-            String input = scanner.nextLine().trim();
+            String input = SCANNER.nextLine().trim();
             
             if (input.isEmpty()) {
                 return defaultValue;
@@ -275,7 +268,7 @@ public class InteractiveLearningDemo {
     private static float getFloatInput(String prompt, float min, float max, float defaultValue) {
         while (true) {
             System.out.print(prompt);
-            String input = scanner.nextLine().trim();
+            String input = SCANNER.nextLine().trim();
             
             if (input.isEmpty()) {
                 return defaultValue;

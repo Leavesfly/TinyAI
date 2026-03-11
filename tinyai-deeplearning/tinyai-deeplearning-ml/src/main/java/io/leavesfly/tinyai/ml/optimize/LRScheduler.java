@@ -1,10 +1,8 @@
 package io.leavesfly.tinyai.ml.optimize;
 
 /**
- * 学习率调度器接口
- * <p>
- * 提供灵活的学习率调整策略,用于在训练过程中动态调整优化器的学习率。
- * 类似PyTorch的lr_scheduler。
+ * 学习率调度器接口，提供灵活的学习率调整策略，用于训练过程中动态调整优化器学习率。
+ * 类似 PyTorch 的 lr_scheduler。
  *
  * @author TinyAI
  * @version 2.0
@@ -36,9 +34,7 @@ public interface LRScheduler {
     }
 
     /**
-     * 阶梯衰减学习率调度器
-     * <p>
-     * 每隔stepSize步,学习率乘以gamma
+     * 阶梯衰减学习率调度器，每隔 stepSize 步，学习率乘以 gamma。
      */
     class StepLR implements LRScheduler {
         private final float baseLR;
@@ -66,9 +62,7 @@ public interface LRScheduler {
     }
 
     /**
-     * 余弦退火学习率调度器
-     * <p>
-     * 使用余弦函数平滑地降低学习率
+     * 余弦退火学习率调度器，使用余弦函数平滑降低学习率。
      */
     class CosineAnnealingLR implements LRScheduler {
         private final float baseLR;
@@ -123,9 +117,7 @@ public interface LRScheduler {
     }
 
     /**
-     * 多步衰减学习率调度器
-     * <p>
-     * 在指定的步数处降低学习率
+     * 多步衰减学习率调度器，在指定的步数处降低学习率。
      */
     class MultiStepLR implements LRScheduler {
         private final float baseLR;
@@ -158,9 +150,7 @@ public interface LRScheduler {
     }
 
     /**
-     * 线性预热学习率调度器
-     * <p>
-     * 在warmup_steps内线性增加学习率,之后保持不变
+     * 线性预热学习率调度器，在 warmup_steps 内线性增加学习率，之后保持不变。
      */
     class LinearWarmupLR implements LRScheduler {
         private final float baseLR;

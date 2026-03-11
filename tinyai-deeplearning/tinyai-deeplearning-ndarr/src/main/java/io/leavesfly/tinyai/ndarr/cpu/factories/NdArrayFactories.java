@@ -8,8 +8,7 @@ import java.util.Arrays;
 import java.util.Random;
 
 /**
- * NdArray工厂类
- * <p>提供各种创建NdArray的静态工厂方法</p>
+ * NdArray 工厂类，提供各类创建 NdArray 的静态工厂方法。
  */
 public class NdArrayFactories {
 

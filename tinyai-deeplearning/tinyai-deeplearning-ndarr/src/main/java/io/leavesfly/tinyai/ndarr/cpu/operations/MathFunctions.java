@@ -7,8 +7,7 @@ import io.leavesfly.tinyai.ndarr.cpu.operations.ArithmeticOperations;
 import io.leavesfly.tinyai.ndarr.cpu.transformations.TransformationOperations;
 
 /**
- * 数学函数操作类
- * <p>提供各种数学函数运算功能</p>
+ * 数学函数操作类，提供各类数学函数运算。
  */
 public class MathFunctions {
 
@@ -109,12 +108,10 @@ public class MathFunctions {
     }
 
     /**
-     * Sigmoid函数运算，对数组每个元素进行sigmoid运算
-     *
-     * <p>Sigmoid函数公式：f(x) = 1 / (1 + e^(-x))</p>
+     * Sigmoid 运算，f(x) = 1 / (1 + e^(-x))。
      *
      * @param array 数组
-     * @return Sigmoid运算结果数组
+     * @return Sigmoid 运算结果数组
      */
     public static NdArrayCpu sigmoid(NdArrayCpu array) {
         return unaryOperation(array, x -> (float) (1.0 / (1.0 + Math.exp(-x))));
@@ -161,15 +158,13 @@ public class MathFunctions {
     }
 
     /**
-     * 裁剪数组元素到指定范围
-     *
-     * <p>将数组中小于最小值的元素设为最小值，大于最大值的元素设为最大值</p>
+     * 裁剪数组元素到 [min, max] 范围。
      *
      * @param array 数组
      * @param min   最小值
      * @param max   最大值
      * @return 裁剪后的数组
-     * @throws IllegalArgumentException 当最小值大于最大值时抛出
+     * @throws IllegalArgumentException 当 min > max 时抛出
      */
     public static NdArrayCpu clip(NdArrayCpu array, float min, float max) {
         if (min > max) {
@@ -179,13 +174,10 @@ public class MathFunctions {
     }
 
     /**
-     * Softmax函数运算，按行计算概率分布
-     *
-     * <p>Softmax函数公式：softmax(x_i) = exp(x_i) / Σ(exp(x_j))</p>
-     * <p>使用数值稳定版本实现，避免指数运算溢出</p>
+     * Softmax 运算，softmax(x_i) = exp(x_i) / Σexp(x_j)，采用数值稳定实现。
      *
      * @param array 数组
-     * @return Softmax运算结果数组
+     * @return Softmax 运算结果数组
      */
     public static NdArrayCpu softMax(NdArrayCpu array) {
         int dimNum = array.shape.getDimNum();
@@ -194,13 +186,12 @@ public class MathFunctions {
     }
 
     /**
-     * Softmax函数运算，沿指定 axis 计算概率分布
-     *
-     * <p>使用数值稳定版本实现：先减去该轴上的最大值，再进行 exp 和归一化</p>
+     * 沿指定 axis 计算 Softmax，支持负轴（-1 表示最后一维）。
+     * 数值稳定实现：先减该轴最大值，再 exp 并归一化。
      *
      * @param array 数组
-     * @param axis  计算 softmax 的维度，支持负轴（-1 表示最后一维）
-     * @return Softmax运算结果数组
+     * @param axis  计算维度
+     * @return Softmax 运算结果数组
      * @throws IllegalArgumentException 当 axis 越界时抛出
      */
     public static NdArrayCpu softMax(NdArrayCpu array, int axis) {

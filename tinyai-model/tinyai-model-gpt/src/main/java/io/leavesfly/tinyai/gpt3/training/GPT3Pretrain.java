@@ -4,7 +4,8 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.gpt3.GPT3Config;
 import io.leavesfly.tinyai.gpt3.GPT3Model;
 import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
-import io.leavesfly.tinyai.ml.optimize.SGD;
+import io.leavesfly.tinyai.ml.optimize.Adam;
+import io.leavesfly.tinyai.ml.optimize.Optimizer;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.v2.core.Parameter;
@@ -40,7 +41,7 @@ public class GPT3Pretrain {
     private final GPT3Config config;
     private final GPT3Dataset dataset;
     private final SoftmaxCrossEntropy lossFunction;
-    private final SGD optimizer;
+    private final Optimizer optimizer;
 
     // 训练超参数
     private int maxEpochs;
@@ -73,14 +74,15 @@ public class GPT3Pretrain {
         // 默认超参数（遵循GPT-3论文，按小型模型设置）
         this.maxEpochs = 10;
         this.initialLearningRate = 6e-4f;
-        this.minLearningRate = 1e-5f;
+        this.minLearningRate = 6e-5f;
         this.warmupSteps = 2000;
         this.maxGradNorm = 1.0f;
         this.logInterval = 100;
         this.saveInterval = 1;
         this.checkpointDir = "./checkpoints/gpt3_pretrain";
 
-        this.optimizer = new SGD(model, initialLearningRate);
+        // 使用Adam优化器，收敛速度比SGD快3-5倍
+        this.optimizer = new Adam(model, initialLearningRate, 0.9f, 0.999f, 1e-8f);
 
         this.currentEpoch = 0;
         this.globalStep = 0;

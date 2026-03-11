@@ -215,8 +215,8 @@ public class StreamDataset extends DataSet {
     }
 
     @Override
-    public Map<String, DataSet> splitDataset(float trainRatio, float testRatio, float validaRation) {
-        if (Math.abs(trainRatio + testRatio + validaRation - 1.0f) > 1e-6) {
+    public Map<String, DataSet> splitDataset(float trainRatio, float testRatio, float validationRatio) {
+        if (Math.abs(trainRatio + testRatio + validationRatio - 1.0f) > 1e-6f) {
             throw new IllegalArgumentException("数据集分割比例之和必须等于1.0");
         }
         
@@ -225,7 +225,7 @@ public class StreamDataset extends DataSet {
         }
         
         // 保存分割配置，在数据读取时使用
-        this.splitConfig = new SplitConfig(trainRatio, testRatio, validaRation);
+        this.splitConfig = new SplitConfig(trainRatio, testRatio, validationRatio);
         
         // 创建三个子数据集
         StreamDataset trainDataset = createSubDataset(Usage.TRAIN);

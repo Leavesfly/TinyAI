@@ -150,17 +150,18 @@ public class GPT3TrainDemo {
 
         // 创建适合演示的nano配置（参数量小，训练快）
         GPT3Config config = createNanoConfig();
+
+        // 先确定实际词汇表大小，再创建模型（确保输出层维度与词汇表一致，避免生成越界token ID）
+        // 注意：必须直接使用实际词汇量，不能取 max，否则 config 默认值(1000)会导致输出层偏大
+        int vocabSize = sharedTokenizer.getVocabSize();
+        config.setVocabSize(vocabSize);
+
         GPT3Model model = new GPT3Model("gpt3-nano-pretrain", config);
         model.printModelInfo();
 
-        // 准备数据集
-        int vocabSize = sharedTokenizer.getVocabSize();
-        // 更新配置词汇表大小
-        config.setVocabSize(Math.max(vocabSize, config.getVocabSize()));
-
         GPT3Dataset trainDataset = new GPT3Dataset(
                 config.getNPositions(), /* maxSeqLen */
-                2,                      /* batchSize */
+                4,                      /* batchSize */
                 config.getVocabSize()
         );
 
@@ -176,8 +177,8 @@ public class GPT3TrainDemo {
 
         // 配置预训练器
         GPT3Pretrain pretrain = new GPT3Pretrain(model, trainDataset)
-                .configure(3, 6e-4f, 100, 1.0f)
-                .setCheckpoint(CHECKPOINT_DIR + "/pretrain", 1);
+                .configure(50, 6e-4f, 25, 1.0f)
+                .setCheckpoint(CHECKPOINT_DIR + "/pretrain", 5);
 
         pretrain.train();
 
@@ -219,7 +220,7 @@ public class GPT3TrainDemo {
         // 配置微调训练器
         GPT3Finetune finetune = new GPT3Finetune(pretrainedModel, trainDataset, valDataset)
                 .configure(3, 6e-5f, 2)
-                .setCheckpoint(CHECKPOINT_DIR + "/finetune", 50);
+                .setCheckpoint(CHECKPOINT_DIR + "/finetune", 500);
 
         finetune.train();
 
@@ -296,7 +297,7 @@ public class GPT3TrainDemo {
         config.setNLayer(2);
         config.setNHead(2);
         config.setNInner(256);
-        config.setNPositions(64);
+        config.setNPositions(32);
         config.setVocabSize(1000);     // 演示用小词汇表
         config.setParallelAttention(true);
         config.setUseRotaryEmbedding(false);
@@ -348,6 +349,22 @@ public class GPT3TrainDemo {
         texts.add("data augmentation artificially expands training data to improve model generalization");
         texts.add("regularization techniques like weight decay prevent neural networks from overfitting");
         texts.add("gradient clipping prevents exploding gradients by rescaling them to a maximum norm");
+        // 新增15条深度学习文本
+        texts.add("activation functions introduce non-linearity into neural networks enabling them to learn complex patterns");
+        texts.add("the vanishing gradient problem occurs when gradients become too small in deep networks");
+        texts.add("weight initialization strategies like xavier and he initialization help with training stability");
+        texts.add("early stopping prevents overfitting by halting training when validation loss increases");
+        texts.add("mini-batch gradient descent computes gradients on small subsets of data for efficiency");
+        texts.add("momentum accelerates gradient descent by accumulating velocity in consistent directions");
+        texts.add("the learning rate controls the step size during gradient descent optimization");
+        texts.add("batch size affects the noise in gradient estimates and training dynamics");
+        texts.add("epoch refers to one complete pass through the entire training dataset");
+        texts.add("validation data is used to tune hyperparameters and monitor model performance");
+        texts.add("test data provides final evaluation of model performance on unseen examples");
+        texts.add("overfitting occurs when a model memorizes training data instead of learning patterns");
+        texts.add("underfitting happens when a model is too simple to capture underlying patterns");
+        texts.add("the bias-variance tradeoff balances model complexity with generalization ability");
+        texts.add("cross-validation estimates model performance by partitioning data into multiple folds");
         return texts;
     }
 
@@ -363,6 +380,17 @@ public class GPT3TrainDemo {
         texts.add("the softmax function converts attention scores to probability distributions over tokens");
         texts.add("masked self-attention prevents future tokens from influencing current token predictions");
         texts.add("token embeddings map discrete token ids to continuous vector representations");
+        // 新增10条Transformer文本
+        texts.add("the encoder-decoder architecture processes input sequences and generates output sequences");
+        texts.add("attention heads learn different patterns and relationships in the input data");
+        texts.add("the residual connection adds the input of a sublayer to its output");
+        texts.add("transformer models can be parallelized across sequence positions during training");
+        texts.add("the key query and value projections transform embeddings for attention computation");
+        texts.add("scaled dot-product attention divides attention scores by the square root of dimension");
+        texts.add("the decoder uses cross-attention to attend to encoder outputs");
+        texts.add("attention masks prevent attending to padding tokens or future positions");
+        texts.add("the transformer was introduced in the attention is all you need paper");
+        texts.add("bert uses bidirectional attention while gpt uses unidirectional causal attention");
         return texts;
     }
 
@@ -378,6 +406,17 @@ public class GPT3TrainDemo {
         texts.add("scaling laws show that model performance improves predictably with more compute and data");
         texts.add("the gpt3 model has 175 billion parameters trained on 300 billion tokens of text data");
         texts.add("autoregressive generation produces text one token at a time using the previous tokens");
+        // 新增10条GPT-3文本
+        texts.add("the context window limits how many tokens a model can attend to at once");
+        texts.add("temperature controls randomness in text generation with higher values increasing diversity");
+        texts.add("top-k sampling restricts generation to the k most likely next tokens");
+        texts.add("nucleus sampling selects from the smallest set of tokens whose cumulative probability exceeds p");
+        texts.add("beam search explores multiple generation paths to find the most likely sequence");
+        texts.add("the vocabulary size determines how many unique tokens the model can represent");
+        texts.add("tokenization algorithms like bpe split words into frequent subword units");
+        texts.add("the embedding dimension determines the size of token representation vectors");
+        texts.add("larger models generally perform better but require more compute and memory");
+        texts.add("zero-shot learning tests model ability to perform tasks without any examples");
         return texts;
     }
 
@@ -393,6 +432,17 @@ public class GPT3TrainDemo {
         texts.add("named entity recognition identifies and classifies named entities in text");
         texts.add("sentiment analysis determines the emotional tone or opinion expressed in text");
         texts.add("machine translation converts text from one language to another automatically");
+        // 新增10条NLP文本
+        texts.add("part-of-speech tagging assigns grammatical categories to words in a sentence");
+        texts.add("dependency parsing analyzes grammatical structure by identifying relationships between words");
+        texts.add("coreference resolution determines which expressions refer to the same entity");
+        texts.add("text classification assigns predefined categories to documents or sentences");
+        texts.add("information extraction identifies structured information from unstructured text");
+        texts.add("semantic similarity measures how close two pieces of text are in meaning");
+        texts.add("language identification determines the language of a given text sample");
+        texts.add("keyword extraction identifies the most important terms in a document");
+        texts.add("text segmentation divides documents into coherent sections or topics");
+        texts.add("speech recognition converts spoken language into written text");
         return texts;
     }
 
@@ -403,6 +453,12 @@ public class GPT3TrainDemo {
         texts.add("softmax converts logits to probability distributions by exponentiating and normalizing");
         texts.add("the gradient of a function indicates the direction of steepest ascent at each point");
         texts.add("the chain rule allows gradients to be propagated backward through composite functions");
+        // 新增5条数学文本
+        texts.add("the dot product measures similarity between two vectors in vector space");
+        texts.add("the relu activation function outputs zero for negative inputs and passes positive values");
+        texts.add("the sigmoid function maps inputs to values between zero and one");
+        texts.add("the tanh activation function maps inputs to values between negative one and one");
+        texts.add("normalization scales values to have zero mean and unit variance");
         return texts;
     }
 
@@ -418,6 +474,27 @@ public class GPT3TrainDemo {
         instructions.add("Instruction: What is rotary position embedding? Response: RoPE encodes positional information by rotating query and key vectors, allowing relative position information to be captured in dot-product attention.");
         instructions.add("Instruction: Explain sparse attention. Response: Sparse attention reduces computational cost by only attending to local windows and strided global positions rather than all token pairs.");
         instructions.add("Instruction: What is gradient checkpointing? Response: Gradient checkpointing saves memory by not storing intermediate activations and recomputing them during the backward pass.");
+        // 新增20条微调指令文本
+        instructions.add("Instruction: What is batch normalization? Response: Batch normalization normalizes layer inputs during training to stabilize and accelerate deep network training.");
+        instructions.add("Instruction: Explain dropout regularization. Response: Dropout randomly deactivates neurons during training to prevent overfitting and improve model generalization.");
+        instructions.add("Instruction: What is the learning rate? Response: The learning rate controls the step size during gradient descent optimization affecting convergence speed and stability.");
+        instructions.add("Instruction: What is transfer learning? Response: Transfer learning fine-tunes pretrained models on new tasks leveraging knowledge from large-scale pretraining.");
+        instructions.add("Instruction: Explain multi-head attention. Response: Multi-head attention runs multiple attention operations in parallel to capture different types of relationships.");
+        instructions.add("Instruction: What is causal language modeling? Response: Causal language modeling trains models to predict each token from only previous tokens in the sequence.");
+        instructions.add("Instruction: What is tokenization? Response: Tokenization splits text into subword units using algorithms like BPE to create a fixed vocabulary for language models.");
+        instructions.add("Instruction: Explain softmax function. Response: Softmax converts logits to probability distributions by exponentiating and normalizing to sum to one.");
+        instructions.add("Instruction: What is cross-entropy loss? Response: Cross-entropy measures the difference between predicted probability distributions and true labels for classification.");
+        instructions.add("Instruction: What is the Adam optimizer? Response: Adam combines momentum and adaptive learning rates for efficient gradient-based optimization.");
+        instructions.add("Instruction: Explain residual connections. Response: Residual connections add layer inputs to outputs allowing gradients to flow directly through skip connections.");
+        instructions.add("Instruction: What is layer normalization? Response: Layer normalization normalizes across the feature dimension and is commonly used in transformer architectures.");
+        instructions.add("Instruction: What is few-shot learning? Response: Few-shot learning enables models to perform tasks from just a few examples provided in the context.");
+        instructions.add("Instruction: Explain temperature in generation. Response: Temperature controls randomness in text generation with higher values producing more diverse outputs.");
+        instructions.add("Instruction: What is top-k sampling? Response: Top-k sampling restricts generation to the k most likely next tokens at each step.");
+        instructions.add("Instruction: What is nucleus sampling? Response: Nucleus sampling selects from the smallest token set whose cumulative probability exceeds threshold p.");
+        instructions.add("Instruction: Explain beam search. Response: Beam search explores multiple generation paths simultaneously to find the most likely output sequence.");
+        instructions.add("Instruction: What is in-context learning? Response: In-context learning allows models to adapt to new tasks from examples without updating model weights.");
+        instructions.add("Instruction: What is positional encoding? Response: Positional encoding adds position information to token embeddings since attention has no inherent order.");
+        instructions.add("Instruction: Explain the feed-forward network. Response: The feed-forward network applies two linear transformations with activation between them in each transformer layer.");
         return instructions;
     }
 

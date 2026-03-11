@@ -18,13 +18,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 绘图工具类
+ * 绘图工具类，基于 JFreeChart 实现数据可视化，支持散点图和折线图。
  *
  * @author leavesfly
  * @version 0.01
- * <p>
- * Plot类提供了数据可视化功能，基于JFreeChart库实现。
- * 支持绘制散点图和折线图，用于展示训练数据和模型结果。
  */
 public class Plot {
 

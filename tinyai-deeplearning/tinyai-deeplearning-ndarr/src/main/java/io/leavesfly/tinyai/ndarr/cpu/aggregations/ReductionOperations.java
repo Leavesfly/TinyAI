@@ -6,9 +6,8 @@ import io.leavesfly.tinyai.ndarr.cpu.utils.ArrayValidator;
 import io.leavesfly.tinyai.ndarr.cpu.utils.IndexConverter;
 
 /**
- * 聚合操作类
- * <p>提供各种聚合运算功能，包括求和、均值、方差、最大值、最小值等</p>
- * <p>经过性能优化，直接访问底层buffer，避免不必要的索引转换和方法调用开销</p>
+ * 聚合操作类，提供求和、均值、方差、最大/最小值等运算。
+ * 直接访问底层 buffer，减少索引转换和方法调用开销。
  */
 public class ReductionOperations {
 

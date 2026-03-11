@@ -116,8 +116,8 @@ public class GPT3TokenEmbedding extends Module {
         // tokenIds: (batchSize, sequenceLength)
         // 需要将tokenIds flatten为1D，然后使用indexSelect，最后reshape回(batchSize, sequenceLength, embeddingDim)
         
-        Variable tokenEmbedVar = new Variable(tokenEmbedding.data());
-        tokenEmbedVar.setRequireGrad(false);
+        // 直接使用Parameter参与计算（Parameter继承自Variable），梯度可以直接传回Parameter
+        Variable tokenEmbedVar = tokenEmbedding;
         
         // Flatten tokenIds: (batchSize, sequenceLength) -> (batchSize * sequenceLength)
         Variable flatTokenIds = tokenIds.reshape(Shape.of(batchSize * sequenceLength));
@@ -143,8 +143,8 @@ public class GPT3TokenEmbedding extends Module {
         // positionEmbedding: (maxPositions, embeddingDim)
         // 需要选择前sequenceLength个位置，然后扩展到batchSize
         
-        Variable positionEmbedVar = new Variable(positionEmbedding.data());
-        positionEmbedVar.setRequireGrad(false);
+        // 直接使用Parameter参与计算（Parameter继承自Variable），梯度可以直接传回Parameter
+        Variable positionEmbedVar = positionEmbedding;
         
         // 创建位置索引: [0, 1, 2, ..., sequenceLength-1]
         float[] posIndices = new float[sequenceLength];

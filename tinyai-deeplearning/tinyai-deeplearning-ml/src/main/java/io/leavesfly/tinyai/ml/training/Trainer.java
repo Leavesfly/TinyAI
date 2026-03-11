@@ -23,47 +23,31 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 模型训练器
- * <p>
- * 该类是TinyDL框架中模型训练的核心组件，提供了完整的训练流程管理功能，
+ * 模型训练器。
+ *
+ * 该类是 TinyDL 框架中模型训练的核心组件，提供完整的训练流程管理，
  * 支持单线程和并行训练两种模式。
- * <p>
+ *
  * 主要功能：
  * 1. 训练流程管理：控制训练的轮次、批次处理等
  * 2. 单线程训练：传统的顺序训练模式
  * 3. 并行训练：支持多线程并行处理批次数据
- * 4. 训练监控：与Monitor配合收集训练过程信息
- * 5. 模型评估：与Evaluator配合进行模型性能评估
- * <p>
- * 使用示例:
- * <pre>
- * // 快速开始 - 最小配置
- * Trainer.builder()
- *     .model(model)
- *     .dataSet(dataSet)
- *     .loss(loss)
- *     .optimizer(optimizer)
- *     .epochs(100)
- *     .build()
- *     .train();
+ * 4. 训练监控：与 Monitor 配合收集训练过程信息
+ * 5. 模型评估：与 Evaluator 配合进行模型性能评估
  *
- * // 完整配置 - 自定义所有参数
- * Trainer.builder()
- *     .model(model)
- *     .dataSet(dataSet)
- *     .loss(loss)
- *     .optimizer(optimizer)
- *     .epochs(100)
- *     .monitor(new Monitor("log.txt"))
- *     .evaluator(evaluator)
- *     .enableParallel(true, 4)
- *     .shuffle(true)
- *     .validationInterval(5)
- *     .earlyStopping(patience, minDelta)
- *     .gradientClipping(maxNorm)
- *     .build()
- *     .train();
- * </pre>
+ * 使用示例：
+ * 快速开始 - 最小配置：
+ *   Trainer.builder()
+ *       .model(model).dataSet(dataSet).loss(loss).optimizer(optimizer)
+ *       .epochs(100).build().train();
+ *
+ * 完整配置 - 自定义所有参数：
+ *   Trainer.builder()
+ *       .model(model).dataSet(dataSet).loss(loss).optimizer(optimizer)
+ *       .epochs(100).monitor(new Monitor("log.txt")).evaluator(evaluator)
+ *       .enableParallel(true, 4).shuffle(true).validationInterval(5)
+ *       .earlyStopping(patience, minDelta).gradientClipping(maxNorm)
+ *       .build().train();
  *
  * @author TinyDL
  * @version 2.0
@@ -795,9 +779,7 @@ public class Trainer {
     }
 
     /**
-     * Trainer构建器
-     * <p>
-     * 提供流畅的API来配置和创建Trainer实例
+     * Trainer 构建器，提供流畅的 API 来配置和创建 Trainer 实例。
      */
     public static class Builder {
         private Model model;

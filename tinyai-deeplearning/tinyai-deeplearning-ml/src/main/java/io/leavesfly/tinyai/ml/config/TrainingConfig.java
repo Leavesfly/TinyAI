@@ -3,10 +3,8 @@ package io.leavesfly.tinyai.ml.config;
 import io.leavesfly.tinyai.ml.visual.ValidationUtils;
 
 /**
- * 训练配置类
- * <p>
- * 统一管理训练相关的所有配置参数，提升易用性和可维护性
- * 
+ * 训练配置类，统一管理训练相关的所有配置参数，提升易用性和可维护性。
+ *
  * @author TinyAI
  * @version 1.0
  */

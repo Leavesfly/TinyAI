@@ -4,10 +4,8 @@ import io.leavesfly.tinyai.ml.optimize.Optimizer;
 import io.leavesfly.tinyai.ml.visual.ValidationUtils;
 
 /**
- * 余弦退火学习率调度器
- * <p>
- * 学习率按照余弦函数从初始值衰减到最小值
- * 
+ * 余弦退火学习率调度器，学习率按余弦函数从初始值衰减到最小值。
+ *
  * @author TinyAI
  * @version 1.0
  */

@@ -4,10 +4,8 @@ import io.leavesfly.tinyai.ml.optimize.Optimizer;
 import io.leavesfly.tinyai.ml.visual.ValidationUtils;
 
 /**
- * 阶梯式学习率调度器
- * <p>
- * 每隔 stepSize 个 epoch，学习率乘以 gamma
- * 
+ * 阶梯式学习率调度器，每隔 stepSize 个 epoch，学习率乘以 gamma。
+ *
  * @author TinyAI
  * @version 1.0
  */

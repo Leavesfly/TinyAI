@@ -113,15 +113,15 @@ public class GPT1Config implements Serializable {
     
     /**
      * 创建微型GPT-1配置（用于快速测试）
-     * 配置：256维, 6层, 8头, 序列长度128
+     * 配置：32维, 6层, 8头, 序列长度128
      */
     public static GPT1Config createTinyConfig() {
         GPT1Config config = new GPT1Config();
         config.setVocabSize(10000);
-        config.setNEmbd(256);
+        config.setNEmbd(32);
         config.setNLayer(6);
         config.setNHead(8);
-        config.setNInner(1024);
+        config.setNInner(256);
         config.setNPositions(128);
         return config;
     }

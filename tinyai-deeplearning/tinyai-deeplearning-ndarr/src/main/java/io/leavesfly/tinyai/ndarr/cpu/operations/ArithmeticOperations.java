@@ -4,8 +4,7 @@ import io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu;
 import io.leavesfly.tinyai.ndarr.cpu.utils.ArrayValidator;
 
 /**
- * 算术运算操作类
- * <p>提供四则运算（加法、减法、乘法、除法）功能</p>
+ * 算术运算操作类，提供四则运算（加、减、乘、除）。
  */
 public class ArithmeticOperations {
 

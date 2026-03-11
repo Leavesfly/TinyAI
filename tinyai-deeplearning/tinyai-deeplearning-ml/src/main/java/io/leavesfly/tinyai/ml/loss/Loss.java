@@ -3,17 +3,15 @@ package io.leavesfly.tinyai.ml.loss;
 import io.leavesfly.tinyai.func.Variable;
 
 /**
- * 损失函数抽象类
- * <p>
- * 该类是所有损失函数实现的基类，定义了计算损失值的基本接口。
+ * 损失函数抽象类。
+ *
+ * 该类是所有损失函数实现的基类，定义计算损失值的基本接口，
  * 子类需要实现具体的损失计算逻辑。
- * 
- * <p>V2增强功能:
- * <ul>
- *   <li>支持PyTorch风格的reduction参数(NONE, MEAN, SUM)</li>
- *   <li>支持类别权重(weight)</li>
- *   <li>支持忽略索引(ignore_index)</li>
- * </ul>
+ *
+ * V2 增强功能：
+ * - 支持 PyTorch 风格的 reduction 参数（NONE, MEAN, SUM）
+ * - 支持类别权重（weight）
+ * - 支持忽略索引（ignore_index）
  *
  * @author TinyDL
  * @version 2.0
@@ -21,9 +19,7 @@ import io.leavesfly.tinyai.func.Variable;
 public abstract class Loss {
     
     /**
-     * Reduction枚举 - 定义损失值的归约方式
-     * <p>
-     * 与PyTorch的reduction参数保持一致
+     * Reduction 枚举，定义损失值的归约方式，与 PyTorch 的 reduction 参数保持一致。
      */
     public enum Reduction {
         /**
@@ -96,9 +92,7 @@ public abstract class Loss {
     public abstract Variable loss(Variable y, Variable predict);
     
     /**
-     * 应用归约操作
-     * <p>
-     * 根据reduction参数对损失值进行归约
+     * 根据 reduction 参数对损失值进行归约。
      *
      * @param loss 原始损失值
      * @return 归约后的损失值

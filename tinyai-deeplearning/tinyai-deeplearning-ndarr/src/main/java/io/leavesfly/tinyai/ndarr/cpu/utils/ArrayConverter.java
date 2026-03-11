@@ -4,8 +4,7 @@ import io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu;
 import io.leavesfly.tinyai.ndarr.cpu.ShapeCpu;
 
 /**
- * 数组格式转换工具类
- * <p>提供NdArray与各种Java数组格式之间的转换功能</p>
+ * 数组格式转换工具类，提供 NdArray 与 Java 数组格式之间的转换。
  */
 public class ArrayConverter {
 
@@ -59,12 +58,12 @@ public class ArrayConverter {
             }
             return result;
         } else {
-            throw new IllegalArgumentException("not support!");
+            throw new IllegalArgumentException("仅支持三维数组，当前维度: " + shape.dimension.length);
         }
     }
 
     /**
-     * 将NdArray转换为四维数组返回
+     * 将 NdArray 转换为四维数组返回
      *
      * @param ndArray NdArray实例
      * @return 四维数组表示
@@ -87,7 +86,7 @@ public class ArrayConverter {
             }
             return result;
         } else {
-            throw new IllegalArgumentException("not support!");
+            throw new IllegalArgumentException("仅支持四维数组，当前维度: " + shape.dimension.length);
         }
     }
 

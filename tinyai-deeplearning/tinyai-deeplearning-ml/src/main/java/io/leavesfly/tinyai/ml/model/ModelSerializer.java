@@ -14,9 +14,9 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 /**
- * 模型序列化器 - 提供完整的模型保存和加载功能
- * <p>
- * 该类提供了多种模型序列化和反序列化的方法，支持：
+ * 模型序列化器，提供完整的模型保存和加载功能。
+ *
+ * 支持多种序列化方式：
  * 1. 完整模型保存（包含架构和参数）
  * 2. 仅参数保存
  * 3. 压缩保存
@@ -276,11 +276,9 @@ public class ModelSerializer {
     /* ===== V2增强: Checkpoint支持 ===== */
     
     /**
-     * 保存Checkpoint对象
-     * <p>
-     * 支持保存模型+优化器状态+训练元数据
+     * 保存 Checkpoint 对象，支持模型、优化器状态及训练元数据。
      *
-     * @param checkpoint Checkpoint对象
+     * @param checkpoint Checkpoint 对象
      * @param filePath   保存路径
      */
     public static void saveCheckpoint(Checkpoint checkpoint, String filePath) {
@@ -306,13 +304,11 @@ public class ModelSerializer {
     }
     
     /**
-     * 保存模型+优化器检查点(便捷方法)
-     * <p>
-     * 类似PyTorch的torch.save()
+     * 保存模型与优化器检查点（便捷方法），类似 PyTorch 的 torch.save()。
      *
      * @param model     模型对象
      * @param optimizer 优化器对象
-     * @param epoch     当前epoch
+     * @param epoch     当前 epoch
      * @param loss      当前损失值
      * @param filePath  保存路径
      */

@@ -108,35 +108,14 @@ public class GPT1TrainDemo {
         // 5. Transformer和注意力机制
         pretrainTexts.addAll(generateTransformerTexts());
 
-        // 6. TinyAI框架知识
-        pretrainTexts.addAll(generateTinyAITexts());
-
-        // 7. 数学基础
-        pretrainTexts.addAll(generateMathematicsTexts());
-
-        // 8. 编程概念
-        pretrainTexts.addAll(generateProgrammingTexts());
-
-        // 9. AI历史与发展
-        pretrainTexts.addAll(generateAIHistoryTexts());
-
-        // 10. 优化算法
+        // 6. 优化算法
         pretrainTexts.addAll(generateOptimizationTexts());
 
-        // 11. 计算机视觉
+        // 7. 计算机视觉
         pretrainTexts.addAll(generateComputerVisionTexts());
 
-        // 12. 强化学习
+        // 8. 强化学习
         pretrainTexts.addAll(generateReinforcementLearningTexts());
-
-        // 13. 数据处理
-        pretrainTexts.addAll(generateDataProcessingTexts());
-
-        // 14. 模型评估
-        pretrainTexts.addAll(generateModelEvaluationTexts());
-
-        // 15. 分布式训练
-        pretrainTexts.addAll(generateDistributedTrainingTexts());
 
         // 写入文件
         String filePath = DATA_DIR + "/pretrain.txt";
@@ -1417,7 +1396,7 @@ public class GPT1TrainDemo {
         System.out.println("\n📝 配置预训练器...");
         GPT1Pretrain trainer = new GPT1Pretrain(model, dataset);
         trainer.configure(
-                30,
+                10,
                 1e-2f,
                 5,
                 1.0f
@@ -1472,14 +1451,14 @@ public class GPT1TrainDemo {
 
         GPT1Dataset trainDataset = new GPT1Dataset(
                 config.getNPositions(),
-                2,
+                4,
                 config.getVocabSize()
         );
         trainDataset.loadFromInstructionTexts(trainTexts, sharedTokenizer, responseSeparator);
 
         GPT1Dataset valDataset = new GPT1Dataset(
                 config.getNPositions(),
-                1,
+                4,
                 config.getVocabSize()
         );
         valDataset.loadFromInstructionTexts(valTexts, sharedTokenizer, responseSeparator);
@@ -1496,7 +1475,7 @@ public class GPT1TrainDemo {
         );
 
         finetuner.configure(
-                10,
+                5,
                 1e-3f,
                 3
         ).setCheckpoint(CHECKPOINT_DIR + "/finetune", 3);

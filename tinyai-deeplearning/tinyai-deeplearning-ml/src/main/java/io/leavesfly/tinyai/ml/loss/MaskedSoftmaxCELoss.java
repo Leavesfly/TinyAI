@@ -5,19 +5,18 @@ import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 
 /**
- * 掩码Softmax交叉熵损失函数
- * <p>
- * 用于处理序列模型中的掩码交叉熵损失计算，特别适用于处理变长序列。
- * 在序列处理中，较短的序列会被填充到固定长度，掩码用于忽略填充部分的损失计算。
- * <p>
+ * 掩码 Softmax 交叉熵损失函数。
+ *
+ * 用于处理序列模型中的掩码交叉熵损失计算，特别适用于变长序列。
+ * 较短的序列会被填充到固定长度，掩码用于忽略填充部分的损失计算。
+ *
  * 主要应用场景：
  * 1. 机器翻译中的变长目标序列
  * 2. 文本生成任务中的填充部分
  * 3. 序列到序列模型的训练
- * <p>
- * 损失计算公式：
- * Loss = -Σ(mask_i * y_i * log(softmax(pred_i))) / Σ(mask_i)
- * 其中mask_i为掩码值（0或1），用于指示有效的序列位置
+ *
+ * 损失计算公式：Loss = -Σ(mask_i * y_i * log(softmax(pred_i))) / Σ(mask_i)
+ * 其中 mask_i 为掩码值（0 或 1），用于指示有效的序列位置。
  *
  * @author TinyDL
  * @version 1.0

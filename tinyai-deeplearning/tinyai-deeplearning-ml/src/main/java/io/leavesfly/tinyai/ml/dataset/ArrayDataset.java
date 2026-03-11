@@ -6,10 +6,8 @@ import io.leavesfly.tinyai.ndarr.NdArray;
 import java.util.*;
 
 /**
- * 能全量装载到内存的DataSet的简单实现
- * <p>
- * 该类是DataSet的抽象实现，适用于能够完全加载到内存中的数据集。
- * 提供了批次处理、数据分割和数据打乱等基本功能。
+ * 能全量装载到内存的 DataSet 的简单实现，适用于可完全加载到内存的数据集。
+ * 提供批次处理、数据分割和数据打乱等基本功能。
  *
  * @author TinyDL
  * @version 1.0
@@ -50,9 +48,8 @@ public abstract class ArrayDataset extends DataSet {
     }
 
     @Override
-    public Map<String, DataSet> splitDataset(float trainRatio, float testRatio, float validaRation) {
-
-        if (trainRatio + testRatio + validaRation != 1.0f) {
+    public Map<String, DataSet> splitDataset(float trainRatio, float testRatio, float validationRatio) {
+        if (Math.abs(trainRatio + testRatio + validationRatio - 1.0f) > 1e-6f) {
             throw new RuntimeException("splitDataset parameters error! ");
         }
 

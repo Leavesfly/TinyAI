@@ -7,18 +7,16 @@ import io.leavesfly.tinyai.ndarr.cpu.utils.ArrayValidator;
 import io.leavesfly.tinyai.ndarr.cpu.utils.IndexConverter;
 
 /**
- * 变形操作类
- * <p>提供数组形状变换功能，包括转置、重塑、广播等</p>
+ * 变形操作类，提供转置、重塑、广播等形状变换功能。
  */
 public class TransformationOperations {
 
     /**
-     * 矩阵转置操作，交换最后两个维度
-     * <p>对于二维矩阵，行列互换；对于多维数组，交换最后两个维度</p>
+     * 矩阵转置，二维时行列互换，多维时交换最后两个维度。
      *
      * @param array 数组
      * @return 转置后的数组
-     * @throws IllegalArgumentException 当数组维度小于2时抛出
+     * @throws IllegalArgumentException 当数组维度小于 2 时抛出
      */
     public static NdArrayCpu transpose(NdArrayCpu array) {
         int dimNum = array.shape.getDimNum();
@@ -113,12 +111,10 @@ public class TransformationOperations {
     }
 
     /**
-     * 数组广播运算，将当前数组广播到指定形状
+     * 将数组广播到目标形状，小数组会重复填充以匹配大数组。
      *
-     * <p>广播机制允许小数组与大数组进行运算，小数组会重复填充以匹配大数组的形状</p>
-     *
-     * @param array  数组
-     * @param targetShape 目标广播形状
+     * @param array       数组
+     * @param targetShape 目标形状
      * @return 广播结果数组
      * @throws IllegalArgumentException 当形状不合法时抛出
      */
@@ -178,11 +174,9 @@ public class TransformationOperations {
     }
 
     /**
-     * 按指定形状进行压缩累加运算
+     * 按目标形状压缩累加，超出部分累加到对应位置。
      *
-     * <p>将当前数组按指定形状进行压缩，超出目标形状的部分会累加到对应位置</p>
-     *
-     * @param array  数组
+     * @param array       数组
      * @param targetShape 目标形状
      * @return 压缩累加结果数组
      * @throws IllegalArgumentException 当形状不合法时抛出
@@ -258,10 +252,7 @@ public class TransformationOperations {
     // =============================================================================
 
     /**
-     * 支持广播语义的reshape（新增方法）
-     * <p>
-     * 允许将大小为1的维度扩展到更大的尺寸，如将[1,3]扩展为[5,3]
-     * </p>
+     * 支持广播语义的 reshape，可将大小为 1 的维度扩展，如 [1,3] → [5,3]。
      *
      * @param array    源数组
      * @param newShape 新形状
@@ -301,10 +292,7 @@ public class TransformationOperations {
     }
 
     /**
-     * 优化的sumTo实现（新增方法）
-     * <p>
-     * 使用轴向求和策略，性能提升2-3倍
-     * </p>
+     * 优化的 sumTo 实现，采用轴向求和策略，性能优于逐元素累加。
      *
      * @param array       源数组
      * @param targetShape 目标形状

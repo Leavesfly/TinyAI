@@ -1,10 +1,8 @@
 package io.leavesfly.tinyai.ml.callback;
 
 /**
- * 训练回调接口
- * <p>
- * 用于在训练过程的不同阶段执行自定义逻辑，提升扩展性
- * 
+ * 训练回调接口，用于在训练过程的不同阶段执行自定义逻辑，提升扩展性。
+ *
  * @author TinyAI
  * @version 1.0
  */
@@ -79,10 +77,8 @@ public interface TrainingCallback {
     }
     
     /**
-     * 检查是否应该停止训练
-     * <p>
-     * 返回true时，训练器会提前停止训练
-     * 
+     * 检查是否应该停止训练，返回 true 时训练器会提前停止。
+     *
      * @return true 如果应该停止训练
      */
     default boolean shouldStop() {

@@ -4,8 +4,7 @@ import io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu;
 import io.leavesfly.tinyai.ndarr.cpu.utils.ArrayValidator;
 
 /**
- * 逻辑运算操作类
- * <p>提供逻辑比较和一元运算功能</p>
+ * 逻辑运算操作类，提供逻辑比较和一元运算。
  */
 public class LogicalOperations {
 

@@ -4,30 +4,22 @@ import java.util.*;
 import java.util.concurrent.*;
 
 /**
- * 数据加载器 - PyTorch风格的DataLoader实现
- * <p>
- * 提供了灵活的数据加载能力，支持以下特性：
- * <ul>
- *   <li>批次数据加载</li>
- *   <li>数据打乱(shuffle)</li>
- *   <li>多线程异步预取(prefetch)</li>
- *   <li>自定义采样器</li>
- * </ul>
+ * 数据加载器，PyTorch 风格的 DataLoader 实现。
  *
- * <p><b>使用示例</b>：
- * <pre>{@code
- * DataSet dataset = new ArrayDataset(xs, ys);
- * DataLoader loader = new DataLoader(dataset)
- *     .batchSize(32)
- *     .shuffle(true)
- *     .numWorkers(4);
- * 
- * for (Batch batch : loader) {
- *     Variable x = batch.toVariableX();
- *     Variable y = batch.toVariableY();
- *     // 训练逻辑...
- * }
- * }</pre>
+ * 提供灵活的数据加载能力，支持：
+ * - 批次数据加载
+ * - 数据打乱（shuffle）
+ * - 多线程异步预取（prefetch）
+ * - 自定义采样器
+ *
+ * 使用示例：
+ *   DataSet dataset = new ArrayDataset(xs, ys);
+ *   DataLoader loader = new DataLoader(dataset).batchSize(32).shuffle(true).numWorkers(4);
+ *   for (Batch batch : loader) {
+ *       Variable x = batch.toVariableX();
+ *       Variable y = batch.toVariableY();
+ *       // 训练逻辑...
+ *   }
  *
  * @author TinyAI
  * @version 2.0

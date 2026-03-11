@@ -4,9 +4,7 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
 /**
- * 分类评估工具类
- * <p>
- * 提供分类模型的评估方法，如准确率计算等。
+ * 分类评估工具类，提供分类模型的评估方法，如准确率计算等。
  *
  * @author TinyDL
  * @version 1.0

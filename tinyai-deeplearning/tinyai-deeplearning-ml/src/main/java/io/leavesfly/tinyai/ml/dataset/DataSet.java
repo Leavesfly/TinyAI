@@ -5,9 +5,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 表示机器学习中的用于训练、测试或验证的数据集抽象类
- * 
- * 该类是所有数据集实现的基类，定义了数据集的基本操作接口：
+ * 用于机器学习训练、测试或验证的数据集抽象类。
+ *
+ * 该类是所有数据集实现的基类，定义基本操作接口：
  * 1. 批次数据的获取
  * 2. 数据集的准备和预处理
  * 3. 数据的随机打乱
@@ -62,13 +62,14 @@ public abstract class DataSet {
     public abstract void shuffle();
 
     /**
-     * 将数据随机拆分成训练、测试和验证集三部分
-     * @param trainRatio 训练集比例
-     * @param testRatio 测试集比例
-     * @param validaRation 验证集比例
+     * 将数据随机拆分成训练、测试和验证集三部分。
+     *
+     * @param trainRatio      训练集比例
+     * @param testRatio       测试集比例
+     * @param validationRatio 验证集比例
      * @return 分割后的数据集映射
      */
-    public abstract Map<String, DataSet> splitDataset(float trainRatio, float testRatio, float validaRation);
+    public abstract Map<String, DataSet> splitDataset(float trainRatio, float testRatio, float validationRatio);
 
     /**
      * 获取训练数据集
@@ -80,11 +81,11 @@ public abstract class DataSet {
 
     /**
      * 获取测试数据集
+     *
      * @return 测试数据集
      */
     public DataSet getTestDataSet() {
         return splitDatasetMap.get(Usage.TEST.name());
-
     }
 
     /**

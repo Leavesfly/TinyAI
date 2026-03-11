@@ -9,19 +9,16 @@ import io.leavesfly.tinyai.ndarr.cpu.utils.IndexConverter;
 import java.util.Arrays;
 
 /**
- * 累加操作类
- * <p>提供数组累加相关的操作，包括在指定位置累加数组元素等</p>
+ * 累加操作类，提供在指定位置累加数组元素等功能。
  */
 public class AccumulationOperations {
 
     /**
-     * 在指定位置累加数组元素
-     *
-     * <p>在指定的行和列位置上累加另一个数组的元素。这个方法常用于反向传播中梯度的累积。</p>
+     * 在指定行、列位置累加另一数组元素，常用于反向传播梯度累积。
      *
      * @param array     目标数组
-     * @param rowSlices 行索引数组，指定要累加的行位置
-     * @param colSlices 列索引数组，指定要累加的列位置
+     * @param rowSlices 行索引数组
+     * @param colSlices 列索引数组
      * @param other     要累加的数组
      * @return 累加结果数组
      * @throws IllegalArgumentException 当输入参数不合法时抛出

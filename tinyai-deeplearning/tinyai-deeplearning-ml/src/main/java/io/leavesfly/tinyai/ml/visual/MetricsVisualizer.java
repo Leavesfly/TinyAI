@@ -19,9 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 指标可视化工具
- * <p>
- * 使用JFreeChart绘制训练过程中的各种指标曲线,支持:
+ * 指标可视化工具，使用 JFreeChart 绘制训练过程中的各种指标曲线，支持：
  * - 损失曲线(Loss Curve)
  * - 准确率曲线(Accuracy Curve)
  * - 学习率曲线(Learning Rate Curve)

@@ -4,10 +4,8 @@ import io.leavesfly.tinyai.ml.model.Model;
 import io.leavesfly.tinyai.ml.visual.ValidationUtils;
 
 /**
- * 早停机制
- * <p>
- * 监控训练指标，当指标不再改善时提前停止训练，防止过拟合
- * 
+ * 早停机制，监控训练指标，当指标不再改善时提前停止训练，防止过拟合。
+ *
  * @author TinyAI
  * @version 1.0
  */

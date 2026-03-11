@@ -5,9 +5,8 @@ import io.leavesfly.tinyai.ndarr.cpu.ShapeCpu;
 import io.leavesfly.tinyai.ndarr.cpu.utils.ArrayValidator;
 
 /**
- * 轴操作类
- * <p>提供沿指定轴进行的各种操作，包括最大值、最小值、argMax等</p>
- * <p>注意：当前实现主要支持最后两个轴的优化操作</p>
+ * 轴操作类，提供沿指定轴的最大值、最小值、argMax 等操作。
+ * 当前实现主要优化最后两个轴。
  */
 public class AxisOperations {
 

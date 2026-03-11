@@ -20,9 +20,7 @@ import java.util.Map;
 import static org.junit.Assert.*;
 
 /**
- * Evaluator 包相关类的单元测试
- * <p>
- * 测试 AccuracyEval、RegressEval、Evaluator 相关功能
+ * Evaluator 包相关类的单元测试，测试 AccuracyEval、RegressEval、Evaluator 相关功能。
  *
  * @author TinyDL
  * @version 1.0
@@ -232,8 +230,8 @@ public class EvaluatorTest {
             // 测试数据不需要打乱
         }
 
-        public Map<String, DataSet> splitDataset(float trainRatio, float testRatio, float validaRation) {
-            if (Math.abs(trainRatio + testRatio + validaRation - 1.0f) > 1e-6) {
+        public Map<String, DataSet> splitDataset(float trainRatio, float testRatio, float validationRatio) {
+            if (Math.abs(trainRatio + testRatio + validationRatio - 1.0f) > 1e-6f) {
                 throw new RuntimeException("splitDataset parameters error!");
             }
 

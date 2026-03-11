@@ -7,10 +7,8 @@ import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 
 /**
- * 参数操作接口
- * <p>
- * 提供统一的参数复制、比较等操作，支持任意维度的参数
- * 
+ * 参数操作接口，提供统一的参数复制、比较等操作，支持任意维度的参数。
+ *
  * @author TinyAI
  * @version 1.0
  */

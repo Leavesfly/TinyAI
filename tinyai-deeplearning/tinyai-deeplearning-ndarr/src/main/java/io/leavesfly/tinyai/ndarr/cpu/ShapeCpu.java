@@ -6,10 +6,8 @@ import java.io.Serializable;
 import java.util.Arrays;
 
 /**
- * 表示矩阵或向量等N维数组的形状
- * <p>
- * Shape类用于描述N维数组的维度信息，包含各维度的大小以及用于索引计算的乘数。
- * 该类是不可变的，一旦创建就不能修改。
+ * 表示 N 维数组的形状。
+ * 描述各维度大小及用于索引计算的乘数，创建后不可变。
  */
 public class ShapeCpu implements Serializable, Shape {
 

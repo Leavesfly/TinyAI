@@ -12,9 +12,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 参数管理器 - 专门处理模型参数的保存、加载和管理
- * <p>
- * 提供更灵活的参数操作功能，包括：
+ * 参数管理器，专门处理模型参数的保存、加载和管理。
+ *
+ * 提供灵活的参数操作功能，包括：
  * 1. 参数的保存和加载
  * 2. 参数在不同模型间的复制
  * 3. 参数的比较和统计
@@ -82,8 +82,6 @@ public class ParameterManager {
         if (sourceModel == null || targetModel == null) {
             throw new IllegalArgumentException("模型不能为空");
         }
-        ValidationUtils.requireNonNull(sourceModel, "sourceModel");
-        ValidationUtils.requireNonNull(targetModel, "targetModel");
 
         Map<String, Parameter> sourceParams = sourceModel.getAllParams();
         Map<String, Parameter> targetParams = targetModel.getAllParams();
@@ -353,12 +351,8 @@ public class ParameterManager {
     }
 
     /**
-     * 参数统计信息类
-     * <p>
-     * 用于存储和表示模型参数的统计信息，包括：
-     * 1. 总参数数量
-     * 2. 参数组数量
-     * 3. 参数值的最小值、最大值和平均值
+     * 参数统计信息类，用于存储模型参数的统计信息：
+     * 总参数数量、参数组数量、参数值的最小值/最大值/平均值。
      */
     public static class ParameterStats {
         public long totalParameters = 0;

@@ -3,8 +3,7 @@ package io.leavesfly.tinyai.ndarr.cpu.utils;
 import io.leavesfly.tinyai.ndarr.cpu.ShapeCpu;
 
 /**
- * 索引转换工具类
- * <p>提供多维索引与一维线性索引之间的转换功能</p>
+ * 索引转换工具类，提供多维索引与一维线性索引的相互转换。
  */
 public class IndexConverter {
 

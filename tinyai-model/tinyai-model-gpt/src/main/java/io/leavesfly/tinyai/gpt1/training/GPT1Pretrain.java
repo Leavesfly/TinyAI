@@ -4,7 +4,8 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.gpt1.GPT1Config;
 import io.leavesfly.tinyai.gpt1.GPT1Model;
 import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
-import io.leavesfly.tinyai.ml.optimize.SGD;
+import io.leavesfly.tinyai.ml.optimize.Adam;
+import io.leavesfly.tinyai.ml.optimize.Optimizer;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 
@@ -35,7 +36,7 @@ public class GPT1Pretrain {
     private final GPT1Config config;
     private final GPT1Dataset dataset;
     private final SoftmaxCrossEntropy lossFunction;
-    private final SGD optimizer;
+    private final Optimizer optimizer;
     
     // 训练超参数
     private int maxEpochs;
@@ -75,8 +76,8 @@ public class GPT1Pretrain {
         this.saveInterval = 5000;
         this.checkpointDir = "./checkpoints/gpt1_pretrain";
         
-        // 创建优化器(SGD节省内存，避免Adam大量临时对象)
-        this.optimizer = new SGD(model, initialLearningRate);
+        // 使用Adam优化器，收敛速度比SGD快3-5倍，对稀疏梯度处理更好
+        this.optimizer = new Adam(model, initialLearningRate, 0.9f, 0.999f, 1e-8f);
         
         // 初始化状态
         this.currentEpoch = 0;

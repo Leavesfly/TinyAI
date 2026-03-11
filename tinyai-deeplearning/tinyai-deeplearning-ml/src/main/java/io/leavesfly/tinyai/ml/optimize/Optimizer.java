@@ -9,17 +9,15 @@ import java.util.Map;
 import java.io.Serializable;
 
 /**
- * 参数优化器抽象类
- * <p>
- * 该类是所有参数优化器实现的基类，定义了参数更新的基本接口和流程。
+ * 参数优化器抽象类。
+ *
+ * 该类是所有参数优化器实现的基类，定义参数更新的基本接口和流程，
  * 子类需要实现具体的参数更新逻辑。
- * 
- * <p>V2增强功能:
- * <ul>
- *   <li>优化器状态管理(state_dict/load_state_dict)</li>
- *   <li>学习率调度支持</li>
- *   <li>参数组管理</li>
- * </ul>
+ *
+ * V2 增强功能：
+ * - 优化器状态管理（state_dict/load_state_dict）
+ * - 学习率调度支持
+ * - 参数组管理
  *
  * @author TinyDL
  * @version 2.0
@@ -153,9 +151,7 @@ public abstract class Optimizer implements Serializable {
     /* ===== PyTorch风格状态管理API ===== */
 
     /**
-     * 导出优化器状态字典
-     * <p>
-     * 包含优化器的所有状态（如动量、速度等）和超参数
+     * 导出优化器状态字典，包含所有状态（如动量、速度等）和超参数。
      *
      * @return 状态字典
      */
@@ -175,9 +171,7 @@ public abstract class Optimizer implements Serializable {
     }
 
     /**
-     * 加载优化器状态字典
-     * <p>
-     * 从状态字典恢复优化器状态
+     * 从状态字典恢复优化器状态。
      *
      * @param state_dict 状态字典
      */
@@ -201,9 +195,7 @@ public abstract class Optimizer implements Serializable {
     }
     
     /**
-     * 清空梯度（便捷方法）
-     * <p>
-     * 等价于model.clearGrads()
+     * 清空梯度（便捷方法），等价于 model.clearGrads()。
      */
     public void zero_grad() {
         if (target != null) {

@@ -3,18 +3,15 @@ package io.leavesfly.tinyai.ndarr.cpu.utils;
 import io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu;
 
 /**
- * 数组格式化工具类
- * <p>提供数组的字符串表示功能</p>
+ * 数组格式化工具类，提供数组的字符串表示。
  */
 public class ArrayFormatter {
 
     /**
-     * 将数组转换为字符串表示
-     *
-     * <p>对于小数组会显示所有元素，对于大数组只会显示部分元素</p>
+     * 将数组转换为字符串，小数组显示全部元素，大数组显示部分元素。
      *
      * @param array 数组
-     * @return 数组的字符串表示
+     * @return 字符串表示
      */
     public static String toString(NdArrayCpu array) {
         StringBuilder sb = new StringBuilder();

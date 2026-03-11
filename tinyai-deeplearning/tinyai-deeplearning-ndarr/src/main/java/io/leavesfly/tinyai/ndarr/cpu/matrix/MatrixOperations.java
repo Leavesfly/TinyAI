@@ -5,17 +5,14 @@ import io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu;
 import io.leavesfly.tinyai.ndarr.cpu.ShapeCpu;
 
 /**
- * 矩阵运算操作类
- * <p>提供矩阵乘法、切片等矩阵相关操作</p>
- * <p>经过性能优化，使用缓存友好的循环顺序和预计算优化</p>
+ * 矩阵运算操作类。
+ * 提供矩阵乘法、切片等操作，采用缓存友好的循环顺序和预计算优化。
  */
 public class MatrixOperations {
 
     /**
-     * 矩阵内积运算（矩阵乘法）
-     *
-     * <p>执行标准的矩阵乘法运算，要求第一个矩阵的列数等于第二个矩阵的行数</p>
-     * <p>支持多维数组的批量矩阵乘法，自动处理广播机制</p>
+     * 矩阵内积运算（矩阵乘法）。
+     * 要求左矩阵列数等于右矩阵行数，支持多维批量乘法和广播。
      *
      * @param left  左操作数数组
      * @param right 右操作数数组
@@ -53,13 +50,12 @@ public class MatrixOperations {
     }
 
     /**
-     * 2D矩阵乘法特化实现（性能优化版本）
-     * <p>使用缓存友好的循环顺序：i-k-j，提高缓存命中率</p>
+     * 2D 矩阵乘法特化实现，使用 i-k-j 循环顺序提高缓存命中率。
      *
-     * @param left     左矩阵
-     * @param right    右矩阵
-     * @param leftRows 左矩阵行数（M）
-     * @param leftCols 左矩阵列数（K）
+     * @param left      左矩阵
+     * @param right     右矩阵
+     * @param leftRows  左矩阵行数（M）
+     * @param leftCols  左矩阵列数（K）
      * @param rightCols 右矩阵列数（N）
      * @return 矩阵乘法结果 (M × N)
      */
@@ -174,14 +170,12 @@ public class MatrixOperations {
     }
 
     /**
-     * 获取数组的子集（切片操作）
-     *
-     * <p>支持对矩阵的最后两个维度进行切片操作</p>
-     * <p>优化：预计算索引映射，使用批量复制优化连续数据访问</p>
+     * 获取数组子集（切片操作）。
+     * 支持对矩阵最后两维切片，预计算索引并批量复制以优化连续访问。
      *
      * @param array      数组
-     * @param rowSlices  行索引数组，null表示选择所有行
-     * @param colSlices  列索引数组，null表示选择所有列
+     * @param rowSlices  行索引数组，null 表示选择所有行
+     * @param colSlices  列索引数组，null 表示选择所有列
      * @return 切片结果数组
      * @throws IllegalArgumentException 当数组不是矩阵或参数不合法时抛出
      */
@@ -207,14 +201,13 @@ public class MatrixOperations {
     }
 
     /**
-     * 点索引模式：获取指定坐标点的值
-     * <p>rowSlices[i] 和 colSlices[i] 组成一个坐标点</p>
+     * 点索引模式：rowSlices[i] 与 colSlices[i] 组成坐标点，获取对应值。
      *
      * @param array      源数组
      * @param rowSlices  行索引数组
      * @param colSlices  列索引数组
      * @param cols       源数组列数
-     * @return 结果数组（形状为 1 × N，N为索引数组长度）
+     * @return 结果数组（形状 1×N，N 为索引数组长度）
      */
     private static NdArrayCpu getItemPointIndices(NdArrayCpu array, int[] rowSlices, int[] colSlices, int cols) {
         int count = colSlices.length;
@@ -232,12 +225,11 @@ public class MatrixOperations {
     }
 
     /**
-     * 矩形切片模式：获取矩形区域的子矩阵
-     * <p>支持行切片和列切片的组合</p>
+     * 矩形切片模式：获取行、列切片组合而成的子矩阵。
      *
      * @param array      源数组
-     * @param rowSlices  行索引数组，null表示选择所有行
-     * @param colSlices  列索引数组，null表示选择所有列
+     * @param rowSlices  行索引数组，null 表示选择所有行
+     * @param colSlices  列索引数组，null 表示选择所有列
      * @param rows       源数组行数
      * @param cols       源数组列数
      * @return 切片结果数组
@@ -330,14 +322,12 @@ public class MatrixOperations {
     }
 
     /**
-     * 设置数组的子集（切片赋值操作）
-     *
-     * <p>支持点索引模式和矩形切片模式的赋值操作</p>
-     * <p>优化：预计算索引，使用批量复制优化连续数据写入</p>
+     * 设置数组子集（切片赋值）。
+     * 支持点索引和矩形切片，预计算索引并批量复制以优化写入。
      *
      * @param array      数组
-     * @param rowSlices  行索引数组，null表示选择所有行
-     * @param colSlices  列索引数组，null表示选择所有列
+     * @param rowSlices  行索引数组，null 表示选择所有行
+     * @param colSlices  列索引数组，null 表示选择所有列
      * @param data       要设置的数据
      * @return 当前数组实例
      * @throws IllegalArgumentException 当数组不是矩阵或参数不合法时抛出
@@ -430,10 +420,7 @@ public class MatrixOperations {
     // =============================================================================
 
     /**
-     * 高性能连续区域赋值（新增方法）
-     * <p>
-     * 使用System.arraycopy实现批量复制，性能比逐点赋值提升3-5倍
-     * </p>
+     * 高性能连续区域赋值，使用 System.arraycopy 批量复制，性能优于逐点赋值。
      *
      * @param array    目标数组
      * @param startRow 起始行索引（包含）
@@ -480,10 +467,7 @@ public class MatrixOperations {
     }
 
     /**
-     * 行切片赋值（新增方法）
-     * <p>
-     * 高效设置指定行的数据
-     * </p>
+     * 行切片赋值，高效设置指定行的数据。
      *
      * @param array      目标数组
      * @param rowIndices 行索引数组
@@ -516,10 +500,7 @@ public class MatrixOperations {
     }
 
     /**
-     * 列切片赋值（新增方法）
-     * <p>
-     * 高效设置指定列的数据
-     * </p>
+     * 列切片赋值，高效设置指定列的数据。
      *
      * @param array      目标数组
      * @param colIndices 列索引数组

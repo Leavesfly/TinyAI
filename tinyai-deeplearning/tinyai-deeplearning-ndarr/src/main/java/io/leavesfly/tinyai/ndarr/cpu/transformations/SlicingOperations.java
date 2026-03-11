@@ -4,8 +4,7 @@ import io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu;
 import io.leavesfly.tinyai.ndarr.cpu.ShapeCpu;
 
 /**
- * 切片操作类
- * <p>提供数组切片相关的操作，包括获取子数组等</p>
+ * 切片操作类，提供获取子数组等切片功能。
  */
 public class SlicingOperations {
 

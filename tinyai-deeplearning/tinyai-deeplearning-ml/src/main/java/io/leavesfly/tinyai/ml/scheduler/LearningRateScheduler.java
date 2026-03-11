@@ -3,10 +3,8 @@ package io.leavesfly.tinyai.ml.scheduler;
 import io.leavesfly.tinyai.ml.optimize.Optimizer;
 
 /**
- * 学习率调度器接口
- * <p>
- * 用于在训练过程中动态调整学习率
- * 
+ * 学习率调度器接口，用于在训练过程中动态调整学习率。
+ *
  * @author TinyAI
  * @version 1.0
  */

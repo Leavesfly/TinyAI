@@ -8,10 +8,8 @@ import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 import java.util.Map;
 
 /**
- * 梯度裁剪工具
- * <p>
- * 用于防止梯度爆炸问题，通过限制梯度的大小来稳定训练过程
- * 
+ * 梯度裁剪工具，用于防止梯度爆炸，通过限制梯度大小稳定训练过程。
+ *
  * @author TinyAI
  * @version 1.0
  */

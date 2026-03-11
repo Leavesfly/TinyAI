@@ -9,10 +9,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 训练检查点类
- * <p>
- * 用于保存和加载完整的训练状态,支持断点续训。
- * 类似PyTorch的checkpoint机制,可以保存:
+ * 训练检查点类，用于保存和加载完整训练状态，支持断点续训。
+ * 类似 PyTorch 的 checkpoint 机制，可保存：
  * - 模型参数
  * - 优化器状态
  * - 训练epoch

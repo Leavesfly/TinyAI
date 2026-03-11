@@ -3,9 +3,7 @@ package io.leavesfly.tinyai.ml.visual;
 import java.util.*;
 
 /**
- * 训练监控器
- * <p>
- * 实时记录和展示训练过程中的关键指标,支持:
+ * 训练监控器，实时记录和展示训练过程中的关键指标，支持：
  * - 损失值追踪
  * - 准确率追踪
  * - 学习率追踪

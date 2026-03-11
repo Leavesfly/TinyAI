@@ -10,9 +10,7 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * 梯度聚合器 - 用于多线程训练中收集和平均梯度
- * <p>
- * 支持多个线程并发提交梯度，自动进行梯度平均，确保线程安全
+ * 梯度聚合器，用于多线程训练中收集和平均梯度，支持多线程并发提交，确保线程安全。
  */
 public class GradientAggregator {
 

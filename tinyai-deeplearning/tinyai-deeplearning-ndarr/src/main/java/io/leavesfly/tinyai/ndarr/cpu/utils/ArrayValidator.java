@@ -3,8 +3,7 @@ package io.leavesfly.tinyai.ndarr.cpu.utils;
 import io.leavesfly.tinyai.ndarr.Shape;
 
 /**
- * 数组验证工具类
- * <p>提供各种数组和形状验证功能</p>
+ * 数组验证工具类，提供数组与形状的各类验证功能。
  */
 public class ArrayValidator {
 
@@ -36,15 +35,17 @@ public class ArrayValidator {
     }
 
     /**
-     * 验证轴参数的有效性
+     * 验证轴参数有效性，支持负轴（-1 表示最后一维）。
      *
-     * @param axis    轴参数
-     * @param dimNum  维度数量
+     * @param axis   轴参数，有效范围 [0, dimNum) 或 [-dimNum, -1]
+     * @param dimNum 维度数量
      * @throws IllegalArgumentException 当轴参数无效时抛出
      */
     public static void validateAxis(int axis, int dimNum) {
-        if (axis < 0 || axis >= dimNum) {
-            throw new IllegalArgumentException(String.format("轴参数%d超出范围[0,%d)", axis, dimNum));
+        int normalized = axis < 0 ? axis + dimNum : axis;
+        if (normalized < 0 || normalized >= dimNum) {
+            throw new IllegalArgumentException(
+                    String.format("轴参数 %d 超出有效范围 [0, %d) 或 [-%d, -1]", axis, dimNum, dimNum));
         }
     }
 
@@ -89,14 +90,12 @@ public class ArrayValidator {
     }
 
     /**
-     * 递归验证多维数组各维度大小的一致性
-     *
-     * <p>确保多维数组在每个维度上的大小是一致的，避免不规则数组</p>
+     * 递归验证多维数组各维度大小一致，避免不规则数组。
      *
      * @param array         当前数组对象
      * @param depth         当前递归深度
-     * @param expectedSizes 各层级的期望大小列表
-     * @throws IllegalArgumentException 当数组维度不一致或包含null元素时抛出
+     * @param expectedSizes 各层级期望大小列表
+     * @throws IllegalArgumentException 当维度不一致或包含 null 时抛出
      */
     private static void validateDimensionConsistency(Object array, int depth, java.util.List<Integer> expectedSizes) {
         if (array == null) {

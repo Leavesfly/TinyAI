@@ -5,10 +5,8 @@ import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.NdArrayUtil;
 
 /**
- * 一批数据
- * <p>
- * 该类表示机器学习中的一批训练或测试数据，包含输入数据和对应的标签数据。
- * 提供了将数据转换为Variable对象的方法，便于模型训练和推理。
+ * 一批数据，表示机器学习中的一批训练或测试数据，包含输入和对应标签。
+ * 提供将数据转换为 Variable 对象的方法，便于模型训练和推理。
  *
  * @author TinyDL
  * @version 1.0

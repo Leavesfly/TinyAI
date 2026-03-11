@@ -5,7 +5,7 @@ import io.leavesfly.tinyai.gpt3.GPT3Config;
 import io.leavesfly.tinyai.gpt3.GPT3Model;
 import io.leavesfly.tinyai.ml.loss.Loss;
 import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
-import io.leavesfly.tinyai.ml.optimize.SGD;
+import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.v2.core.Parameter;
@@ -39,7 +39,7 @@ public class GPT3Finetune {
     private final GPT3Dataset valDataset;
     private final SoftmaxCrossEntropy lossFunction;
     private final SoftmaxCrossEntropy perTokenLossFunction;
-    private final SGD optimizer;
+    private final Adam optimizer;
 
     // 微调超参数
     private int maxEpochs;
@@ -49,6 +49,10 @@ public class GPT3Finetune {
     private int evalInterval;
     private int patience;
     private String checkpointDir;
+
+    // 学习率调度参数（Warmup支持）
+    private int warmupSteps;
+    private float initialLearningRate;
 
     // 训练状态
     private int currentEpoch;
@@ -73,16 +77,19 @@ public class GPT3Finetune {
         this.lossFunction = new SoftmaxCrossEntropy();
         this.perTokenLossFunction = new SoftmaxCrossEntropy(Loss.Reduction.NONE);
 
-        // 微调默认超参数（学习率比预训练小10倍）
+        // 微调默认超参数（学习率比预训练小，但使用Adam优化器加速收敛）
         this.maxEpochs = 5;
-        this.learningRate = 6e-5f;
+        this.learningRate = 1e-4f;  // 提高学习率以加速收敛
+        this.initialLearningRate = this.learningRate;
+        this.warmupSteps = 50;      // 50步线性warmup稳定训练初期
         this.maxGradNorm = 1.0f;
         this.logInterval = 50;
         this.evalInterval = 100;
         this.patience = 3;
         this.checkpointDir = "./checkpoints/gpt3_finetune";
 
-        this.optimizer = new SGD(model, learningRate);
+        // 使用Adam优化器（比SGD收敛更快更稳定）
+        this.optimizer = new Adam(model, learningRate, 0.9f, 0.999f, 1e-8f);
 
         this.currentEpoch = 0;
         this.globalStep = 0;
@@ -103,8 +110,20 @@ public class GPT3Finetune {
     public GPT3Finetune configure(int maxEpochs, float learningRate, int patience) {
         this.maxEpochs = maxEpochs;
         this.learningRate = learningRate;
+        this.initialLearningRate = learningRate;
         this.patience = patience;
         this.optimizer.setLearningRate(learningRate);
+        return this;
+    }
+
+    /**
+     * 设置Warmup步数
+     *
+     * @param warmupSteps warmup预热步数（默认50步）
+     * @return this
+     */
+    public GPT3Finetune setWarmupSteps(int warmupSteps) {
+        this.warmupSteps = warmupSteps;
         return this;
     }
 
@@ -136,6 +155,8 @@ public class GPT3Finetune {
         System.out.println("  - 验证样本: " + valDataset.getSampleCount());
         System.out.println("  - 最大轮次: " + maxEpochs);
         System.out.println("  - 学习率: " + learningRate);
+        System.out.println("  - Warmup步数: " + warmupSteps);
+        System.out.println("  - 优化器: Adam");
         System.out.println("  - 早停耐心: " + patience);
         System.out.println("=".repeat(60));
 
@@ -222,6 +243,9 @@ public class GPT3Finetune {
      * @return 损失值
      */
     private float trainStep(GPT3Dataset.Batch batch) {
+        // 更新学习率（支持Warmup）
+        updateLearningRate();
+
         NdArray inputIds  = batch.getInputIds();
         NdArray targetIds = batch.getTargetIds();
         NdArray lossMask  = batch.getLossMask();
@@ -332,6 +356,25 @@ public class GPT3Finetune {
                 }
             }
         }
+    }
+
+    /**
+     * 更新学习率（支持线性Warmup）
+     *
+     * 在训练初期，学习率从0线性增加到目标学习率，
+     * 避免初期梯度不稳定导致的震荡。
+     */
+    private void updateLearningRate() {
+        float currentLr;
+        if (globalStep < warmupSteps) {
+            // 线性warmup：从很小的值线性增加到目标学习率
+            currentLr = initialLearningRate * ((float) (globalStep + 1) / warmupSteps);
+        } else {
+            // warmup结束后保持目标学习率
+            currentLr = initialLearningRate;
+        }
+        this.learningRate = currentLr;
+        optimizer.setLearningRate(currentLr);
     }
 
     /**

@@ -1,5 +1,7 @@
 package io.leavesfly.tinyai.gpt3;
 
+import java.io.Serializable;
+
 /**
  * GPT-3模型配置类（完全独立实现）
  * 
@@ -12,7 +14,9 @@ package io.leavesfly.tinyai.gpt3;
  * @author leavesfly
  * @version 2.0 - 完全独立实现
  */
-public class GPT3Config {
+public class GPT3Config implements Serializable {
+
+    private static final long serialVersionUID = 1L;
     
     // ==================== 基础模型配置 ====================
     

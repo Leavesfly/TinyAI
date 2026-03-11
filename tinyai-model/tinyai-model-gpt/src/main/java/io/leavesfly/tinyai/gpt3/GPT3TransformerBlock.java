@@ -6,80 +6,78 @@ import io.leavesfly.tinyai.nnet.v2.layer.activation.GELU;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
 import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
-import io.leavesfly.tinyai.nnet.v2.layer.transformer.MultiHeadAttention;
 
 /**
- * GPT-3 Transformer块实现（使用V2 API）
- * 
+ * GPT-3 Transformer块实现（V2 API）
+ *
  * GPT-3的核心创新：并行注意力和前馈网络计算
  * 与GPT-2的串行架构不同，GPT-3同时计算注意力和MLP，然后合并结果
- * 
+ *
  * 并行架构流程：
  * <pre>
  * input -> split
- *           |-> LayerNorm1 -> MultiHeadAttention -> attn_output
- *           |-> LayerNorm2 -> FeedForward -> mlp_output
+ *           |-> LayerNorm1 -> GPT3Attention -> attn_output  (RoPE + 稀疏注意力)
+ *           |-> LayerNorm2 -> FeedForward  -> mlp_output
  *          merge -> input + attn_output + mlp_output -> output
  * </pre>
- * 
- * 对比GPT-2串行架构：
+ *
+ * 串行兼容模式（parallelAttention=false）：
  * <pre>
  * input -> LayerNorm1 -> Attention -> Add(input)
  *       -> LayerNorm2 -> FeedForward -> Add -> output
  * </pre>
- * 
- * 优势：
- * 1. 提升计算效率：注意力和MLP可并行计算
- * 2. 更好的梯度流动
- * 3. 充分利用现代硬件的并行能力
- * 
+ *
+ * 注意力特性（由 GPT3Config 控制）：
+ * - useRotaryEmbedding=true  : 启用 RoPE 旋转位置编码
+ * - sparseAttention=true     : 启用局部窗口 + 步长全局稀疏注意力
+ * - 两者可独立开启或组合使用
+ *
  * @author leavesfly
- * @version 1.0
+ * @version 2.0 - 接入 GPT3Attention（RoPE + 稀疏注意力 + KV Cache）
  */
 public class GPT3TransformerBlock extends Module {
-    
+
     private final GPT3Config config;
-    
+
     // 注意力分支
-    private final LayerNorm layerNorm1;           // 注意力分支的LayerNorm
-    private final MultiHeadAttention attention;    // 多头自注意力
-    private final Dropout attnDropout;            // 注意力输出dropout
-    
+    private final LayerNorm layerNorm1;       // 注意力分支的 Pre-LayerNorm
+    private final GPT3Attention attention;    // 增强注意力（支持 RoPE / 稀疏注意力 / KV Cache）
+    private final Dropout attnDropout;        // 注意力输出残差 Dropout
+
     // 前馈分支
-    private final LayerNorm layerNorm2;           // MLP分支的LayerNorm
-    private final Linear ffnLinear1;              // 第一个线性层
-    private final GELU activation;                // GELU激活函数
-    private final Linear ffnLinear2;              // 第二个线性层
-    private final Dropout mlpDropout;             // MLP输出dropout
-    
+    private final LayerNorm layerNorm2;       // MLP 分支的 Pre-LayerNorm
+    private final Linear ffnLinear1;          // FFN 第一层：dModel -> dFF
+    private final GELU activation;            // GELU 激活函数
+    private final Linear ffnLinear2;          // FFN 第二层：dFF -> dModel
+    private final Dropout mlpDropout;         // MLP 输出残差 Dropout
+
     /**
-     * 构造GPT-3 Transformer块
-     * 
-     * @param name 块名称
-     * @param config GPT-3配置
+     * 构造 GPT-3 Transformer 块
+     *
+     * @param name   块名称
+     * @param config GPT-3 配置（包含注意力模式控制开关）
      */
     public GPT3TransformerBlock(String name, GPT3Config config) {
         super(name);
         this.config = config;
-        
+
         int dModel = config.getNEmbd();
-        int numHeads = config.getNHead();
         int dFF = config.getNInner();
-        float dropout = (float) config.getResidPdrop();
-        float attnDropoutRate = (float) config.getAttnPdrop();
-        
+        float residDropout = (float) config.getResidPdrop();
+
         // 初始化注意力分支
         this.layerNorm1 = new LayerNorm("ln1", dModel, (float) config.getLayerNormEpsilon());
-        this.attention = new MultiHeadAttention("attn", dModel, numHeads, attnDropoutRate);
-        this.attnDropout = new Dropout("attn_dropout", dropout);
-        
+        // GPT3Attention 根据 config 中的开关自动启用 RoPE / 稀疏注意力
+        this.attention = new GPT3Attention("attn", config);
+        this.attnDropout = new Dropout("attn_dropout", residDropout);
+
         // 初始化前馈分支
         this.layerNorm2 = new LayerNorm("ln2", dModel, (float) config.getLayerNormEpsilon());
         this.ffnLinear1 = new Linear("ffn_fc1", dModel, dFF, true);
         this.activation = new GELU("gelu");
         this.ffnLinear2 = new Linear("ffn_fc2", dFF, dModel, true);
-        this.mlpDropout = new Dropout("mlp_dropout", dropout);
-        
+        this.mlpDropout = new Dropout("mlp_dropout", residDropout);
+
         // 注册所有子模块
         registerModule("ln1", layerNorm1);
         registerModule("attn", attention);
@@ -90,110 +88,133 @@ public class GPT3TransformerBlock extends Module {
         registerModule("ffn_fc2", ffnLinear2);
         registerModule("mlp_dropout", mlpDropout);
     }
-    
+
     @Override
     public Variable forward(Variable... inputs) {
         Variable x = inputs[0];  // (batch_size, seq_len, n_embd)
-        
-        // 获取序列长度并生成因果掩码
-        int seqLen = x.getValue().getShape().getDimension(1);
-        Variable causalMask = MultiHeadAttention.generateCausalMaskBatched(seqLen);
-        
+
         if (config.isParallelAttention()) {
-            // GPT-3并行架构
-            return forwardParallel(x, causalMask);
+            return forwardParallel(x);
         } else {
-            // 回退到GPT-2串行架构（兼容模式）
-            return forwardSequential(x, causalMask);
+            return forwardSequential(x);
         }
     }
-    
+
     /**
-     * GPT-3并行前向传播
-     * 同时计算注意力和MLP，然后合并
-     * 
-     * @param x 输入变量
-     * @param causalMask 因果掩码
-     * @return 输出变量
+     * 带 KV Cache 的前向传播（用于增量推理加速）
+     *
+     * @param x        输入张量 (batch, newSeqLen, dModel)
+     * @param cache    KV缓存（null 表示不使用）
+     * @param startPos 当前 Token 在完整序列中的起始位置
+     * @return 输出张量 (batch, newSeqLen, dModel)
      */
-    private Variable forwardParallel(Variable x, Variable causalMask) {
-        // 注意力分支：LayerNorm -> Attention
+    public Variable forwardWithCache(Variable x, GPT3KVCache cache, int startPos) {
+        if (config.isParallelAttention()) {
+            return forwardParallelWithCache(x, cache, startPos);
+        } else {
+            return forwardSequentialWithCache(x, cache, startPos);
+        }
+    }
+
+    /**
+     * GPT-3 并行前向传播
+     * 注意力分支和 MLP 分支同时对同一输入计算，最后将结果合并到残差中
+     */
+    private Variable forwardParallel(Variable x) {
+        // 注意力分支：Pre-LayerNorm -> GPT3Attention（含 RoPE/稀疏掩码）
         Variable attnInput = layerNorm1.forward(x);
-        Variable attnOutput = attention.forward(attnInput, attnInput, attnInput, causalMask, null);
+        Variable attnOutput = attention.forward(attnInput);
         attnOutput = attnDropout.forward(attnOutput);
-        
-        // MLP分支：LayerNorm -> Linear -> GELU -> Linear
+
+        // MLP 分支：Pre-LayerNorm -> Linear -> GELU -> Linear
         Variable mlpInput = layerNorm2.forward(x);
         Variable mlpOutput = ffnLinear1.forward(mlpInput);
         mlpOutput = activation.forward(mlpOutput);
         mlpOutput = ffnLinear2.forward(mlpOutput);
         mlpOutput = mlpDropout.forward(mlpOutput);
-        
-        // 合并：input + attn_output + mlp_output
-        Variable output = x.add(attnOutput).add(mlpOutput);
-        
-        return output;
+
+        // 并行残差合并：x + attn + mlp
+        return x.add(attnOutput).add(mlpOutput);
     }
-    
+
     /**
-     * GPT-2风格的串行前向传播（兼容模式）
-     * 
-     * @param x 输入变量
-     * @param causalMask 因果掩码
-     * @return 输出变量
+     * 带 KV Cache 的并行前向传播
      */
-    private Variable forwardSequential(Variable x, Variable causalMask) {
-        // 第一个子层：LayerNorm -> Attention -> Residual
+    private Variable forwardParallelWithCache(Variable x, GPT3KVCache cache, int startPos) {
+        Variable attnInput = layerNorm1.forward(x);
+        Variable attnOutput = attention.forwardWithCache(attnInput, cache, startPos);
+        attnOutput = attnDropout.forward(attnOutput);
+
+        Variable mlpInput = layerNorm2.forward(x);
+        Variable mlpOutput = ffnLinear1.forward(mlpInput);
+        mlpOutput = activation.forward(mlpOutput);
+        mlpOutput = ffnLinear2.forward(mlpOutput);
+        mlpOutput = mlpDropout.forward(mlpOutput);
+
+        return x.add(attnOutput).add(mlpOutput);
+    }
+
+    /**
+     * GPT-2 风格的串行前向传播（兼容模式）
+     * 先计算注意力，再计算 MLP，结果顺序叠加到残差
+     */
+    private Variable forwardSequential(Variable x) {
+        // 第一子层：Pre-LayerNorm -> Attention -> Residual
         Variable normalized1 = layerNorm1.forward(x);
-        Variable attnOutput = attention.forward(normalized1, normalized1, normalized1, causalMask, null);
+        Variable attnOutput = attention.forward(normalized1);
         attnOutput = attnDropout.forward(attnOutput);
         Variable residual1 = x.add(attnOutput);
-        
-        // 第二个子层：LayerNorm -> MLP -> Residual
+
+        // 第二子层：Pre-LayerNorm -> MLP -> Residual
         Variable normalized2 = layerNorm2.forward(residual1);
         Variable mlpOutput = ffnLinear1.forward(normalized2);
         mlpOutput = activation.forward(mlpOutput);
         mlpOutput = ffnLinear2.forward(mlpOutput);
         mlpOutput = mlpDropout.forward(mlpOutput);
-        Variable output = residual1.add(mlpOutput);
-        
-        return output;
+
+        return residual1.add(mlpOutput);
     }
-    
-    // ==================== Getter方法 ====================
-    
-    public LayerNorm getLayerNorm1() {
-        return layerNorm1;
+
+    /**
+     * 带 KV Cache 的串行前向传播
+     */
+    private Variable forwardSequentialWithCache(Variable x, GPT3KVCache cache, int startPos) {
+        Variable normalized1 = layerNorm1.forward(x);
+        Variable attnOutput = attention.forwardWithCache(normalized1, cache, startPos);
+        attnOutput = attnDropout.forward(attnOutput);
+        Variable residual1 = x.add(attnOutput);
+
+        Variable normalized2 = layerNorm2.forward(residual1);
+        Variable mlpOutput = ffnLinear1.forward(normalized2);
+        mlpOutput = activation.forward(mlpOutput);
+        mlpOutput = ffnLinear2.forward(mlpOutput);
+        mlpOutput = mlpDropout.forward(mlpOutput);
+
+        return residual1.add(mlpOutput);
     }
-    
-    public MultiHeadAttention getAttention() {
-        return attention;
-    }
-    
-    public LayerNorm getLayerNorm2() {
-        return layerNorm2;
-    }
-    
-    public Linear getFfnLinear1() {
-        return ffnLinear1;
-    }
-    
-    public GELU getActivation() {
-        return activation;
-    }
-    
-    public Linear getFfnLinear2() {
-        return ffnLinear2;
-    }
-    
-    public GPT3Config getConfig() {
-        return config;
-    }
-    
+
+    // ========================== Getter ==========================
+
+    public LayerNorm getLayerNorm1() { return layerNorm1; }
+
+    public GPT3Attention getAttention() { return attention; }
+
+    public LayerNorm getLayerNorm2() { return layerNorm2; }
+
+    public Linear getFfnLinear1() { return ffnLinear1; }
+
+    public GELU getActivation() { return activation; }
+
+    public Linear getFfnLinear2() { return ffnLinear2; }
+
+    public GPT3Config getConfig() { return config; }
+
     @Override
     public String toString() {
         String mode = config.isParallelAttention() ? "Parallel" : "Sequential";
-        return String.format("GPT3TransformerBlock{name='%s', mode=%s, dModel=%d, numHeads=%d, dFF=%d}",
-                name, mode, config.getNEmbd(), config.getNHead(), config.getNInner());
+        String attnFeatures = attention.toString();
+        return String.format(
+                "GPT3TransformerBlock{name='%s', mode=%s, dModel=%d, numHeads=%d, dFF=%d, attn=%s}",
+                name, mode, config.getNEmbd(), config.getNHead(), config.getNInner(), attnFeatures);
     }
 }

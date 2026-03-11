@@ -22,11 +22,18 @@ import java.util.*;
  * - 包含数据集自动生成功能
  * - 详细的训练过程说明和日志
  * - 完整的预训练-后训练-推理流程
+ * - 后训练采用行业主流的 ChatML 对话模板格式
+ * - 实现 Answer-Only Loss Masking（仅对回答部分计算损失）
  * 
  * V3特色：
  * - MoE架构的负载均衡训练
  * - 任务感知的数据标注和训练
  * - 代码生成任务的专门支持
+ * 
+ * 预训练 vs 后训练数据格式对比：
+ * - 预训练: 纯文本句子 → 全序列因果语言建模(CLM) loss
+ * - 后训练: ChatML 对话模板 → Answer-Only loss（只对 assistant 回答计算损失）
+ *   格式: [TASK] &lt;|im_start|&gt;user\n{问题}&lt;|im_end|&gt;\n&lt;|im_start|&gt;assistant\n{回答}&lt;|im_end|&gt;
  * 
  * @author leavesfly
  * @version 2.0
@@ -375,44 +382,52 @@ public class DeepSeekV3TrainDemoV2 {
     
     /**
      * 生成任务感知的问答对（后训练数据）
+     * 
+     * 采用行业主流的 ChatML 对话模板格式：
+     *   [TASK_TYPE] <|im_start|>user\n{问题}<|im_end|>\n<|im_start|>assistant\n{回答}<|im_end|>
+     * 
+     * 与预训练纯文本格式的关键区别：
+     * 1. 使用 <|im_start|>/<|im_end|> 特殊标记区分对话角色边界
+     * 2. 明确的 user/assistant 角色标注
+     * 3. 训练时只对 assistant 回答部分计算 loss（answer-only loss masking）
      */
     private static List<String> generateTaskAwareQA() {
         List<String> qa = new ArrayList<>();
         
-        // MoE相关问答 (20条)
-        qa.add("[REASONING] Question: What is Mixture of Experts? Answer: Mixture of Experts is an architecture that uses multiple specialized expert networks with a gating mechanism to route inputs efficiently");
-        qa.add("[REASONING] Question: How does MoE routing work? Answer: MoE routing uses a gating network to compute scores for each expert and selects the top K experts to process each input token");
-        qa.add("[REASONING] Question: Why is load balancing important in MoE? Answer: Load balancing ensures all experts are utilized evenly preventing some experts from being overused while others remain idle");
-        qa.add("[REASONING] Question: What is sparse activation? Answer: Sparse activation means only a subset of model parameters are active for each input reducing computational cost significantly");
-        qa.add("[MATH] Question: If MoE has 8 experts and uses top 2 routing what is the activation ratio? Answer: The activation ratio is 2 divided by 8 which equals 0.25 or 25 percent");
+        // MoE相关问答 (5条)
+        qa.add("[REASONING] <|im_start|>user\nWhat is Mixture of Experts?<|im_end|>\n<|im_start|>assistant\nMixture of Experts is an architecture that uses multiple specialized expert networks with a gating mechanism to route inputs efficiently<|im_end|>");
+        qa.add("[REASONING] <|im_start|>user\nHow does MoE routing work?<|im_end|>\n<|im_start|>assistant\nMoE routing uses a gating network to compute scores for each expert and selects the top K experts to process each input token<|im_end|>");
+        qa.add("[REASONING] <|im_start|>user\nWhy is load balancing important in MoE?<|im_end|>\n<|im_start|>assistant\nLoad balancing ensures all experts are utilized evenly preventing some experts from being overused while others remain idle<|im_end|>");
+        qa.add("[REASONING] <|im_start|>user\nWhat is sparse activation?<|im_end|>\n<|im_start|>assistant\nSparse activation means only a subset of model parameters are active for each input reducing computational cost significantly<|im_end|>");
+        qa.add("[MATH] <|im_start|>user\nIf MoE has 8 experts and uses top 2 routing what is the activation ratio?<|im_end|>\n<|im_start|>assistant\nThe activation ratio is 2 divided by 8 which equals 0.25 or 25 percent<|im_end|>");
         
-        // DeepSeek相关问答 (20条)
-        qa.add("[GENERAL] Question: What is DeepSeek V3? Answer: DeepSeek V3 is an advanced language model combining MoE architecture with task aware routing for efficient and high quality text generation");
-        qa.add("[REASONING] Question: How does task aware architecture help? Answer: Task aware architecture adapts model behavior based on task type routing inputs to experts specialized for reasoning coding math or other domains");
-        qa.add("[CODING] Question: What languages does DeepSeek support? Answer: DeepSeek supports ten programming languages including Python Java C plus plus JavaScript Go Rust TypeScript Ruby PHP and Swift");
-        qa.add("[CODING] Question: How is code quality evaluated? Answer: Code quality is evaluated on four dimensions correctness readability efficiency and adherence to style guidelines");
-        qa.add("[GENERAL] Question: What are DeepSeek advantages? Answer: DeepSeek advantages include efficient sparse computation task adaptive routing strong code generation and fast inference speed");
+        // DeepSeek相关问答 (5条)
+        qa.add("[GENERAL] <|im_start|>user\nWhat is DeepSeek V3?<|im_end|>\n<|im_start|>assistant\nDeepSeek V3 is an advanced language model combining MoE architecture with task aware routing for efficient and high quality text generation<|im_end|>");
+        qa.add("[REASONING] <|im_start|>user\nHow does task aware architecture help?<|im_end|>\n<|im_start|>assistant\nTask aware architecture adapts model behavior based on task type routing inputs to experts specialized for reasoning coding math or other domains<|im_end|>");
+        qa.add("[CODING] <|im_start|>user\nWhat languages does DeepSeek support?<|im_end|>\n<|im_start|>assistant\nDeepSeek supports ten programming languages including Python Java C plus plus JavaScript Go Rust TypeScript Ruby PHP and Swift<|im_end|>");
+        qa.add("[CODING] <|im_start|>user\nHow is code quality evaluated?<|im_end|>\n<|im_start|>assistant\nCode quality is evaluated on four dimensions correctness readability efficiency and adherence to style guidelines<|im_end|>");
+        qa.add("[GENERAL] <|im_start|>user\nWhat are DeepSeek advantages?<|im_end|>\n<|im_start|>assistant\nDeepSeek advantages include efficient sparse computation task adaptive routing strong code generation and fast inference speed<|im_end|>");
         
-        // 编程相关问答 (20条)
-        qa.add("[CODING] Question: What is Python used for? Answer: Python is used for machine learning data science web development automation scientific computing and general purpose programming");
-        qa.add("[CODING] Question: Explain object oriented programming. Answer: Object oriented programming organizes code into objects that combine data and methods providing encapsulation inheritance and polymorphism");
-        qa.add("[CODING] Question: What is algorithm complexity? Answer: Algorithm complexity measures computational resources required typically expressed as time complexity and space complexity using big O notation");
-        qa.add("[CODING] Question: Why is code readability important? Answer: Code readability makes programs easier to understand maintain debug and extend by other developers or future self");
-        qa.add("[CODING] Question: What are design patterns? Answer: Design patterns are reusable solutions to common software design problems providing tested templates for solving recurring challenges");
+        // 编程相关问答 (5条)
+        qa.add("[CODING] <|im_start|>user\nWhat is Python used for?<|im_end|>\n<|im_start|>assistant\nPython is used for machine learning data science web development automation scientific computing and general purpose programming<|im_end|>");
+        qa.add("[CODING] <|im_start|>user\nExplain object oriented programming.<|im_end|>\n<|im_start|>assistant\nObject oriented programming organizes code into objects that combine data and methods providing encapsulation inheritance and polymorphism<|im_end|>");
+        qa.add("[CODING] <|im_start|>user\nWhat is algorithm complexity?<|im_end|>\n<|im_start|>assistant\nAlgorithm complexity measures computational resources required typically expressed as time complexity and space complexity using big O notation<|im_end|>");
+        qa.add("[CODING] <|im_start|>user\nWhy is code readability important?<|im_end|>\n<|im_start|>assistant\nCode readability makes programs easier to understand maintain debug and extend by other developers or future self<|im_end|>");
+        qa.add("[CODING] <|im_start|>user\nWhat are design patterns?<|im_end|>\n<|im_start|>assistant\nDesign patterns are reusable solutions to common software design problems providing tested templates for solving recurring challenges<|im_end|>");
         
-        // Transformer相关问答 (20条)
-        qa.add("[REASONING] Question: What is self attention? Answer: Self attention computes relationships between all positions in a sequence allowing each position to attend to all other positions in parallel");
-        qa.add("[REASONING] Question: Why use multi head attention? Answer: Multi head attention allows the model to attend to different representation subspaces simultaneously capturing diverse types of relationships");
-        qa.add("[GENERAL] Question: What is positional encoding? Answer: Positional encoding injects information about token positions into embeddings since transformers have no inherent notion of sequence order");
-        qa.add("[REASONING] Question: How does attention scaling work? Answer: Attention scores are scaled by the square root of dimension to prevent extremely small gradients when dot products grow large");
-        qa.add("[GENERAL] Question: What is the transformer advantage? Answer: Transformers enable parallel processing of sequences eliminate vanishing gradients and capture long range dependencies effectively");
+        // Transformer相关问答 (5条)
+        qa.add("[REASONING] <|im_start|>user\nWhat is self attention?<|im_end|>\n<|im_start|>assistant\nSelf attention computes relationships between all positions in a sequence allowing each position to attend to all other positions in parallel<|im_end|>");
+        qa.add("[REASONING] <|im_start|>user\nWhy use multi head attention?<|im_end|>\n<|im_start|>assistant\nMulti head attention allows the model to attend to different representation subspaces simultaneously capturing diverse types of relationships<|im_end|>");
+        qa.add("[GENERAL] <|im_start|>user\nWhat is positional encoding?<|im_end|>\n<|im_start|>assistant\nPositional encoding injects information about token positions into embeddings since transformers have no inherent notion of sequence order<|im_end|>");
+        qa.add("[REASONING] <|im_start|>user\nHow does attention scaling work?<|im_end|>\n<|im_start|>assistant\nAttention scores are scaled by the square root of dimension to prevent extremely small gradients when dot products grow large<|im_end|>");
+        qa.add("[GENERAL] <|im_start|>user\nWhat is the transformer advantage?<|im_end|>\n<|im_start|>assistant\nTransformers enable parallel processing of sequences eliminate vanishing gradients and capture long range dependencies effectively<|im_end|>");
         
-        // 深度学习基础问答 (20条)
-        qa.add("[REASONING] Question: What is backpropagation? Answer: Backpropagation computes gradients of loss with respect to parameters by applying chain rule backwards through the computational graph");
-        qa.add("[MATH] Question: How does gradient descent work? Answer: Gradient descent updates parameters by moving in the direction opposite to the gradient scaled by learning rate to minimize loss");
-        qa.add("[REASONING] Question: Why use activation functions? Answer: Activation functions introduce non linearity enabling neural networks to learn complex patterns beyond linear relationships");
-        qa.add("[GENERAL] Question: What is overfitting? Answer: Overfitting occurs when a model learns training data too well including noise and fails to generalize to new unseen data");
-        qa.add("[REASONING] Question: How does dropout prevent overfitting? Answer: Dropout randomly disables neurons during training forcing the network to learn robust features that do not rely on specific neurons");
+        // 深度学习基础问答 (5条)
+        qa.add("[REASONING] <|im_start|>user\nWhat is backpropagation?<|im_end|>\n<|im_start|>assistant\nBackpropagation computes gradients of loss with respect to parameters by applying chain rule backwards through the computational graph<|im_end|>");
+        qa.add("[MATH] <|im_start|>user\nHow does gradient descent work?<|im_end|>\n<|im_start|>assistant\nGradient descent updates parameters by moving in the direction opposite to the gradient scaled by learning rate to minimize loss<|im_end|>");
+        qa.add("[REASONING] <|im_start|>user\nWhy use activation functions?<|im_end|>\n<|im_start|>assistant\nActivation functions introduce non linearity enabling neural networks to learn complex patterns beyond linear relationships<|im_end|>");
+        qa.add("[GENERAL] <|im_start|>user\nWhat is overfitting?<|im_end|>\n<|im_start|>assistant\nOverfitting occurs when a model learns training data too well including noise and fails to generalize to new unseen data<|im_end|>");
+        qa.add("[REASONING] <|im_start|>user\nHow does dropout prevent overfitting?<|im_end|>\n<|im_start|>assistant\nDropout randomly disables neurons during training forcing the network to learn robust features that do not rely on specific neurons<|im_end|>");
         
         return qa;
     }
@@ -420,44 +435,46 @@ public class DeepSeekV3TrainDemoV2 {
     /**
      * 生成代码专项问答数据（纯CODING任务）
      * 用于强化MoE专家对代码任务的特化能力
+     * 
+     * 同样采用 ChatML 对话模板格式，所有数据的任务类型均为 CODING
      */
     private static List<String> generateCodeQA() {
         List<String> codeQA = new ArrayList<>();
         
-        // Python相关问答 (15条)
-        codeQA.add("[CODING] Question: How to define a function in Python? Answer: Use def keyword followed by function name parentheses for parameters and colon then indent the function body");
-        codeQA.add("[CODING] Question: What is list comprehension in Python? Answer: List comprehension provides concise syntax to create lists using bracket notation with for loop and optional if condition");
-        codeQA.add("[CODING] Question: How to handle exceptions in Python? Answer: Use try block for code that may raise exceptions except block to catch and handle specific exception types and finally for cleanup");
-        codeQA.add("[CODING] Question: What are Python decorators? Answer: Decorators are functions that modify behavior of other functions using at symbol syntax wrapping the original function with additional functionality");
-        codeQA.add("[CODING] Question: How to read files in Python? Answer: Use open function with file path and mode then read content with read or readlines method always close file or use with statement");
+        // Python相关问答 (5条)
+        codeQA.add("[CODING] <|im_start|>user\nHow to define a function in Python?<|im_end|>\n<|im_start|>assistant\nUse def keyword followed by function name parentheses for parameters and colon then indent the function body<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nWhat is list comprehension in Python?<|im_end|>\n<|im_start|>assistant\nList comprehension provides concise syntax to create lists using bracket notation with for loop and optional if condition<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nHow to handle exceptions in Python?<|im_end|>\n<|im_start|>assistant\nUse try block for code that may raise exceptions except block to catch and handle specific exception types and finally for cleanup<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nWhat are Python decorators?<|im_end|>\n<|im_start|>assistant\nDecorators are functions that modify behavior of other functions using at symbol syntax wrapping the original function with additional functionality<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nHow to read files in Python?<|im_end|>\n<|im_start|>assistant\nUse open function with file path and mode then read content with read or readlines method always close file or use with statement<|im_end|>");
         
-        // Java相关问答 (15条)
-        codeQA.add("[CODING] Question: How to declare a class in Java? Answer: Use public class keyword followed by class name then curly braces containing fields methods and constructors");
-        codeQA.add("[CODING] Question: What is inheritance in Java? Answer: Inheritance allows a class to inherit fields and methods from parent class using extends keyword promoting code reuse");
-        codeQA.add("[CODING] Question: How to create an interface in Java? Answer: Use interface keyword followed by name declare method signatures without implementation classes implement interface with implements keyword");
-        codeQA.add("[CODING] Question: What is Java generics? Answer: Generics enable types to be parameters when defining classes interfaces and methods providing compile time type safety");
-        codeQA.add("[CODING] Question: How to handle null in Java? Answer: Check for null before dereferencing use Optional class or annotations like NonNull to prevent null pointer exceptions");
+        // Java相关问答 (5条)
+        codeQA.add("[CODING] <|im_start|>user\nHow to declare a class in Java?<|im_end|>\n<|im_start|>assistant\nUse public class keyword followed by class name then curly braces containing fields methods and constructors<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nWhat is inheritance in Java?<|im_end|>\n<|im_start|>assistant\nInheritance allows a class to inherit fields and methods from parent class using extends keyword promoting code reuse<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nHow to create an interface in Java?<|im_end|>\n<|im_start|>assistant\nUse interface keyword followed by name declare method signatures without implementation classes implement interface with implements keyword<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nWhat is Java generics?<|im_end|>\n<|im_start|>assistant\nGenerics enable types to be parameters when defining classes interfaces and methods providing compile time type safety<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nHow to handle null in Java?<|im_end|>\n<|im_start|>assistant\nCheck for null before dereferencing use Optional class or annotations like NonNull to prevent null pointer exceptions<|im_end|>");
         
-        // JavaScript相关问答 (10条)
-        codeQA.add("[CODING] Question: What are arrow functions in JavaScript? Answer: Arrow functions provide shorter syntax using arrow notation capture this from enclosing scope unlike regular functions");
-        codeQA.add("[CODING] Question: How to handle async operations in JavaScript? Answer: Use promises with then and catch or async await syntax for cleaner asynchronous code handling");
-        codeQA.add("[CODING] Question: What is closure in JavaScript? Answer: Closure is a function that remembers variables from its outer scope even after outer function has finished executing");
-        codeQA.add("[CODING] Question: How to iterate arrays in JavaScript? Answer: Use for loop forEach map filter or for of loop depending on whether you need transformation filtering or simple iteration");
-        codeQA.add("[CODING] Question: What is destructuring in JavaScript? Answer: Destructuring extracts values from arrays or objects into distinct variables using bracket or curly brace syntax");
+        // JavaScript相关问答 (5条)
+        codeQA.add("[CODING] <|im_start|>user\nWhat are arrow functions in JavaScript?<|im_end|>\n<|im_start|>assistant\nArrow functions provide shorter syntax using arrow notation capture this from enclosing scope unlike regular functions<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nHow to handle async operations in JavaScript?<|im_end|>\n<|im_start|>assistant\nUse promises with then and catch or async await syntax for cleaner asynchronous code handling<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nWhat is closure in JavaScript?<|im_end|>\n<|im_start|>assistant\nClosure is a function that remembers variables from its outer scope even after outer function has finished executing<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nHow to iterate arrays in JavaScript?<|im_end|>\n<|im_start|>assistant\nUse for loop forEach map filter or for of loop depending on whether you need transformation filtering or simple iteration<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nWhat is destructuring in JavaScript?<|im_end|>\n<|im_start|>assistant\nDestructuring extracts values from arrays or objects into distinct variables using bracket or curly brace syntax<|im_end|>");
         
-        // C++相关问答 (10条)
-        codeQA.add("[CODING] Question: What are pointers in C plus plus? Answer: Pointers store memory addresses enabling dynamic memory allocation direct memory access and efficient data structure implementation");
-        codeQA.add("[CODING] Question: How to use templates in C plus plus? Answer: Templates enable generic programming using template keyword with type parameters allowing code to work with different data types");
-        codeQA.add("[CODING] Question: What is RAII in C plus plus? Answer: Resource Acquisition Is Initialization ties resource lifetime to object lifetime using constructors and destructors for automatic resource management");
-        codeQA.add("[CODING] Question: How to handle memory in C plus plus? Answer: Use new for dynamic allocation delete to free memory or prefer smart pointers like unique ptr and shared ptr");
-        codeQA.add("[CODING] Question: What are virtual functions in C plus plus? Answer: Virtual functions enable polymorphism allowing derived classes to override base class methods using virtual keyword");
+        // C++相关问答 (5条)
+        codeQA.add("[CODING] <|im_start|>user\nWhat are pointers in C plus plus?<|im_end|>\n<|im_start|>assistant\nPointers store memory addresses enabling dynamic memory allocation direct memory access and efficient data structure implementation<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nHow to use templates in C plus plus?<|im_end|>\n<|im_start|>assistant\nTemplates enable generic programming using template keyword with type parameters allowing code to work with different data types<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nWhat is RAII in C plus plus?<|im_end|>\n<|im_start|>assistant\nResource Acquisition Is Initialization ties resource lifetime to object lifetime using constructors and destructors for automatic resource management<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nHow to handle memory in C plus plus?<|im_end|>\n<|im_start|>assistant\nUse new for dynamic allocation delete to free memory or prefer smart pointers like unique ptr and shared ptr<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nWhat are virtual functions in C plus plus?<|im_end|>\n<|im_start|>assistant\nVirtual functions enable polymorphism allowing derived classes to override base class methods using virtual keyword<|im_end|>");
         
-        // 通用编程概念 (10条)
-        codeQA.add("[CODING] Question: What is time complexity? Answer: Time complexity measures how algorithm runtime grows with input size using big O notation like O of n or O of n squared");
-        codeQA.add("[CODING] Question: How to optimize code performance? Answer: Profile code identify bottlenecks use efficient algorithms and data structures minimize memory allocations and avoid premature optimization");
-        codeQA.add("[CODING] Question: What is recursion? Answer: Recursion is when function calls itself to solve problem by breaking it into smaller subproblems requires base case to terminate");
-        codeQA.add("[CODING] Question: How to debug code effectively? Answer: Use debugger set breakpoints inspect variables trace execution flow write unit tests and use logging strategically");
-        codeQA.add("[CODING] Question: What is code refactoring? Answer: Refactoring improves code structure readability and maintainability without changing external behavior through small incremental changes");
+        // 通用编程概念 (5条)
+        codeQA.add("[CODING] <|im_start|>user\nWhat is time complexity?<|im_end|>\n<|im_start|>assistant\nTime complexity measures how algorithm runtime grows with input size using big O notation like O of n or O of n squared<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nHow to optimize code performance?<|im_end|>\n<|im_start|>assistant\nProfile code identify bottlenecks use efficient algorithms and data structures minimize memory allocations and avoid premature optimization<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nWhat is recursion?<|im_end|>\n<|im_start|>assistant\nRecursion is when function calls itself to solve problem by breaking it into smaller subproblems requires base case to terminate<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nHow to debug code effectively?<|im_end|>\n<|im_start|>assistant\nUse debugger set breakpoints inspect variables trace execution flow write unit tests and use logging strategically<|im_end|>");
+        codeQA.add("[CODING] <|im_start|>user\nWhat is code refactoring?<|im_end|>\n<|im_start|>assistant\nRefactoring improves code structure readability and maintainability without changing external behavior through small incremental changes<|im_end|>");
         
         return codeQA;
     }
@@ -598,8 +615,8 @@ public class DeepSeekV3TrainDemoV2 {
         System.out.println("  ✓ 训练集: " + trainTexts.size() + " 条");
         System.out.println("  ✓ 验证集: " + valTexts.size() + " 条");
         
-        // 2. 准备数据集（带任务标签）
-        System.out.println("\n📝 准备后训练数据集（任务感知）...");
+        // 2. 准备数据集（ChatML 对话模板 + answer-only loss mask）
+        System.out.println("\n📝 准备后训练数据集（ChatML 格式 + Answer-Only Loss）...");
         DeepSeekV3Config config = pretrainedModel.getConfig();
         
         DeepSeekV3Dataset trainDataset = createDatasetFromTexts(
@@ -607,7 +624,7 @@ public class DeepSeekV3TrainDemoV2 {
             config.getNPositions(),
             2,  // batch size
             config.getVocabSize(),
-            true  // 使用任务标签
+            true  // 使用任务标签 + ChatML 格式 + loss mask
         );
         
         DeepSeekV3Dataset valDataset = createDatasetFromTexts(
@@ -615,12 +632,13 @@ public class DeepSeekV3TrainDemoV2 {
             config.getNPositions(),
             1,  // batch size
             config.getVocabSize(),
-            true  // 使用任务标签
+            true  // 使用任务标签 + ChatML 格式 + loss mask
         );
         
         System.out.println("  ✓ 训练样本: " + trainDataset.getSampleCount());
         System.out.println("  ✓ 验证样本: " + valDataset.getSampleCount());
-        System.out.println("  ✓ 任务感知标注: 启用");
+        System.out.println("  ✓ 数据格式: ChatML 对话模板 (<|im_start|>user/assistant<|im_end|>)");
+        System.out.println("  ✓ Loss策略: Answer-Only (仅对 assistant 回答部分计算 loss)");
         
         // 3. 配置后训练器
         System.out.println("\n📝 配置后训练器...");
@@ -650,10 +668,14 @@ public class DeepSeekV3TrainDemoV2 {
         System.out.println("\n✅ 后训练完成!");
         System.out.println("\n💡 后训练阶段总结:");
         System.out.println("  - 目标: 适应任务特定的推理和生成");
-        System.out.println("  - 任务: 任务感知的指令跟随");
-        System.out.println("  - 数据: 带任务标签的指令数据");
+        System.out.println("  - 任务: 任务感知的指令跟随（ChatML 对话格式）");
+        System.out.println("  - 数据: ChatML 模板 + 任务标签（行业主流 SFT 格式）");
+        System.out.println("  - Loss: Answer-Only Loss Masking（仅对回答部分计算损失）");
         System.out.println("  - 技巧: 小学习率 + 早停 + 任务路由");
         System.out.println("  - 结果: 模型获得任务感知能力");
+        System.out.println("\n💡 与预训练的关键区别:");
+        System.out.println("  - 预训练: 纯文本 → 全序列 CLM loss");
+        System.out.println("  - 后训练: ChatML 对话模板 → Answer-Only loss (只学回答)");
         
         return pretrainedModel;
     }
@@ -703,6 +725,7 @@ public class DeepSeekV3TrainDemoV2 {
         
         System.out.println("  ✓ 训练样本: " + codeTrainDataset.getSampleCount());
         System.out.println("  ✓ 验证样本: " + codeValDataset.getSampleCount());
+        System.out.println("  ✓ 数据格式: ChatML 对话模板 + Answer-Only Loss");
         System.out.println("  ✓ 支持语言: Python, Java, JavaScript, C++");
         
         // 3. 配置代码专项后训练器
@@ -734,8 +757,9 @@ public class DeepSeekV3TrainDemoV2 {
         System.out.println("\n✅ 代码专项后训练完成!");
         System.out.println("\n💡 代码专项后训练阶段总结:");
         System.out.println("  - 目标: 强化MoE专家对代码任务的特化");
-        System.out.println("  - 任务: 纯CODING任务的指令跟随");
-        System.out.println("  - 数据: 60条代码生成问答 (Python/Java/JS/C++)");
+        System.out.println("  - 任务: 纯CODING任务的指令跟随（ChatML 格式）");
+        System.out.println("  - 数据: 25条代码生成 ChatML 问答 (Python/Java/JS/C++)");
+        System.out.println("  - Loss: Answer-Only Loss Masking（仅对代码回答部分计算损失）");
         System.out.println("  - 特色: 持续激活同一批专家 -> 专家特化能力增强");
         System.out.println("  - 结果: 模型获得更强的代码生成能力");
         System.out.println("\nℹ️ MoE专家特化说明:");
@@ -818,6 +842,12 @@ public class DeepSeekV3TrainDemoV2 {
     
     /**
      * 从文本创建数据集
+     * 
+     * 当 useTaskLabels=true 时，解析 ChatML 对话模板格式，并生成 answer-only loss mask：
+     * - user 提问部分和特殊标记的 loss mask 为 0.0（不参与 loss 计算）
+     * - assistant 回答部分的 loss mask 为 1.0（参与 loss 计算）
+     * 
+     * 当 useTaskLabels=false 时（预训练模式），不生成 loss mask，所有位置都参与 loss 计算。
      */
     private static DeepSeekV3Dataset createDatasetFromTexts(
             List<String> texts,
@@ -828,6 +858,7 @@ public class DeepSeekV3TrainDemoV2 {
         
         List<int[]> sequences = new ArrayList<>();
         List<TaskType> taskTypes = new ArrayList<>();
+        List<float[]> lossMasks = new ArrayList<>();
         
         for (String text : texts) {
             TaskType taskType = TaskType.GENERAL;
@@ -839,23 +870,59 @@ public class DeepSeekV3TrainDemoV2 {
                 cleanText = removeTaskLabel(text);
             }
             
-            // 编码文本
-            List<Integer> tokens = sharedTokenizer.encode(cleanText);
-            
-            // 转换为数组
-            int[] sequence = tokens.stream().mapToInt(Integer::intValue).toArray();
-            
-            // 截断或填充到maxSeqLength
-            // 显式使用PAD_TOKEN_ID填充，避免与词汇ID冲突
-            int[] paddedSeq = new int[maxSeqLength];
-           Arrays.fill(paddedSeq, SimpleTokenizer.PAD_TOKEN_ID);
-            int copyLen = Math.min(sequence.length, maxSeqLength);
-            System.arraycopy(sequence, 0, paddedSeq, 0, copyLen);
-            
-            sequences.add(paddedSeq);
-            taskTypes.add(taskType);
+            if (useTaskLabels && cleanText.contains("<|im_start|>assistant")) {
+                // ChatML 格式：分别编码 user 和 assistant 部分，生成 loss mask
+                int assistantContentStart = cleanText.indexOf("<|im_start|>assistant\n");
+                String userPart = cleanText.substring(0, assistantContentStart);
+                String assistantPart = cleanText.substring(assistantContentStart);
+                
+                // 分别编码
+                List<Integer> userTokens = sharedTokenizer.encode(userPart);
+                List<Integer> assistantTokens = sharedTokenizer.encode(assistantPart);
+                
+                // 合并 token 序列
+                List<Integer> allTokens = new ArrayList<>(userTokens);
+                allTokens.addAll(assistantTokens);
+                int[] sequence = allTokens.stream().mapToInt(Integer::intValue).toArray();
+                
+                // 构建 loss mask：user 部分为 0.0，assistant 部分为 1.0
+                float[] mask = new float[maxSeqLength];
+                int userLen = userTokens.size();
+                int totalLen = Math.min(allTokens.size(), maxSeqLength);
+                for (int j = 0; j < totalLen; j++) {
+                    mask[j] = (j >= userLen) ? 1.0f : 0.0f;
+                }
+                // padding 部分保持 0.0（数组默认值）
+                
+                // 截断或填充到 maxSeqLength
+                int[] paddedSeq = new int[maxSeqLength];
+                Arrays.fill(paddedSeq, SimpleTokenizer.PAD_TOKEN_ID);
+                int copyLen = Math.min(sequence.length, maxSeqLength);
+                System.arraycopy(sequence, 0, paddedSeq, 0, copyLen);
+                
+                sequences.add(paddedSeq);
+                taskTypes.add(taskType);
+                lossMasks.add(mask);
+            } else {
+                // 预训练模式或非 ChatML 格式：整条文本编码，无 loss mask
+                List<Integer> tokens = sharedTokenizer.encode(cleanText);
+                int[] sequence = tokens.stream().mapToInt(Integer::intValue).toArray();
+                
+                int[] paddedSeq = new int[maxSeqLength];
+                Arrays.fill(paddedSeq, SimpleTokenizer.PAD_TOKEN_ID);
+                int copyLen = Math.min(sequence.length, maxSeqLength);
+                System.arraycopy(sequence, 0, paddedSeq, 0, copyLen);
+                
+                sequences.add(paddedSeq);
+                taskTypes.add(taskType);
+            }
         }
         
+        // 如果有 loss mask 数据，使用带 mask 的构造函数
+        if (!lossMasks.isEmpty()) {
+            return new DeepSeekV3Dataset(sequences, taskTypes, lossMasks,
+                maxSeqLength, batchSize, true, true);
+        }
         return new DeepSeekV3Dataset(sequences, taskTypes, maxSeqLength, batchSize, true);
     }
     

@@ -4,6 +4,7 @@ import io.leavesfly.tinyai.deepseek.r1.DeepSeekR1Config;
 import io.leavesfly.tinyai.deepseek.r1.DeepSeekR1Model;
 import io.leavesfly.tinyai.deepseek.r1.training.dataset.DeepSeekR1Dataset;
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.ml.loss.Loss;
 import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
 import io.leavesfly.tinyai.ml.optimize.SGD;
 import io.leavesfly.tinyai.ndarr.NdArray;
@@ -22,10 +23,14 @@ import java.util.Map;
  * DeepSeek-R1后训练器(Posttrain/Finetune)
  * 
  * 用于在预训练模型基础上进行任务特定的微调,
- * 重点优化推理质量和反思能力
+ * 重点优化推理质量和反思能力。
+ * 
+ * 支持行业标准的 Answer-only Loss Mask：
+ * 当数据集包含 Loss Mask 时，只对 assistant 回复部分计算 loss，
+ * user 指令部分不参与梯度更新。
  * 
  * @author leavesfly
- * @version 1.0
+ * @version 2.0
  */
 public class DeepSeekR1Posttrain {
     
@@ -34,6 +39,7 @@ public class DeepSeekR1Posttrain {
     private final DeepSeekR1Dataset trainDataset;
     private final DeepSeekR1Dataset valDataset;
     private final SoftmaxCrossEntropy lossFunction;
+    private final SoftmaxCrossEntropy elementWiseLossFunction;
     private final SGD optimizer;
     
     // 后训练超参数
@@ -62,6 +68,7 @@ public class DeepSeekR1Posttrain {
         this.trainDataset = trainDataset;
         this.valDataset = valDataset;
         this.lossFunction = new SoftmaxCrossEntropy();
+        this.elementWiseLossFunction = new SoftmaxCrossEntropy(Loss.Reduction.NONE);
         
         // 后训练学习率比预训练小10倍
         this.maxEpochs = 5;
@@ -102,6 +109,7 @@ public class DeepSeekR1Posttrain {
         System.out.println("验证样本: " + valDataset.getSampleCount());
         System.out.println("学习率: " + learningRate);
         System.out.println("早停耐心: " + patience);
+        System.out.println("Loss Mask: " + (trainDataset.hasLossMasks() ? "启用（Answer-only Loss）" : "未启用（全序列Loss）"));
         System.out.println("=".repeat(70));
         
         createCheckpointDir();
@@ -151,10 +159,32 @@ public class DeepSeekR1Posttrain {
             
             Variable logits2D = result.logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
             Variable targetVar = new Variable(targetIds.reshape(Shape.of(batchSize * seqLen, 1)));
-            Variable loss = lossFunction.loss(targetVar, logits2D);
+            
+            Variable loss;
+            if (batch.hasLossMask()) {
+                // Answer-only Loss: 使用逐元素 loss 乘以 mask，只对 assistant 回复部分计算梯度
+                Variable elementWiseLoss = elementWiseLossFunction.loss(targetVar, logits2D);
+                
+                // 将 mask reshape 为 [batchSize * seqLen, 1] 与逐元素 loss 对齐
+                NdArray maskFlat = batch.getLossMask().reshape(Shape.of(batchSize * seqLen, 1));
+                Variable maskVar = new Variable(maskFlat);
+                
+                // masked loss = elementWiseLoss * mask
+                Variable maskedLoss = elementWiseLoss.mul(maskVar);
+                
+                // 计算有效位置数量，避免除以零
+                float maskSum = maskFlat.sum().getNumber().floatValue();
+                float effectiveCount = Math.max(maskSum, 1.0f);
+                
+                // 对有效位置求平均: sum(maskedLoss) / count(mask==1)
+                loss = maskedLoss.sum().div(new Variable(NdArray.of(new float[]{effectiveCount})));
+            } else {
+                // 无 mask 时使用标准 MEAN 归约
+                loss = lossFunction.loss(targetVar, logits2D);
+            }
             
             float lossValue = loss.getValue().getNumber().floatValue();
-            float moeLoss = (float) result.moeLoss;  // 使用 MoE 损失
+            float moeLoss = (float) result.moeLoss;
             
             trainLossHistory.add(lossValue);
             qualityScoreHistory.add(moeLoss);
@@ -202,7 +232,19 @@ public class DeepSeekR1Posttrain {
             
             Variable logits2D = result.logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
             Variable targetVar = new Variable(batch.getTargetIds().reshape(Shape.of(batchSize * seqLen, 1)));
-            Variable loss = lossFunction.loss(targetVar, logits2D);
+            
+            Variable loss;
+            if (batch.hasLossMask()) {
+                Variable elementWiseLoss = elementWiseLossFunction.loss(targetVar, logits2D);
+                NdArray maskFlat = batch.getLossMask().reshape(Shape.of(batchSize * seqLen, 1));
+                Variable maskVar = new Variable(maskFlat);
+                Variable maskedLoss = elementWiseLoss.mul(maskVar);
+                float maskSum = maskFlat.sum().getNumber().floatValue();
+                float effectiveCount = Math.max(maskSum, 1.0f);
+                loss = maskedLoss.sum().div(new Variable(NdArray.of(new float[]{effectiveCount})));
+            } else {
+                loss = lossFunction.loss(targetVar, logits2D);
+            }
             
             totalLoss += loss.getValue().getNumber().floatValue();
             count++;

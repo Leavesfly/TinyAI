@@ -38,6 +38,7 @@ public class DeepSeekV3Posttrain {
     private final DeepSeekV3Dataset trainDataset;
     private final DeepSeekV3Dataset valDataset;
     private final SoftmaxCrossEntropy lossFunction;
+    private final SoftmaxCrossEntropy elementWiseLossFunction; // 逐元素 loss，用于 answer-only loss masking
     private final Adam optimizer;
     
     // 训练超参数
@@ -74,6 +75,7 @@ public class DeepSeekV3Posttrain {
         this.trainDataset = trainDataset;
         this.valDataset = valDataset;
         this.lossFunction = new SoftmaxCrossEntropy();
+        this.elementWiseLossFunction = new SoftmaxCrossEntropy(SoftmaxCrossEntropy.Reduction.NONE);
         
         // 默认超参数（比预训练更保守）
         this.maxEpochs = 5;
@@ -215,6 +217,10 @@ public class DeepSeekV3Posttrain {
     
     /**
      * 训练单步
+     * 
+     * 支持 answer-only loss masking：当 batch 包含 lossMask 时，
+     * 只对 assistant 回答部分计算 loss，user 提问部分不参与梯度更新。
+     * 这是行业主流的 SFT 训练方式（ChatML 格式）。
      */
     private StepResult trainStep(DeepSeekV3Dataset.Batch batch) {
         updateLearningRate();
@@ -227,9 +233,8 @@ public class DeepSeekV3Posttrain {
         DeepSeekV3Block.DetailedForwardResult result =
             model.predictWithDetails(new Variable(inputIds), taskType);
 
-        // 计算损失
-        Variable[] shaped = reshapeForLoss(inputIds, targetIds, result.logits);
-        Variable lmLoss = lossFunction.loss(shaped[1], shaped[0]);
+        // 计算损失（支持 answer-only loss masking）
+        Variable lmLoss = computeMaskedLoss(batch, result.logits);
         float lossValue = lmLoss.getValue().getNumber().floatValue();
         float moeLoss = (float) result.avgMoELoss;
 
@@ -245,7 +250,7 @@ public class DeepSeekV3Posttrain {
     }
     
     /**
-     * 验证
+     * 验证（同样支持 answer-only loss masking）
      */
     private float validate() {
         valDataset.prepare(false);
@@ -254,12 +259,9 @@ public class DeepSeekV3Posttrain {
 
         while (valDataset.hasNext()) {
             DeepSeekV3Dataset.Batch batch = valDataset.nextBatch();
-            NdArray inputIds = batch.getInputIds();
-            NdArray targetIds = batch.getTargetIds();
 
-            Variable logits = model.predict(new Variable(inputIds));
-            Variable[] shaped = reshapeForLoss(inputIds, targetIds, logits);
-            Variable loss = lossFunction.loss(shaped[1], shaped[0]);
+            Variable logits = model.predict(new Variable(batch.getInputIds()));
+            Variable loss = computeMaskedLoss(batch, logits);
 
             totalLoss += loss.getValue().getNumber().floatValue();
             count++;
@@ -271,16 +273,48 @@ public class DeepSeekV3Posttrain {
     }
     
     /**
-     * 将 logits 和 targets reshape 为 2D（供损失函数使用）
-     * 返回 [logits2D, targets2D]
+     * 计算带 mask 的损失（answer-only loss masking）
+     * 
+     * 当 batch 包含 lossMask 时：
+     * 1. 使用 Reduction.NONE 获取逐位置的 loss
+     * 2. 将 loss 与 mask 逐元素相乘（user 部分 mask=0 不贡献 loss）
+     * 3. 对有效位置求均值（除以 mask 中 1.0 的个数）
+     * 
+     * 当 batch 无 lossMask 时：退化为标准的全序列 loss 计算
      */
-    private Variable[] reshapeForLoss(NdArray inputIds, NdArray targetIds, Variable logits) {
+    private Variable computeMaskedLoss(DeepSeekV3Dataset.Batch batch, Variable logits) {
+        NdArray inputIds = batch.getInputIds();
+        NdArray targetIds = batch.getTargetIds();
         int batchSize = inputIds.getShape().getDimension(0);
-        int seqLen    = inputIds.getShape().getDimension(1);
+        int seqLen = inputIds.getShape().getDimension(1);
         int vocabSize = model.getConfig().getVocabSize();
-        Variable logits2D  = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
+        
+        Variable logits2D = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
         Variable targets2D = new Variable(targetIds).reshape(Shape.of(batchSize * seqLen, 1));
-        return new Variable[]{logits2D, targets2D};
+        
+        if (!batch.hasLossMask()) {
+            // 无 mask：标准全序列 loss（预训练兼容）
+            return lossFunction.loss(targets2D, logits2D);
+        }
+        
+        // 有 mask：answer-only loss masking
+        // 1. 获取逐位置 loss（不归约）
+        Variable elementWiseLoss = elementWiseLossFunction.loss(targets2D, logits2D);
+        
+        // 2. 将 mask reshape 为 1D 并与 loss 相乘
+        NdArray lossMask = batch.getLossMask();
+        Variable mask1D = new Variable(lossMask).reshape(Shape.of(batchSize * seqLen, 1));
+        Variable maskedLoss = elementWiseLoss.mul(mask1D);
+        
+        // 3. 计算有效位置数量，对有效位置求均值
+        float maskSum = lossMask.sum().getNumber().floatValue();
+        if (maskSum <= 0) {
+            // 安全兜底：如果没有有效位置，返回 0 loss
+            return new Variable(NdArray.of(new float[]{0.0f}));
+        }
+        Variable totalMaskedLoss = maskedLoss.sum();
+        Variable validCount = new Variable(NdArray.of(new float[]{maskSum}));
+        return totalMaskedLoss.div(validCount);
     }
 
     /**

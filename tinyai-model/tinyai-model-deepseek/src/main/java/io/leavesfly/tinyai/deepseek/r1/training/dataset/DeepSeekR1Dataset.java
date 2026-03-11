@@ -20,6 +20,7 @@ public class DeepSeekR1Dataset extends DeepSeekBaseDataset<DeepSeekR1Dataset.Bat
     
     private final List<String> reasoning;     // 推理过程（RLHF用）
     private final List<Float> rewards;        // 奖励分数（RLHF用）
+    private final List<float[]> lossMasks;    // Loss Mask（SFT后训练用，标记哪些位置参与loss计算）
     
     /**
      * 构造函数（预训练模式）
@@ -34,6 +35,7 @@ public class DeepSeekR1Dataset extends DeepSeekBaseDataset<DeepSeekR1Dataset.Bat
         super(sequences, maxSeqLength, batchSize, shuffle);
         this.reasoning = new ArrayList<>();
         this.rewards = new ArrayList<>();
+        this.lossMasks = new ArrayList<>();
     }
     
     /**
@@ -52,6 +54,27 @@ public class DeepSeekR1Dataset extends DeepSeekBaseDataset<DeepSeekR1Dataset.Bat
         super(sequences, maxSeqLength, batchSize, shuffle);
         this.reasoning = reasoning;
         this.rewards = rewards;
+        this.lossMasks = new ArrayList<>();
+    }
+    
+    /**
+     * 构造函数（SFT后训练模式，带 Loss Mask）
+     * 
+     * Loss Mask 用于实现 Answer-only Loss：只对 assistant 回复部分计算 loss，
+     * user 指令部分不参与梯度更新，符合行业主流 SFT 训练标准。
+     * 
+     * @param sequences token序列列表
+     * @param lossMasks 每个样本的 loss mask（1.0=参与loss, 0.0=忽略）
+     * @param maxSeqLength 最大序列长度
+     * @param batchSize 批次大小
+     * @param shuffle 是否打乱数据
+     */
+    public DeepSeekR1Dataset(List<int[]> sequences, List<float[]> lossMasks,
+                             int maxSeqLength, int batchSize, boolean shuffle) {
+        super(sequences, maxSeqLength, batchSize, shuffle);
+        this.reasoning = new ArrayList<>();
+        this.rewards = new ArrayList<>();
+        this.lossMasks = lossMasks;
     }
     
     /**
@@ -70,10 +93,17 @@ public class DeepSeekR1Dataset extends DeepSeekBaseDataset<DeepSeekR1Dataset.Bat
         // 复用基类的 input/target 构建逻辑
         float[][][] inputTarget = createInputTargetData(actualBatchSize);
         
-        // 构建 R1 特有的推理过程和奖励分数
+        // 构建 R1 特有的推理过程、奖励分数和 Loss Mask
         String[] reasoningTexts = new String[actualBatchSize];
         float[] rewardScores = new float[actualBatchSize];
+        float[][] batchLossMasks = null;
+        
         List<Integer> batchIndices = getCurrentBatchIndices(actualBatchSize);
+        
+        boolean hasLossMasks = !lossMasks.isEmpty();
+        if (hasLossMasks) {
+            batchLossMasks = new float[actualBatchSize][maxSeqLength];
+        }
         
         for (int i = 0; i < actualBatchSize; i++) {
             int dataIndex = batchIndices.get(i);
@@ -84,14 +114,31 @@ public class DeepSeekR1Dataset extends DeepSeekBaseDataset<DeepSeekR1Dataset.Bat
             if (!rewards.isEmpty() && dataIndex < rewards.size()) {
                 rewardScores[i] = rewards.get(dataIndex);
             }
+            if (hasLossMasks && dataIndex < lossMasks.size()) {
+                float[] originalMask = lossMasks.get(dataIndex);
+                // Loss Mask 需要右移一位对齐 target（target = input 右移一位）
+                // target[j] = sequence[j+1]，对应的 mask 也应该是 mask[j+1]
+                int validLen = Math.min(originalMask.length - 1, maxSeqLength);
+                for (int j = 0; j < validLen; j++) {
+                    batchLossMasks[i][j] = originalMask[j + 1];
+                }
+            }
         }
         
         advanceIndex(endIndex);
         
         NdArray inputIds = NdArray.of(inputTarget[0]);
         NdArray targetIds = NdArray.of(inputTarget[1]);
+        NdArray lossMaskArray = hasLossMasks ? NdArray.of(batchLossMasks) : null;
         
-        return new Batch(inputIds, targetIds, reasoningTexts, rewardScores);
+        return new Batch(inputIds, targetIds, reasoningTexts, rewardScores, lossMaskArray);
+    }
+    
+    /**
+     * 判断数据集是否包含 Loss Mask
+     */
+    public boolean hasLossMasks() {
+        return !lossMasks.isEmpty();
     }
     
     /**
@@ -102,13 +149,15 @@ public class DeepSeekR1Dataset extends DeepSeekBaseDataset<DeepSeekR1Dataset.Bat
         private final NdArray targetIds;
         private final String[] reasoning;
         private final float[] rewards;
+        private final NdArray lossMask;
         
         public Batch(NdArray inputIds, NdArray targetIds, 
-                    String[] reasoning, float[] rewards) {
+                    String[] reasoning, float[] rewards, NdArray lossMask) {
             this.inputIds = inputIds;
             this.targetIds = targetIds;
             this.reasoning = reasoning;
             this.rewards = rewards;
+            this.lossMask = lossMask;
         }
         
         public NdArray getInputIds() {
@@ -125,6 +174,20 @@ public class DeepSeekR1Dataset extends DeepSeekBaseDataset<DeepSeekR1Dataset.Bat
         
         public float[] getRewards() {
             return rewards;
+        }
+        
+        /**
+         * 获取 Loss Mask（可能为 null，表示不使用 mask）
+         * 
+         * 维度: [batchSize, seqLength]
+         * 值: 1.0f 表示该位置参与 loss 计算，0.0f 表示忽略
+         */
+        public NdArray getLossMask() {
+            return lossMask;
+        }
+        
+        public boolean hasLossMask() {
+            return lossMask != null;
         }
         
         public int getBatchSize() {

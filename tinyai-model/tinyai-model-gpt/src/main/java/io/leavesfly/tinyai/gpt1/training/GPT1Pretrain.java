@@ -122,6 +122,9 @@ public class GPT1Pretrain {
      * 开始训练
      */
     public void train() {
+        // 先准备一次数据以获取正确的批次数量（用于打印和学习率调度）
+        dataset.prepare(true);
+
         System.out.println("=" .repeat(60));
         System.out.println("GPT-1 预训练");
         System.out.println("=".repeat(60));

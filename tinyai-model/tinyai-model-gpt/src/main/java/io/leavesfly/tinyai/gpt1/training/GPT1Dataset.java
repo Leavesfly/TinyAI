@@ -27,6 +27,8 @@ public class GPT1Dataset {
     
     // 数据存储
     private List<int[]> samples;
+    private List<int[]> lossMasks;       // 微调模式下每个样本的loss掩码
+    private boolean finetuneMode;        // 是否为微调模式
     private List<Batch> batches;
     private int currentBatchIndex;
     
@@ -36,18 +38,25 @@ public class GPT1Dataset {
     public static class Batch {
         private final NdArray inputIds;   // 输入token序列
         private final NdArray targetIds;  // 目标token序列(右移1位)
+        private final NdArray lossMask;   // loss掩码,1表示参与loss计算,0表示忽略(可为null表示全部参与)
         private final int batchSize;
         private final int seqLen;
         
         public Batch(NdArray inputIds, NdArray targetIds, int batchSize, int seqLen) {
+            this(inputIds, targetIds, null, batchSize, seqLen);
+        }
+        
+        public Batch(NdArray inputIds, NdArray targetIds, NdArray lossMask, int batchSize, int seqLen) {
             this.inputIds = inputIds;
             this.targetIds = targetIds;
+            this.lossMask = lossMask;
             this.batchSize = batchSize;
             this.seqLen = seqLen;
         }
         
         public NdArray getInputIds() { return inputIds; }
         public NdArray getTargetIds() { return targetIds; }
+        public NdArray getLossMask() { return lossMask; }
         public int getBatchSize() { return batchSize; }
         public int getSeqLen() { return seqLen; }
     }
@@ -64,6 +73,8 @@ public class GPT1Dataset {
         this.batchSize = batchSize;
         this.vocabSize = vocabSize;
         this.samples = new ArrayList<>();
+        this.lossMasks = new ArrayList<>();
+        this.finetuneMode = false;
         this.batches = new ArrayList<>();
         this.currentBatchIndex = 0;
     }
@@ -151,13 +162,129 @@ public class GPT1Dataset {
     }
     
     /**
+     * 从指令-回答格式的文本列表加载微调数据
+     *
+     * 行业主流SFT做法：每条样本独立处理，不跨样本拼接。
+     * 只在Response部分计算loss，Instruction部分通过lossMask屏蔽。
+     * 短样本padding到统一长度，过长样本截断。
+     *
+     * @param texts 指令-回答格式的文本列表，格式为 "Instruction: xxx Response: yyy"
+     * @param tokenizer 分词器
+     * @param responseSeparator Response部分的分隔关键词，如 "Response:"
+     */
+    public void loadFromInstructionTexts(List<String> texts, SimpleTokenizer tokenizer, String responseSeparator) {
+        samples.clear();
+        lossMasks.clear();
+        finetuneMode = true;
+
+        int totalTokens = 0;
+        int skippedCount = 0;
+
+        for (String text : texts) {
+            if (text == null || text.trim().isEmpty()) {
+                continue;
+            }
+
+            // 找到Response分隔符的位置，将文本拆分为instruction部分和response部分
+            int separatorIndex = text.indexOf(responseSeparator);
+            if (separatorIndex < 0) {
+                // 没有分隔符，跳过此条数据
+                skippedCount++;
+                continue;
+            }
+
+            String instructionPart = text.substring(0, separatorIndex + responseSeparator.length());
+            String responsePart = text.substring(separatorIndex + responseSeparator.length());
+
+            // 分别编码instruction和response
+            // instruction部分: <BOS> instruction_tokens (不含EOS)
+            List<Integer> instructionIds = tokenizer.encode(instructionPart);
+            // encode会自动加<BOS>和<EOS>，去掉末尾的<EOS>
+            instructionIds = new ArrayList<>(instructionIds.subList(0, instructionIds.size() - 1));
+
+            // response部分: response_tokens <EOS> (不含BOS)
+            List<Integer> responseIds = tokenizer.encode(responsePart);
+            // encode会自动加<BOS>和<EOS>，去掉开头的<BOS>
+            responseIds = new ArrayList<>(responseIds.subList(1, responseIds.size()));
+
+            // 拼接完整序列: <BOS> instruction_tokens response_tokens <EOS>
+            List<Integer> fullIds = new ArrayList<>();
+            fullIds.addAll(instructionIds);
+            fullIds.addAll(responseIds);
+
+            int instructionLen = instructionIds.size();
+            int totalLen = fullIds.size();
+
+            // 截断到 maxSeqLen+1（需要+1是因为input和target右移一位）
+            int sampleLen = maxSeqLen + 1;
+            if (totalLen > sampleLen) {
+                fullIds = new ArrayList<>(fullIds.subList(0, sampleLen));
+                totalLen = sampleLen;
+            }
+
+            if (totalLen < 2) {
+                skippedCount++;
+                continue;
+            }
+
+            // 构建token序列
+            int[] sequence = new int[totalLen];
+            for (int i = 0; i < totalLen; i++) {
+                sequence[i] = fullIds.get(i);
+            }
+            samples.add(sequence);
+
+            // 构建loss掩码：对应target序列（右移一位后）的掩码
+            // input: sequence[0..totalLen-2], target: sequence[1..totalLen-1]
+            // target中第i个位置对应原始序列的第i+1个位置
+            // instruction部分（原始位置0到instructionLen-1）的target（位置0到instructionLen-2）mask=0
+            // response部分（原始位置instructionLen到totalLen-1）的target（位置instructionLen-1到totalLen-2）mask=1
+            int targetLen = totalLen - 1;
+            int[] mask = new int[targetLen];
+            for (int i = 0; i < targetLen; i++) {
+                // target[i] 对应原始序列的位置 i+1
+                // 如果 i+1 >= instructionLen，说明这个target token属于response部分
+                mask[i] = (i + 1 >= instructionLen) ? 1 : 0;
+            }
+            lossMasks.add(mask);
+
+            totalTokens += totalLen;
+        }
+
+        if (skippedCount > 0) {
+            System.out.println("警告: 跳过了 " + skippedCount + " 条无效数据(缺少分隔符'" + responseSeparator + "')");
+        }
+        System.out.println("微调数据加载完成,共 " + totalTokens + " 个token, "
+                + samples.size() + " 个训练样本");
+    }
+
+    /**
      * 准备批次数据
      * 
      * @param shuffle 是否打乱数据
      */
     public void prepare(boolean shuffle) {
         if (shuffle) {
-            Collections.shuffle(samples, new Random(System.currentTimeMillis()));
+            // 微调模式下需要同步打乱samples和lossMasks
+            if (finetuneMode && !lossMasks.isEmpty()) {
+                long seed = System.currentTimeMillis();
+                List<Integer> indices = new ArrayList<>();
+                for (int i = 0; i < samples.size(); i++) {
+                    indices.add(i);
+                }
+                Collections.shuffle(indices, new Random(seed));
+
+                List<int[]> shuffledSamples = new ArrayList<>();
+                List<int[]> shuffledMasks = new ArrayList<>();
+                for (int idx : indices) {
+                    shuffledSamples.add(samples.get(idx));
+                    shuffledMasks.add(lossMasks.get(idx));
+                }
+                samples = shuffledSamples;
+                lossMasks = shuffledMasks;
+            } else {
+                Collections.shuffle(samples, new Random(System.currentTimeMillis()));
+            }
         }
         
         batches.clear();
@@ -167,31 +294,33 @@ public class GPT1Dataset {
         for (int i = 0; i < samples.size(); i += batchSize) {
             int end = Math.min(i + batchSize, samples.size());
             List<int[]> batchSamples = samples.subList(i, end);
+            List<int[]> batchMasks = finetuneMode ? lossMasks.subList(i, end) : null;
             
-            Batch batch = createBatch(batchSamples);
+            Batch batch = createBatch(batchSamples, batchMasks);
             batches.add(batch);
         }
         
-        System.out.println("批次准备完成,共 " + batches.size() + " 个批次");
+//        System.out.println("批次准备完成,共 " + batches.size() + " 个批次");
     }
     
     /**
      * 创建单个批次
      * 
-     * 由于样本已通过拼接+连续切分生成，绝大多数样本长度固定为 maxSeqLen+1，
-     * 无需大量padding。对每个样本取前 maxSeqLen 个token作为输入，
-     * 取后 maxSeqLen 个token（右移一位）作为目标。
+     * 预训练模式：样本已通过拼接+连续切分生成，长度固定为 maxSeqLen+1，无需padding。
+     * 微调模式：每条样本独立处理，短样本需要padding到统一长度。
      * 
      * @param batchSamples 批次样本列表
+     * @param batchMasks 批次loss掩码列表（微调模式下非null）
      * @return 批次对象
      */
-    private Batch createBatch(List<int[]> batchSamples) {
+    private Batch createBatch(List<int[]> batchSamples, List<int[]> batchMasks) {
         int actualBatchSize = batchSamples.size();
         int seqLen = maxSeqLen;
         
         // 初始化数组
         int[][] inputData = new int[actualBatchSize][seqLen];
         int[][] targetData = new int[actualBatchSize][seqLen];
+        int[][] maskData = (batchMasks != null) ? new int[actualBatchSize][seqLen] : null;
         
         for (int i = 0; i < actualBatchSize; i++) {
             int[] sample = batchSamples.get(i);
@@ -202,17 +331,29 @@ public class GPT1Dataset {
             // 目标: sample[1 .. validLen] (右移一位)
             System.arraycopy(sample, 1, targetData[i], 0, validLen);
             
-            // 仅在极端降级情况下（数据不足一个完整样本）才需要padding
+            // padding部分填0
             for (int j = validLen; j < seqLen; j++) {
                 inputData[i][j] = 0;
                 targetData[i][j] = 0;
+            }
+
+            // 处理loss掩码
+            if (maskData != null && batchMasks != null) {
+                int[] sampleMask = batchMasks.get(i);
+                int maskValidLen = Math.min(sampleMask.length, seqLen);
+                System.arraycopy(sampleMask, 0, maskData[i], 0, maskValidLen);
+                // padding部分的mask为0（不参与loss计算）
+                for (int j = maskValidLen; j < seqLen; j++) {
+                    maskData[i][j] = 0;
+                }
             }
         }
         
         NdArray inputArray = createNdArray(inputData, actualBatchSize, seqLen);
         NdArray targetArray = createNdArray(targetData, actualBatchSize, seqLen);
+        NdArray maskArray = (maskData != null) ? createNdArray(maskData, actualBatchSize, seqLen) : null;
         
-        return new Batch(inputArray, targetArray, actualBatchSize, seqLen);
+        return new Batch(inputArray, targetArray, maskArray, actualBatchSize, seqLen);
     }
     
     /**

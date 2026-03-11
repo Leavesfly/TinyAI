@@ -3,6 +3,10 @@ package io.leavesfly.tinyai.gpt3;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.model.Model;
 import io.leavesfly.tinyai.ndarr.NdArray;
+import io.leavesfly.tinyai.ndarr.Shape;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * GPT-3模型类
@@ -166,50 +170,110 @@ public class GPT3Model extends Model {
     }
     
     /**
-     * 生成文本序列（简化实现）
-     * 
-     * @param promptIds 提示序列
-     * @param maxNewTokens 最大生成token数
-     * @return 生成的序列
+     * 生成文本序列（简化实现：贪婪解码，不使用 KV Cache）
+     *
+     * @param promptIds    提示序列 (batch_size, prompt_len)
+     * @param maxNewTokens 最大生成 Token 数
+     * @return 生成的完整序列（含提示）
      */
     public NdArray generateSequence(NdArray promptIds, int maxNewTokens) {
-        // 简化实现：贪婪解码
-        // 实际应用中可以使用Top-k、Top-p、beam search等高级采样策略
-        
         int batchSize = promptIds.getShape().getDimension(0);
         int promptLen = promptIds.getShape().getDimension(1);
-        
-        // 创建输出序列缓冲区
+
         float[][] generatedSeq = new float[batchSize][promptLen + maxNewTokens];
-        
+
         // 复制提示序列
         for (int b = 0; b < batchSize; b++) {
             for (int t = 0; t < promptLen; t++) {
                 generatedSeq[b][t] = promptIds.get(b, t);
             }
         }
-        
-        // 逐个生成token
+
+        // 逐步生成（无 KV Cache，每步全量计算）
         for (int i = 0; i < maxNewTokens; i++) {
             int currentLen = promptLen + i;
-            
-            // 准备当前输入
             float[][] currentInput = new float[batchSize][currentLen];
             for (int b = 0; b < batchSize; b++) {
                 System.arraycopy(generatedSeq[b], 0, currentInput[b], 0, currentLen);
             }
-            
-            // 前向传播
             Variable logits = predict(new Variable(NdArray.of(currentInput)));
             NdArray logitsArray = logits.getValue();
-            
-            // 对每个batch，选择最后一个位置的最大概率token（贪婪解码）
             for (int b = 0; b < batchSize; b++) {
                 int nextToken = argmax(logitsArray, b, currentLen - 1);
                 generatedSeq[b][currentLen] = nextToken;
             }
         }
-        
+
+        return NdArray.of(generatedSeq);
+    }
+
+    /**
+     * 带 KV Cache 的自回归文本生成（加速推理）
+     *
+     * 利用 KV Cache 避免重复计算历史 Token 的 K/V，每步只计算最新一个 Token：
+     * 1. 处理 Prompt：全量计算，填充 KV Cache
+     * 2. 逐步生成：每步仅输入上一步生成的 Token，利用 Cache 快速计算
+     *
+     * 计算效率：O(n) 每步 vs 无 Cache 时的 O(n²)
+     *
+     * @param promptIds    提示序列 (batch_size, prompt_len)
+     * @param maxNewTokens 最大生成新 Token 数
+     * @return 生成的完整序列（含提示），Shape: (batch_size, prompt_len + maxNewTokens)
+     */
+    public NdArray generateWithCache(NdArray promptIds, int maxNewTokens) {
+        int batchSize = promptIds.getShape().getDimension(0);
+        int promptLen = promptIds.getShape().getDimension(1);
+
+        // 为每层 Transformer 块创建独立的 KV Cache
+        List<GPT3KVCache> kvCaches = new ArrayList<>();
+        for (int i = 0; i < config.getNLayer(); i++) {
+            kvCaches.add(new GPT3KVCache(
+                    batchSize,
+                    config.getNHead(),
+                    config.getNEmbd() / config.getNHead(),
+                    config.getNPositions()
+            ));
+        }
+
+        float[][] generatedSeq = new float[batchSize][promptLen + maxNewTokens];
+        for (int b = 0; b < batchSize; b++) {
+            for (int t = 0; t < promptLen; t++) {
+                generatedSeq[b][t] = promptIds.get(b, t);
+            }
+        }
+
+        // 阶段1：处理完整 Prompt，填充 KV Cache
+        Variable promptVar = new Variable(promptIds);
+        Variable promptLogits = gpt3Block.forwardWithCache(promptVar, kvCaches, 0);
+        NdArray promptLogitsArr = promptLogits.getValue();
+
+        // 从 Prompt 最后一个位置采样第一个生成 Token
+        for (int b = 0; b < batchSize; b++) {
+            int nextToken = argmax(promptLogitsArr, b, promptLen - 1);
+            generatedSeq[b][promptLen] = nextToken;
+        }
+
+        // 阶段2：增量生成（每步只输入1个 Token，利用 KV Cache）
+        for (int step = 1; step < maxNewTokens; step++) {
+            int currentPos = promptLen + step - 1;
+
+            // 取上一步生成的 Token 作为输入（shape: batch_size × 1）
+            float[][] singleToken = new float[batchSize][1];
+            for (int b = 0; b < batchSize; b++) {
+                singleToken[b][0] = generatedSeq[b][currentPos];
+            }
+
+            Variable tokenVar = new Variable(NdArray.of(singleToken));
+            Variable logits = gpt3Block.forwardWithCache(tokenVar, kvCaches, currentPos);
+            NdArray logitsArr = logits.getValue();
+
+            // 贪婪解码：选最大概率 Token
+            for (int b = 0; b < batchSize; b++) {
+                int nextToken = argmax(logitsArr, b, 0);
+                generatedSeq[b][currentPos + 1] = nextToken;
+            }
+        }
+
         return NdArray.of(generatedSeq);
     }
     

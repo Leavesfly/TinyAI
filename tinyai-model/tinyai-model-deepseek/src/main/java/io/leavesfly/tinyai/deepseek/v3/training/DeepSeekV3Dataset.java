@@ -21,6 +21,7 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
     
     private final List<TaskType> taskTypes;   // 任务类型（V3特有）
     private final List<String> codeLanguages; // 代码语言（代码任务专用）
+    private final List<float[]> lossMasks;    // 每个样本的 loss mask（后训练 answer-only loss 使用）
     
     /**
      * 构造函数（预训练模式）
@@ -35,6 +36,7 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
         super(sequences, maxSeqLength, batchSize, shuffle);
         this.taskTypes = new ArrayList<>();
         this.codeLanguages = new ArrayList<>();
+        this.lossMasks = new ArrayList<>();
     }
     
     /**
@@ -51,6 +53,7 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
         super(sequences, maxSeqLength, batchSize, shuffle);
         this.taskTypes = taskTypes;
         this.codeLanguages = new ArrayList<>();
+        this.lossMasks = new ArrayList<>();
     }
     
     /**
@@ -69,6 +72,26 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
         super(sequences, maxSeqLength, batchSize, shuffle);
         this.taskTypes = taskTypes;
         this.codeLanguages = codeLanguages;
+        this.lossMasks = new ArrayList<>();
+    }
+    
+    /**
+     * 构造函数（后训练 ChatML 模式，带 loss mask）
+     * 
+     * @param sequences token序列列表
+     * @param taskTypes 任务类型列表
+     * @param lossMasks 每个样本的 loss mask（1.0=计算loss, 0.0=不计算）
+     * @param maxSeqLength 最大序列长度
+     * @param batchSize 批次大小
+     * @param shuffle 是否打乱数据
+     */
+    public DeepSeekV3Dataset(List<int[]> sequences, List<TaskType> taskTypes,
+                             List<float[]> lossMasks, int maxSeqLength,
+                             int batchSize, boolean shuffle, boolean withLossMask) {
+        super(sequences, maxSeqLength, batchSize, shuffle);
+        this.taskTypes = taskTypes;
+        this.codeLanguages = new ArrayList<>();
+        this.lossMasks = lossMasks;
     }
     
     /**
@@ -92,6 +115,10 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
         String[] batchLanguages = new String[actualBatchSize];
         List<Integer> batchIndices = getCurrentBatchIndices(actualBatchSize);
         
+        // 构建 loss mask（如果有的话）
+        boolean hasLossMaskData = !lossMasks.isEmpty();
+        float[][] batchLossMaskData = hasLossMaskData ? new float[actualBatchSize][maxSeqLength] : null;
+        
         for (int i = 0; i < actualBatchSize; i++) {
             int dataIndex = batchIndices.get(i);
             
@@ -104,31 +131,55 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
             if (!codeLanguages.isEmpty() && dataIndex < codeLanguages.size()) {
                 batchLanguages[i] = codeLanguages.get(dataIndex);
             }
+            
+            // 构建该样本的 loss mask
+            // loss mask 对应的是 target 位置（右移一位后的位置），
+            // 因此 lossMask[j] 对应 target[j]，即原始序列中 sequence[j+1] 的 loss 权重
+            if (hasLossMaskData && dataIndex < lossMasks.size()) {
+                float[] sampleMask = lossMasks.get(dataIndex);
+                int validLen = Math.min(sampleMask.length - 1, maxSeqLength);
+                for (int j = 0; j < validLen; j++) {
+                    batchLossMaskData[i][j] = sampleMask[j + 1];
+                }
+            }
         }
         
         advanceIndex(endIndex);
         
         NdArray inputIds = NdArray.of(inputTarget[0]);
         NdArray targetIds = NdArray.of(inputTarget[1]);
+        NdArray batchLossMask = hasLossMaskData ? NdArray.of(batchLossMaskData) : null;
         
-        return new Batch(inputIds, targetIds, batchTaskTypes, batchLanguages);
+        return new Batch(inputIds, targetIds, batchTaskTypes, batchLanguages, batchLossMask);
     }
     
     /**
      * 批次数据类
+     * 
+     * 包含 lossMask 用于后训练的 answer-only loss masking：
+     * - lossMask[i][j] = 1.0 表示该位置参与 loss 计算（assistant 回答部分）
+     * - lossMask[i][j] = 0.0 表示该位置不参与 loss 计算（user 提问部分 / padding）
+     * - lossMask 为 null 时表示所有位置都参与 loss 计算（预训练模式）
      */
     public static class Batch {
         private final NdArray inputIds;
         private final NdArray targetIds;
         private final TaskType[] taskTypes;
         private final String[] codeLanguages;
+        private final NdArray lossMask;
         
         public Batch(NdArray inputIds, NdArray targetIds, 
                     TaskType[] taskTypes, String[] codeLanguages) {
+            this(inputIds, targetIds, taskTypes, codeLanguages, null);
+        }
+        
+        public Batch(NdArray inputIds, NdArray targetIds, 
+                    TaskType[] taskTypes, String[] codeLanguages, NdArray lossMask) {
             this.inputIds = inputIds;
             this.targetIds = targetIds;
             this.taskTypes = taskTypes;
             this.codeLanguages = codeLanguages;
+            this.lossMask = lossMask;
         }
         
         public NdArray getInputIds() {
@@ -145,6 +196,22 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
         
         public String[] getCodeLanguages() {
             return codeLanguages;
+        }
+        
+        /**
+         * 获取 loss mask（后训练 answer-only loss 使用）
+         * 
+         * @return lossMask，null 表示全部位置参与 loss 计算
+         */
+        public NdArray getLossMask() {
+            return lossMask;
+        }
+        
+        /**
+         * 是否有 loss mask（用于判断是否需要 answer-only loss）
+         */
+        public boolean hasLossMask() {
+            return lossMask != null;
         }
         
         /**

@@ -3,6 +3,7 @@ package io.leavesfly.tinyai.gpt1.training;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.gpt1.GPT1Config;
 import io.leavesfly.tinyai.gpt1.GPT1Model;
+import io.leavesfly.tinyai.ml.loss.Loss;
 import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
 import io.leavesfly.tinyai.ml.optimize.SGD;
 import io.leavesfly.tinyai.ndarr.NdArray;
@@ -37,6 +38,7 @@ public class GPT1Finetune {
     private final GPT1Dataset trainDataset;
     private final GPT1Dataset valDataset;
     private final SoftmaxCrossEntropy lossFunction;
+    private final SoftmaxCrossEntropy perTokenLossFunction;  // 用于masked loss，不做归约
     private final SGD optimizer;
     
     // 微调超参数(与预训练不同)
@@ -69,6 +71,7 @@ public class GPT1Finetune {
         this.trainDataset = trainDataset;
         this.valDataset = valDataset;
         this.lossFunction = new SoftmaxCrossEntropy();
+        this.perTokenLossFunction = new SoftmaxCrossEntropy(Loss.Reduction.NONE);
         
         // 微调默认超参数(学习率比预训练小10倍)
         this.maxEpochs = 5;
@@ -223,18 +226,20 @@ public class GPT1Finetune {
     /**
      * 训练单步
      * 
+     * 支持loss mask：当batch包含lossMask时，只在mask=1的位置计算loss（Response部分），
+     * mask=0的位置（Instruction和padding部分）不参与loss计算和梯度更新。
+     * 
      * @param batch 批次数据
      * @return 损失值
      */
     private float trainStep(GPT1Dataset.Batch batch) {
         NdArray inputIds = batch.getInputIds();
         NdArray targetIds = batch.getTargetIds();
+        NdArray lossMask = batch.getLossMask();
         
         Variable inputVar = new Variable(inputIds);
         Variable logits = model.predict(inputVar);
         
-        // logits: [batch, seq_len, vocab_size] -> [batch * seq_len, vocab_size]
-        // targets: [batch, seq_len] -> [batch * seq_len]
         int[] logitsShape = logits.getValue().getShape().getShapeDims();
         int batchSize = logitsShape[0];
         int seqLen = logitsShape[1];
@@ -242,9 +247,27 @@ public class GPT1Finetune {
         
         Variable logits2D = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
         NdArray targets2D = targetIds.reshape(Shape.of(batchSize * seqLen, 1));
-        
         Variable targetVar = new Variable(targets2D);
-        Variable loss = lossFunction.loss(targetVar, logits2D);
+        
+        Variable loss;
+        if (lossMask != null) {
+            // 微调模式：使用masked loss，只在Response部分计算loss
+            Variable perTokenLoss = perTokenLossFunction.loss(targetVar, logits2D);
+            // perTokenLoss shape: [batch*seq_len, 1] 或 [batch*seq_len]
+            NdArray mask1D = lossMask.reshape(Shape.of(batchSize * seqLen, 1));
+            Variable maskVar = new Variable(mask1D);
+            Variable maskedLoss = perTokenLoss.mul(maskVar);
+            
+            // 计算有效token数量（mask=1的个数），避免除以0
+            float validTokenCount = mask1D.sum().getNumber().floatValue();
+            if (validTokenCount < 1.0f) {
+                validTokenCount = 1.0f;
+            }
+            loss = maskedLoss.sum().mul(new Variable(NdArray.of(1.0f / validTokenCount)));
+        } else {
+            // 预训练模式：所有token都参与loss计算
+            loss = lossFunction.loss(targetVar, logits2D);
+        }
         
         float lossValue = loss.getValue().getNumber().floatValue();
         
@@ -263,6 +286,8 @@ public class GPT1Finetune {
     /**
      * 在验证集上评估
      * 
+     * 支持loss mask：与trainStep一致，当batch包含lossMask时只在Response部分计算loss。
+     * 
      * @return 验证损失
      */
     private float evaluate() {
@@ -276,11 +301,11 @@ public class GPT1Finetune {
             
             NdArray inputIds = batch.getInputIds();
             NdArray targetIds = batch.getTargetIds();
+            NdArray lossMask = batch.getLossMask();
             
             Variable inputVar = new Variable(inputIds);
             Variable logits = model.predict(inputVar);
             
-            // logits: [batch, seq_len, vocab_size] -> [batch * seq_len, vocab_size]
             int[] logitsShape = logits.getValue().getShape().getShapeDims();
             int batchSize = logitsShape[0];
             int seqLen = logitsShape[1];
@@ -288,9 +313,23 @@ public class GPT1Finetune {
             
             Variable logits2D = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
             NdArray targets2D = targetIds.reshape(Shape.of(batchSize * seqLen, 1));
-            
             Variable targetVar = new Variable(targets2D);
-            Variable loss = lossFunction.loss(targetVar, logits2D);
+            
+            Variable loss;
+            if (lossMask != null) {
+                Variable perTokenLoss = perTokenLossFunction.loss(targetVar, logits2D);
+                NdArray mask1D = lossMask.reshape(Shape.of(batchSize * seqLen, 1));
+                Variable maskVar = new Variable(mask1D);
+                Variable maskedLoss = perTokenLoss.mul(maskVar);
+                
+                float validTokenCount = mask1D.sum().getNumber().floatValue();
+                if (validTokenCount < 1.0f) {
+                    validTokenCount = 1.0f;
+                }
+                loss = maskedLoss.sum().mul(new Variable(NdArray.of(1.0f / validTokenCount)));
+            } else {
+                loss = lossFunction.loss(targetVar, logits2D);
+            }
             
             totalLoss += loss.getValue().getNumber().floatValue();
             batchCount++;

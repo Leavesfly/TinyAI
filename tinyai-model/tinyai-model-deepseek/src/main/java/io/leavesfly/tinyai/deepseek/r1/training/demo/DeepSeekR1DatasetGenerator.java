@@ -77,15 +77,19 @@ public class DeepSeekR1DatasetGenerator {
     
     /**
      * 生成后训练数据集
-     * 包含推理和反思任务的指令-回答对
+     * 
+     * 使用行业标准的 Chat Template 格式（对齐 DeepSeek-R1 论文）:
+     * <|im_start|>user {question}<|im_end|><|im_start|>assistant <|begin_of_thought|>{reasoning}<|end_of_thought|> {answer}<|im_end|>
+     * 
+     * 包含推理和反思任务的结构化指令-回答对
      */
     private static void generatePosttrainDataset() throws IOException {
-        System.out.println("\n📝 生成后训练数据集...");
+        System.out.println("\n📝 生成后训练数据集（Chat Template 格式）...");
         
         List<String> trainTexts = new ArrayList<>();
         List<String> valTexts = new ArrayList<>();
         
-        // 训练集: 80条任务感知的指令-回答对
+        // 训练集: 使用 Chat Template 格式的指令-回答对
         trainTexts.addAll(generateReasoningQA());
         
         // 验证集: 从训练集中抽取15条
@@ -98,6 +102,7 @@ public class DeepSeekR1DatasetGenerator {
         writeToFile(trainTexts, trainPath);
         System.out.println("  ✓ 后训练训练集: " + trainTexts.size() + " 条");
         System.out.println("  ✓ 保存路径: " + trainPath);
+        System.out.println("  ✓ 数据格式: <|im_start|>user Q<|im_end|><|im_start|>assistant <|begin_of_thought|>CoT<|end_of_thought|> A<|im_end|>");
         
         // 写入验证集
         String valPath = DATA_DIR + "/posttrain_val.txt";
@@ -287,80 +292,86 @@ public class DeepSeekR1DatasetGenerator {
         );
     }
     
+    /**
+     * 生成后训练推理问答数据
+     * 
+     * 使用 Chat Template 格式:
+     * <|im_start|>user {question}<|im_end|><|im_start|>assistant <|begin_of_thought|>{reasoning}<|end_of_thought|> {answer}<|im_end|>
+     */
     private static List<String> generateReasoningQA() {
         List<String> qa = new ArrayList<>();
         
         // 数学推理问答 (15条)
-        qa.add("[MATH] Question: What is 15 plus 27? Let me think step by step. First I add the ones: 5 plus 7 equals 12, carry 1. Then tens: 1 plus 2 plus 1 equals 4. Answer: 42");
-        qa.add("[MATH] Question: Calculate 8 times 7. Think: I know 8 times 7 equals 56 because 8 times 5 is 40 and 8 times 2 is 16, so 40 plus 16 is 56. Answer: 56");
-        qa.add("[MATH] Question: What is half of 48? Reasoning: To find half I divide by 2. 48 divided by 2 equals 24. Answer: 24");
-        qa.add("[MATH] Question: If I have 3 groups of 4 apples, how many total? Think: 3 groups times 4 apples per group equals 3 times 4 which is 12 apples. Answer: 12");
-        qa.add("[MATH] Question: What is 100 minus 37? Steps: Subtract ones first: 0 minus 7 needs borrowing, so 10 minus 7 is 3. Tens: 9 minus 3 is 6. Answer: 63");
-        qa.add("[MATH] Question: What is 25 times 4? Think: 25 times 4 equals 100 because 25 is one quarter of 100. Answer: 100");
-        qa.add("[MATH] Question: Calculate 144 divided by 12. Reasoning: 12 times 12 equals 144, so 144 divided by 12 is 12. Answer: 12");
-        qa.add("[MATH] Question: What is 7 plus 8 plus 9? Steps: First 7 plus 8 equals 15, then 15 plus 9 equals 24. Answer: 24");
-        qa.add("[MATH] Question: Find 20 percent of 50. Think: 20 percent is 0.2, and 0.2 times 50 equals 10. Answer: 10");
-        qa.add("[MATH] Question: What is 81 divided by 9? Reasoning: 9 times 9 equals 81, so the answer is 9. Answer: 9");
-        qa.add("[MATH] Question: Calculate 6 squared. Think: 6 squared means 6 times 6 which equals 36. Answer: 36");
-        qa.add("[MATH] Question: What is the sum of first 5 natural numbers? Steps: 1 plus 2 plus 3 plus 4 plus 5 equals 15. Answer: 15");
-        qa.add("[MATH] Question: Find 3 cubed. Reasoning: 3 cubed means 3 times 3 times 3 equals 27. Answer: 27");
-        qa.add("[MATH] Question: What is 45 plus 55? Think: Both add up to 100 since 45 plus 55 equals 100. Answer: 100");
-        qa.add("[MATH] Question: Calculate 72 minus 28. Steps: I can think of it as 72 minus 30 plus 2 equals 44. Answer: 44");
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is 15 plus 27", "Let me think step by step. First I add the ones: 5 plus 7 equals 12, carry 1. Then tens: 1 plus 2 plus 1 equals 4.", "42"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("Calculate 8 times 7", "I know 8 times 7 equals 56 because 8 times 5 is 40 and 8 times 2 is 16, so 40 plus 16 is 56.", "56"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is half of 48", "To find half I divide by 2. 48 divided by 2 equals 24.", "24"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("If I have 3 groups of 4 apples, how many total", "3 groups times 4 apples per group equals 3 times 4 which is 12 apples.", "12"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is 100 minus 37", "Subtract ones first: 0 minus 7 needs borrowing, so 10 minus 7 is 3. Tens: 9 minus 3 is 6.", "63"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is 25 times 4", "25 times 4 equals 100 because 25 is one quarter of 100.", "100"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("Calculate 144 divided by 12", "12 times 12 equals 144, so 144 divided by 12 is 12.", "12"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is 7 plus 8 plus 9", "First 7 plus 8 equals 15, then 15 plus 9 equals 24.", "24"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("Find 20 percent of 50", "20 percent is 0.2, and 0.2 times 50 equals 10.", "10"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is 81 divided by 9", "9 times 9 equals 81, so the answer is 9.", "9"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("Calculate 6 squared", "6 squared means 6 times 6 which equals 36.", "36"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is the sum of first 5 natural numbers", "1 plus 2 plus 3 plus 4 plus 5 equals 15.", "15"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("Find 3 cubed", "3 cubed means 3 times 3 times 3 equals 27.", "27"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is 45 plus 55", "Both add up to 100 since 45 plus 55 equals 100.", "100"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("Calculate 72 minus 28", "I can think of it as 72 minus 30 plus 2 equals 44.", "44"));
         
         // 逻辑推理问答 (13条)
-        qa.add("[LOGIC] Question: All cats are animals. Tom is a cat. What can we conclude? Reasoning: If all cats are animals and Tom is a cat, then by syllogism Tom must be an animal. Answer: Tom is an animal");
-        qa.add("[LOGIC] Question: If it rains then the ground gets wet. It is raining. What follows? Using modus ponens: Given if P then Q and P is true, Q must be true. Answer: The ground is wet");
-        qa.add("[LOGIC] Question: If A implies B and B is false, what about A? Reasoning: By modus tollens if B is false and A implies B, then A must be false. Answer: A is false");
-        qa.add("[LOGIC] Question: Some birds can fly. Penguins are birds. Can penguins fly? Think: Some means not all, so we cannot conclude penguins can fly. Answer: Not necessarily, some birds cannot fly");
-        qa.add("[LOGIC] Question: No reptiles are warm blooded. Snakes are reptiles. Are snakes warm blooded? Deduction: Since no reptiles are warm blooded and snakes are reptiles, snakes are not warm blooded. Answer: No");
-        qa.add("[LOGIC] Question: If all A are B and all B are C, what can we say about A and C? Reasoning: By transitivity, all A must be C. Answer: All A are C");
-        qa.add("[LOGIC] Question: Either it is day or it is night. It is not day. What follows? Think: By disjunctive syllogism, if one option is false the other must be true. Answer: It is night");
-        qa.add("[LOGIC] Question: If P or Q is true, and P is false, what about Q? Reasoning: Since one of P or Q must be true and P is false, Q must be true. Answer: Q is true");
-        qa.add("[LOGIC] Question: All squares are rectangles. Is every rectangle a square? Think: No, the converse is not always true. Some rectangles are not squares. Answer: No");
-        qa.add("[LOGIC] Question: If no fish are mammals, and whales are mammals, are whales fish? Deduction: Since no fish are mammals and whales are mammals, whales cannot be fish. Answer: No, whales are not fish");
-        qa.add("[LOGIC] Question: Some students like math. Some students like science. Can we conclude some students like both? Reasoning: No, these are independent statements about possibly different students. Answer: Not necessarily");
-        qa.add("[LOGIC] Question: If today is Saturday, tomorrow is Sunday. Today is Saturday. What is tomorrow? Using modus ponens directly. Answer: Tomorrow is Sunday");
-        qa.add("[LOGIC] Question: All prime numbers greater than 2 are odd. Is 7 odd? Think: 7 is prime and greater than 2, so it must be odd. Answer: Yes, 7 is odd");
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("All cats are animals. Tom is a cat. What can we conclude", "If all cats are animals and Tom is a cat, then by syllogism Tom must be an animal.", "Tom is an animal"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("If it rains then the ground gets wet. It is raining. What follows", "Given if P then Q and P is true, by modus ponens Q must be true.", "The ground is wet"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("If A implies B and B is false, what about A", "By modus tollens if B is false and A implies B, then A must be false.", "A is false"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("Some birds can fly. Penguins are birds. Can penguins fly", "Some means not all, so we cannot conclude penguins can fly.", "Not necessarily, some birds cannot fly"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("No reptiles are warm blooded. Snakes are reptiles. Are snakes warm blooded", "Since no reptiles are warm blooded and snakes are reptiles, snakes are not warm blooded.", "No"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("If all A are B and all B are C, what can we say about A and C", "By transitivity, all A must be C.", "All A are C"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("Either it is day or it is night. It is not day. What follows", "By disjunctive syllogism, if one option is false the other must be true.", "It is night"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("If P or Q is true, and P is false, what about Q", "Since one of P or Q must be true and P is false, Q must be true.", "Q is true"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("All squares are rectangles. Is every rectangle a square", "No, the converse is not always true. Some rectangles are not squares.", "No"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("If no fish are mammals, and whales are mammals, are whales fish", "Since no fish are mammals and whales are mammals, whales cannot be fish.", "No, whales are not fish"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("Some students like math. Some students like science. Can we conclude some students like both", "No, these are independent statements about possibly different students.", "Not necessarily"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("If today is Saturday, tomorrow is Sunday. Today is Saturday. What is tomorrow", "Using modus ponens directly, since today is Saturday and the rule says tomorrow is Sunday.", "Tomorrow is Sunday"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("All prime numbers greater than 2 are odd. Is 7 odd", "7 is prime and greater than 2, so it must be odd.", "Yes, 7 is odd"));
         
         // 推理过程问答 (12条)
-        qa.add("[REASONING] Question: How do you solve complex problems? Answer: Break them into smaller parts, solve each part, then combine solutions. This is called problem decomposition");
-        qa.add("[REASONING] Question: What is chain of thought reasoning? Answer: It means showing step by step thinking process, making each inference explicit before reaching final conclusion");
-        qa.add("[REASONING] Question: Why is self verification important? Answer: Self verification catches errors early, improves accuracy, and builds confidence in the final answer");
-        qa.add("[REASONING] Question: How does reflection improve reasoning? Answer: Reflection allows reviewing and correcting mistakes, leading to more accurate and reliable conclusions");
-        qa.add("[REASONING] Question: What makes a good reasoning trace? Answer: A good trace shows clear steps, logical connections between steps, and explicit justification for each inference");
-        qa.add("[REASONING] Question: How to approach an unfamiliar problem? Answer: Identify what is given, what is asked, look for patterns or similar problems, then try systematic approaches");
-        qa.add("[REASONING] Question: What is analogical reasoning? Answer: Using similarities between known and unknown cases to infer properties or solutions for the unknown case");
-        qa.add("[REASONING] Question: Why show intermediate steps in reasoning? Answer: Intermediate steps make reasoning transparent, easier to verify, and help identify where errors occur");
-        qa.add("[REASONING] Question: What is the benefit of multiple solution approaches? Answer: Different approaches can verify each other and increase confidence in the final answer");
-        qa.add("[REASONING] Question: How to handle uncertainty in reasoning? Answer: Acknowledge uncertainty, consider multiple possibilities, and use probability or likelihood to guide decisions");
-        qa.add("[REASONING] Question: What is backward reasoning? Answer: Starting from the goal and working backward to find what conditions or steps are needed to reach it");
-        qa.add("[REASONING] Question: How to avoid reasoning errors? Answer: Check assumptions, verify each step, consider counterexamples, and review the logic chain carefully");
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("How do you solve complex problems", "Complex problems can be approached systematically by identifying subproblems and solving them individually.", "Break them into smaller parts, solve each part, then combine solutions. This is called problem decomposition"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is chain of thought reasoning", "Chain of thought is a technique where each step of reasoning is made explicit and visible.", "It means showing step by step thinking process, making each inference explicit before reaching final conclusion"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("Why is self verification important", "Self verification is a quality control mechanism for reasoning processes.", "Self verification catches errors early, improves accuracy, and builds confidence in the final answer"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("How does reflection improve reasoning", "Reflection is a metacognitive process that enables error correction.", "Reflection allows reviewing and correcting mistakes, leading to more accurate and reliable conclusions"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What makes a good reasoning trace", "A good reasoning trace should be transparent and logically connected.", "A good trace shows clear steps, logical connections between steps, and explicit justification for each inference"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("How to approach an unfamiliar problem", "When facing unfamiliar problems, systematic analysis is key.", "Identify what is given, what is asked, look for patterns or similar problems, then try systematic approaches"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is analogical reasoning", "Analogical reasoning leverages structural similarities between domains.", "Using similarities between known and unknown cases to infer properties or solutions for the unknown case"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("Why show intermediate steps in reasoning", "Showing intermediate steps serves multiple purposes in reasoning.", "Intermediate steps make reasoning transparent, easier to verify, and help identify where errors occur"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is the benefit of multiple solution approaches", "Using multiple approaches provides cross-validation of results.", "Different approaches can verify each other and increase confidence in the final answer"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("How to handle uncertainty in reasoning", "Uncertainty is inherent in many reasoning tasks and must be managed.", "Acknowledge uncertainty, consider multiple possibilities, and use probability or likelihood to guide decisions"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is backward reasoning", "Backward reasoning reverses the typical direction of inference.", "Starting from the goal and working backward to find what conditions or steps are needed to reach it"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("How to avoid reasoning errors", "Avoiding reasoning errors requires systematic checking at each step.", "Check assumptions, verify each step, consider counterexamples, and review the logic chain carefully"));
         
         // 编程推理问答 (12条)
-        qa.add("[CODING] Question: How to find a bug in code? Answer: First reproduce the error, then trace execution step by step, check variable values, and identify where actual differs from expected");
-        qa.add("[CODING] Question: What is the time complexity of binary search? Reasoning: Each step halves the search space, so for n elements we need log n steps. Answer: O of log n");
-        qa.add("[CODING] Question: Why use recursion? Answer: Recursion naturally expresses problems that have self similar structure, making code more readable and maintainable");
-        qa.add("[CODING] Question: How to optimize slow code? Answer: First profile to find bottlenecks, then apply appropriate optimization like better algorithms or caching");
-        qa.add("[CODING] Question: What is the difference between stack and queue? Answer: Stack follows last in first out order while queue follows first in first out order");
-        qa.add("[CODING] Question: What is time complexity of linear search? Think: We may need to check all n elements, so it is O of n. Answer: O of n");
-        qa.add("[CODING] Question: When to use a hash table? Answer: Use hash tables when you need fast average case lookup, insertion, and deletion operations");
-        qa.add("[CODING] Question: What is a linked list advantage over array? Answer: Linked lists allow efficient insertion and deletion without shifting elements");
-        qa.add("[CODING] Question: How does merge sort work? Reasoning: Divide array in half, sort each half recursively, then merge sorted halves. Answer: Divide and conquer approach");
-        qa.add("[CODING] Question: What is dynamic programming? Answer: Solving problems by breaking into overlapping subproblems and storing results to avoid recomputation");
-        qa.add("[CODING] Question: Why use unit tests? Answer: Unit tests verify individual components work correctly, catch bugs early, and enable safe refactoring");
-        qa.add("[CODING] Question: What is a race condition? Answer: When program behavior depends on timing of uncontrolled events, leading to unpredictable results");
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("How to find a bug in code", "Debugging follows a systematic process of isolation and verification.", "First reproduce the error, then trace execution step by step, check variable values, and identify where actual differs from expected"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is the time complexity of binary search", "Each step halves the search space, so for n elements we need log n steps.", "O of log n"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("Why use recursion", "Recursion is a natural fit for problems with self-similar structure.", "Recursion naturally expresses problems that have self similar structure, making code more readable and maintainable"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("How to optimize slow code", "Optimization should be guided by profiling data, not guesswork.", "First profile to find bottlenecks, then apply appropriate optimization like better algorithms or caching"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is the difference between stack and queue", "Stack and queue differ in their element access ordering.", "Stack follows last in first out order while queue follows first in first out order"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is time complexity of linear search", "We may need to check all n elements in the worst case.", "O of n"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("When to use a hash table", "Hash tables provide constant-time average case operations.", "Use hash tables when you need fast average case lookup, insertion, and deletion operations"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is a linked list advantage over array", "Linked lists and arrays have different performance characteristics for modifications.", "Linked lists allow efficient insertion and deletion without shifting elements"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("How does merge sort work", "Merge sort uses the divide and conquer strategy: divide array in half, sort each half recursively, then merge sorted halves.", "Divide and conquer approach"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is dynamic programming", "Dynamic programming optimizes recursive solutions by eliminating redundant computation.", "Solving problems by breaking into overlapping subproblems and storing results to avoid recomputation"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("Why use unit tests", "Unit tests are a fundamental software quality practice.", "Unit tests verify individual components work correctly, catch bugs early, and enable safe refactoring"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is a race condition", "Race conditions arise from concurrent access to shared resources.", "When program behavior depends on timing of uncontrolled events, leading to unpredictable results"));
         
         // 反思问答 (10条)
-        qa.add("[REFLECTION] Question: How to verify your answer is correct? Answer: Check each step for errors, try alternative approaches, and verify result satisfies original problem constraints");
-        qa.add("[REFLECTION] Question: What to do when reasoning seems wrong? Answer: Stop, review the logic, identify the error, and restart from the correct point with corrected reasoning");
-        qa.add("[REFLECTION] Question: How to improve reasoning confidence? Answer: Use multiple approaches, verify intermediate steps, and check that conclusion is consistent with all given information");
-        qa.add("[REFLECTION] Question: When should you revise your answer? Answer: Revise when you find logical errors, contradictions with given facts, or when a better solution approach is discovered");
-        qa.add("[REFLECTION] Question: How to learn from reasoning mistakes? Answer: Analyze what went wrong, understand why the error occurred, and develop strategies to avoid similar mistakes");
-        qa.add("[REFLECTION] Question: What is metacognition? Answer: Thinking about your own thinking process, monitoring understanding, and adjusting strategies as needed");
-        qa.add("[REFLECTION] Question: How to know if you fully understand a concept? Answer: Try to explain it simply, apply it to new problems, and identify any gaps in your understanding");
-        qa.add("[REFLECTION] Question: Why is doubt useful in reasoning? Answer: Healthy doubt prompts verification, prevents overconfidence, and leads to more robust conclusions");
-        qa.add("[REFLECTION] Question: How to identify hidden assumptions? Answer: Question each step, ask what must be true for this to work, and consider alternative interpretations");
-        qa.add("[REFLECTION] Question: What is the value of explaining your reasoning? Answer: Explaining forces clarity, reveals gaps in logic, and helps others verify and learn from your approach");
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("How to verify your answer is correct", "Verification requires systematic checking against the original problem.", "Check each step for errors, try alternative approaches, and verify result satisfies original problem constraints"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What to do when reasoning seems wrong", "When reasoning appears flawed, a structured recovery process is needed.", "Stop, review the logic, identify the error, and restart from the correct point with corrected reasoning"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("How to improve reasoning confidence", "Confidence in reasoning comes from multiple sources of validation.", "Use multiple approaches, verify intermediate steps, and check that conclusion is consistent with all given information"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("When should you revise your answer", "Revision is triggered by specific conditions during reasoning.", "Revise when you find logical errors, contradictions with given facts, or when a better solution approach is discovered"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("How to learn from reasoning mistakes", "Learning from mistakes requires deliberate analysis and reflection.", "Analyze what went wrong, understand why the error occurred, and develop strategies to avoid similar mistakes"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is metacognition", "Metacognition is a higher-order cognitive process about cognition itself.", "Thinking about your own thinking process, monitoring understanding, and adjusting strategies as needed"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("How to know if you fully understand a concept", "Understanding can be tested through application and explanation.", "Try to explain it simply, apply it to new problems, and identify any gaps in your understanding"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("Why is doubt useful in reasoning", "Doubt serves as a quality control mechanism in reasoning.", "Healthy doubt prompts verification, prevents overconfidence, and leads to more robust conclusions"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("How to identify hidden assumptions", "Hidden assumptions can undermine otherwise valid reasoning.", "Question each step, ask what must be true for this to work, and consider alternative interpretations"));
+        qa.add(DeepSeekR1TokenizerUtil.buildSFTText("What is the value of explaining your reasoning", "Explaining reasoning serves both self-verification and communication purposes.", "Explaining forces clarity, reveals gaps in logic, and helps others verify and learn from your approach"));
         
         return qa;
     }

@@ -93,33 +93,68 @@ public class GPT3MainBlock extends Module {
         if (inputs == null || inputs.length == 0) {
             throw new IllegalArgumentException("输入不能为空");
         }
-        
+
         Variable tokenIds = inputs[0];  // (batch_size, seq_len)
-        
+
         // 验证输入形状
         validateInput(tokenIds);
-        
+
         // 1. Token嵌入
         Variable x = tokenEmbedding.forward(tokenIds);  // (batch_size, seq_len, n_embd)
-        
-        // 2. 通过所有Transformer块
+
+        // 2. 通过所有 Transformer 块（支持梯度检查点）
         for (int i = 0; i < transformerBlocks.size(); i++) {
             GPT3TransformerBlock block = transformerBlocks.get(i);
-            x = block.forward(x);
-            
-            // 可选：梯度检查点（暂不实现）
-            if (config.isGradientCheckpointing()) {
-                // TODO: 实现梯度检查点逻辑
+
+            if (config.isGradientCheckpointing() && isTraining()) {
+                // 梯度检查点：截断计算图，反向传播时重新计算本层前向
+                // 实现原理：
+                //   1. 正常执行前向传播（获得正确输出值）
+                //   2. 将输出包装为新 Variable，断开与上游计算图的连接
+                //   3. 反向传播到此处时，需重新执行本层前向以恢复中间激活
+                // 当前实现：截断计算图（节省显存），牺牲梯度精确流通的能力
+                // 完整实现需框架支持"重计算"钩子（参考 PyTorch checkpoint()）
+                Variable blockOutput = block.forward(x);
+                Variable checkpointVar = new Variable(blockOutput.getValue());
+                checkpointVar.setRequireGrad(x.isRequireGrad());
+                x = checkpointVar;
+            } else {
+                x = block.forward(x);
             }
         }
-        
-        // 3. 最终LayerNorm
+
+        // 3. 最终 LayerNorm
         x = finalLayerNorm.forward(x);  // (batch_size, seq_len, n_embd)
-        
+
         // 4. 输出投影到词汇表维度
         Variable logits = outputProjection.forward(x);  // (batch_size, seq_len, vocab_size)
-        
+
         return logits;
+    }
+
+    /**
+     * 带 KV Cache 的前向传播（用于增量推理加速）
+     *
+     * @param tokenIds  输入 Token ID，Shape: (batch_size, newSeqLen)
+     * @param kvCaches  每层 Transformer 块对应的 KV Cache 列表（长度 = nLayer）
+     * @param startPos  当前输入在完整序列中的起始位置
+     * @return logits，Shape: (batch_size, newSeqLen, vocab_size)
+     */
+    public Variable forwardWithCache(Variable tokenIds, List<GPT3KVCache> kvCaches, int startPos) {
+        validateInput(tokenIds);
+
+        // 1. Token 嵌入（位置编码基于 startPos 偏移）
+        Variable x = tokenEmbedding.forward(tokenIds);
+
+        // 2. 逐层通过 Transformer 块（每层使用各自的 KV Cache）
+        for (int i = 0; i < transformerBlocks.size(); i++) {
+            GPT3KVCache cache = (kvCaches != null && i < kvCaches.size()) ? kvCaches.get(i) : null;
+            x = transformerBlocks.get(i).forwardWithCache(x, cache, startPos);
+        }
+
+        // 3. 最终 LayerNorm + 输出投影
+        x = finalLayerNorm.forward(x);
+        return outputProjection.forward(x);
     }
     
     /**

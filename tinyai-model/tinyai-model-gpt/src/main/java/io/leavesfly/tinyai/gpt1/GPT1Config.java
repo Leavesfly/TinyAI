@@ -117,12 +117,12 @@ public class GPT1Config implements Serializable {
      */
     public static GPT1Config createTinyConfig() {
         GPT1Config config = new GPT1Config();
-        config.setVocabSize(1000);
-        config.setNEmbd(128);
+        config.setVocabSize(10000);
+        config.setNEmbd(256);
         config.setNLayer(6);
         config.setNHead(8);
-        config.setNInner(512);
-        config.setNPositions(32);
+        config.setNInner(1024);
+        config.setNPositions(128);
         return config;
     }
     

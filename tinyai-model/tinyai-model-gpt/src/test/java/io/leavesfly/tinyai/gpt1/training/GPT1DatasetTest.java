@@ -89,8 +89,8 @@ public class GPT1DatasetTest {
         
         dataset.loadFromTexts(texts, tokenizer);
         
-        // 应该忽略空行和null
-        assertTrue("应只加载有效文本", dataset.getSampleCount() >= 2);
+        // 应该忽略空行和null，至少产生1个样本（短文本拼接后可能不足一个完整窗口，降级为单样本）
+        assertTrue("应只加载有效文本", dataset.getSampleCount() >= 1);
     }
     
     @Test

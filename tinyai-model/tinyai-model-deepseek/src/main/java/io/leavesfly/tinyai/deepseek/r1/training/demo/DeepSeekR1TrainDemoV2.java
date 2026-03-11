@@ -213,22 +213,21 @@ public class DeepSeekR1TrainDemoV2 {
         System.out.println("\n📝 准备后训练数据集...");
         DeepSeekR1Config config = pretrainedModel.getConfig();
         
-        DeepSeekR1Dataset trainDataset = createDatasetFromTexts(
+        DeepSeekR1Dataset trainDataset = createSFTDatasetWithLossMask(
             trainTexts,
             config.getNPositions(),
-            2,  // batch size
-            config.getVocabSize()
+            2  // batch size
         );
         
-        DeepSeekR1Dataset valDataset = createDatasetFromTexts(
+        DeepSeekR1Dataset valDataset = createSFTDatasetWithLossMask(
             valTexts,
             config.getNPositions(),
-            1,  // batch size
-            config.getVocabSize()
+            1  // batch size
         );
         
         System.out.println("  ✓ 训练样本: " + trainDataset.getSampleCount());
         System.out.println("  ✓ 验证样本: " + valDataset.getSampleCount());
+        System.out.println("  ✓ Loss Mask: 启用（Answer-only Loss）");
         
         // 3. 配置后训练器
         System.out.println("\n📝 配置后训练器...");
@@ -258,9 +257,9 @@ public class DeepSeekR1TrainDemoV2 {
         System.out.println("\n💡 后训练阶段总结:");
         System.out.println("  - 目标: 优化推理质量和反思能力");
         System.out.println("  - 任务: 任务特定的指令跟随");
-        System.out.println("  - 数据: 带任务标签的推理问答对");
-        System.out.println("  - 技巧: 小学习率 + 早停防止过拟合");
-        System.out.println("  - R1特色: 增强链式推理和自我反思");
+        System.out.println("  - 数据: Chat Template 格式的结构化推理问答对");
+        System.out.println("  - 技巧: Answer-only Loss Mask + 小学习率 + 早停防止过拟合");
+        System.out.println("  - R1特色: 只对 assistant 回复部分计算 loss，避免学习复述问题");
         
         return pretrainedModel;
     }
@@ -469,7 +468,7 @@ public class DeepSeekR1TrainDemoV2 {
     // ========== 辅助方法 ==========
     
     /**
-     * 从文本创建数据集
+     * 从文本创建数据集（不含 Loss Mask，用于预训练等全序列 loss 场景）
      */
     private static DeepSeekR1Dataset createDatasetFromTexts(
             List<String> texts,
@@ -498,6 +497,49 @@ public class DeepSeekR1TrainDemoV2 {
         }
         
         return new DeepSeekR1Dataset(sequences, maxSeqLength, batchSize, true);
+    }
+    
+    /**
+     * 从 Chat Template 格式文本创建带 Loss Mask 的 SFT 数据集
+     * 
+     * 行业标准做法：后训练数据使用 Answer-only Loss Mask，
+     * 只对 assistant 回复部分（含推理过程和最终答案）计算 loss，
+     * user 指令部分不参与梯度更新，避免模型学习"复述问题"。
+     */
+    private static DeepSeekR1Dataset createSFTDatasetWithLossMask(
+            List<String> texts,
+            int maxSeqLength,
+            int batchSize) {
+        
+        List<int[]> sequences = new ArrayList<>();
+        List<float[]> lossMasks = new ArrayList<>();
+        
+        for (String text : texts) {
+            String cleanText = DeepSeekR1TokenizerUtil.removeLabels(text);
+            
+            // 编码文本（Chat Template 中的特殊 Token 会被正确识别）
+            List<Integer> tokens = sharedTokenizer.encode(cleanText);
+            int[] sequence = tokens.stream().mapToInt(Integer::intValue).toArray();
+            
+            // 在原始序列上计算 Loss Mask（填充前，确保 mask 与实际内容对齐）
+            float[] rawMask = sharedTokenizer.computeLossMaskWithTokenizer(sequence);
+            
+            // 截断或填充序列到 maxSeqLength
+            int[] paddedSeq = new int[maxSeqLength];
+            Arrays.fill(paddedSeq, DeepSeekR1TokenizerUtil.PAD_TOKEN_ID);
+            int copyLen = Math.min(sequence.length, maxSeqLength);
+            System.arraycopy(sequence, 0, paddedSeq, 0, copyLen);
+            
+            // 同步截断或填充 Loss Mask（填充部分 mask 为 0.0f）
+            float[] paddedMask = new float[maxSeqLength];
+            int maskCopyLen = Math.min(rawMask.length, maxSeqLength);
+            System.arraycopy(rawMask, 0, paddedMask, 0, maskCopyLen);
+            
+            sequences.add(paddedSeq);
+            lossMasks.add(paddedMask);
+        }
+        
+        return new DeepSeekR1Dataset(sequences, lossMasks, maxSeqLength, batchSize, true);
     }
     
     /**

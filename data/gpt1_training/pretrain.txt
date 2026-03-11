@@ -23,6 +23,61 @@ Convolutional layers extract spatial hierarchies from images and visual data
 Pooling layers reduce spatial dimensions while preserving important features
 Deep architectures can learn abstract concepts through multiple levels of representation
 Neural networks trained on large datasets show emergent abilities on new tasks
+Autoencoders learn compressed representations through encoder decoder architecture
+Variational autoencoders add probabilistic elements to learn smooth latent spaces
+Generative adversarial networks pit two networks against each other for data generation
+Discriminator networks in GANs learn to distinguish real from generated samples
+Generator networks learn to produce realistic samples that fool the discriminator
+Style transfer networks apply artistic styles to images using feature representations
+Image segmentation networks assign class labels to each pixel in an image
+Object detection networks identify and locate multiple objects in images
+Face recognition networks map facial images to compact identity embeddings
+Medical imaging networks assist in diagnosis by analyzing scans and x-rays
+Data augmentation artificially expands training datasets through transformations
+Mixup augmentation creates new training samples by mixing pairs of examples
+Cutout augmentation randomly masks regions of input images during training
+Label smoothing prevents overconfidence by softening target distributions
+Warmup learning rate schedules gradually increase learning rate at training start
+Cosine annealing schedules decay learning rate following a cosine curve
+One cycle learning rate policy combines warmup and decay in a single cycle
+Gradient accumulation enables training with larger effective batch sizes
+Mixed precision training uses lower precision for faster computation
+Distributed data parallel training splits batches across multiple GPUs
+Model parallelism distributes large models across multiple devices
+Checkpoint activation trading recomputes activations to save memory
+Dynamic batching groups similar length sequences for efficient training
+Curriculum learning presents training examples in order of increasing difficulty
+Self supervised learning creates supervision signals from unlabeled data
+Cross entropy loss measures the difference between predicted and true probability distributions
+Mean squared error loss penalizes large errors more heavily than small ones
+Binary cross entropy loss is used for binary classification tasks
+Focal loss addresses class imbalance by down weighting easy examples
+Triplet loss learns embeddings by comparing anchor positive and negative samples
+Contrastive loss learns representations by bringing similar samples closer
+Hinge loss is used for maximum margin classification in support vector machines
+Dice loss is effective for segmentation tasks with class imbalance
+IoU loss directly optimizes intersection over union for object detection
+Perceptual loss uses features from pretrained networks for image generation
+Adversarial loss from discriminator networks improves generator outputs
+Cycle consistency loss ensures transformations are reversible in cycle GANs
+Knowledge distillation loss transfers knowledge from teacher to student models
+Auxiliary loss helps train deep networks by adding supervision at intermediate layers
+Multi task learning shares representations across related tasks with combined losses
+L1 regularization adds absolute value penalty encouraging sparse weights
+L2 regularization adds squared penalty preventing large weight values
+Elastic net combines L1 and L2 regularization for balanced sparsity and stability
+Dropconnect randomly drops individual weights rather than entire neurons
+Spatial dropout drops entire feature maps for convolutional networks
+DropPath randomly drops entire paths in networks with skip connections
+Zoneout randomly preserves hidden states in recurrent networks
+ShakeDrop adds random perturbations during training of deep networks
+CutMix combines image patches and labels for regularization
+Stochastic depth randomly drops layers during training
+Label noise regularization adds random label perturbations
+Virtual adversarial training adds small perturbations to improve robustness
+Confidence penalty discourages overconfident predictions
+Early stopping halts training when validation performance degrades
+Weight decay is equivalent to L2 regularization in gradient descent
 Machine learning enables computers to learn patterns from data without explicit programming
 Supervised learning uses labeled examples to train predictive models
 Unsupervised learning discovers hidden patterns in unlabeled data
@@ -48,6 +103,48 @@ Random forests aggregate multiple decision trees for robust predictions
 Support vector machines find optimal hyperplanes for classification
 K nearest neighbors classifies based on proximity in feature space
 Principal component analysis reduces dimensions while retaining variance
+Logistic regression predicts probabilities for binary classification
+Naive Bayes uses probability theory with independence assumptions
+Linear discriminant analysis finds linear combinations for class separation
+Gradient boosting sequentially builds models to correct previous errors
+XGBoost is an optimized implementation of gradient boosting
+LightGBM uses histogram based algorithms for faster training
+CatBoost handles categorical features natively without preprocessing
+K means clustering partitions data into k groups by minimizing variance
+Hierarchical clustering builds a tree of nested clusters
+DBSCAN identifies clusters based on density of data points
+Gaussian mixture models represent clusters as probability distributions
+Spectral clustering uses graph theory to identify clusters
+Mean shift clustering finds modes in the data distribution
+Affinity propagation identifies exemplars for clustering
+Agglomerative clustering iteratively merges similar clusters
+Divisive clustering recursively splits clusters into smaller groups
+OPTICS extends DBSCAN to handle varying density clusters
+t-SNE visualizes high dimensional data in 2D or 3D space
+UMAP preserves both local and global structure in embeddings
+Autoencoders learn compressed representations through bottleneck layers
+Independent component analysis separates mixed signals into components
+Factor analysis models observed variables as linear combinations of factors
+Non negative matrix factorization learns parts based representations
+Locally linear embedding preserves local relationships in data
+Isomap extends classical scaling to geodesic distances
+Random projection provides fast dimensionality reduction
+Linear discriminant analysis maximizes class separability
+Confusion matrix summarizes classification predictions versus actual labels
+Precision measures accuracy of positive predictions
+Recall measures coverage of actual positive cases
+F1 score balances precision and recall in a single metric
+ROC curves plot true positive rate against false positive rate
+AUC measures the area under the ROC curve for model comparison
+Precision recall curves are useful for imbalanced datasets
+Mean absolute error measures average prediction deviation
+Root mean squared error penalizes larger errors more heavily
+R squared measures the proportion of variance explained by the model
+Adjusted R squared accounts for the number of predictors in the model
+Silhouette score evaluates clustering quality without ground truth
+Calinski Harabasz index measures cluster separation and cohesion
+Davies Bouldin index quantifies cluster separation
+Cross validation provides robust estimates of model performance
 Neural networks consist of interconnected layers of artificial neurons
 Each neuron computes a weighted sum of inputs and applies an activation function
 The input layer receives raw features while the output layer produces predictions
@@ -73,6 +170,26 @@ Momentum accelerates optimization by accumulating gradient history
 Leaky ReLU allows small gradients for negative inputs
 Tanh activation maps inputs to range between negative one and one
 Network depth enables learning of complex hierarchical features
+GELU activation combines properties of ReLU and sigmoid smoothly
+Swish activation is a self gated function that outperforms ReLU
+Mish activation is smooth and non monotonic for better gradient flow
+Parametric ReLU learns the negative slope during training
+ELU activation helps mitigate vanishing gradients for negative inputs
+Multilayer perceptrons are the simplest form of deep neural networks
+Convolutional networks share weights across spatial locations
+Recurrent networks maintain hidden states across time steps
+LSTM networks use gates to control information flow in long sequences
+GRU simplifies LSTM with fewer parameters while maintaining performance
+Bidirectional RNNs process sequences in both forward and backward directions
+ResNet uses skip connections to train very deep networks
+DenseNet connects each layer to every other layer for feature reuse
+Wide ResNet increases width for better parallelization
+MobileNet uses depthwise separable convolutions for efficiency
+EfficientNet scales network dimensions in a principled way
+Attention networks dynamically weight different parts of the input
+Memory networks combine neural networks with external memory
+Neural Turing machines learn to read and write to external memory
+Graph neural networks process data structured as graphs
 Natural language processing enables computers to understand and generate human language
 Tokenization splits text into smaller units like words or subwords
 Word embeddings represent words as dense vectors in a continuous space
@@ -98,6 +215,31 @@ Dependency parsing analyzes syntactic structure of sentences
 Coreference resolution links pronouns to their referents
 Semantic role labeling identifies predicate argument structures
 Information extraction retrieves structured data from unstructured text
+Relation extraction identifies relationships between entities in text
+Event extraction identifies events and their participants from text
+Text generation produces fluent and coherent text sequences
+Dialogue systems enable conversational interaction with machines
+Reading comprehension systems answer questions based on given passages
+Semantic parsing maps natural language to formal meaning representations
+Text entailment determines if one text implies another
+Paraphrase detection identifies texts with equivalent meaning
+Text similarity measures semantic closeness between documents
+Keyword extraction identifies important terms in documents
+GPT models generate text by predicting tokens autoregressively
+BERT learns bidirectional representations using masked language modeling
+XLNet combines autoregressive and autoencoding approaches
+RoBERTa improves BERT through optimized training procedures
+ALBERT reduces parameters through factorized embeddings
+T5 frames all NLP tasks as text to text transformations
+BART combines bidirectional encoding with autoregressive decoding
+ELECTRA uses replaced token detection for efficient pretraining
+SpanBERT extends BERT by masking contiguous spans of tokens
+Longformer uses sliding window attention for long documents
+BigBird combines random and local attention for longer sequences
+Reformer uses locality sensitive hashing for efficient attention
+Performer uses kernel approximations for linear attention
+Linformer projects keys and values to lower dimensions
+Sparse transformer uses patterns to reduce attention complexity
 Transformer architecture revolutionized natural language processing in 2017
 Self attention allows models to weigh the importance of different input positions
 Multi head attention captures different aspects of relationships between tokens
@@ -123,6 +265,31 @@ Attention heads learn to focus on different linguistic phenomena
 Positional embeddings can be learned or defined using sinusoidal functions
 The transformer architecture is fully differentiable and trainable end to end
 Sparse attention patterns improve efficiency for long sequences
+Flash attention reduces memory access for faster attention computation
+Multi query attention shares keys and values across attention heads
+Grouped query attention balances efficiency and quality
+Sliding window attention limits attention to local neighborhoods
+Dilated attention expands receptive field with sparse patterns
+Memory efficient attention computes attention without storing full matrices
+Linear attention approximates softmax attention for efficiency
+Local attention restricts attention to nearby tokens
+Global attention allows special tokens to attend to all positions
+Axial attention decomposes attention along different dimensions
+Scaling laws predict model performance based on compute and data
+Emergent abilities appear in large language models unexpectedly
+In context learning allows models to learn from examples in prompts
+Chain of thought prompting improves reasoning step by step
+Instruction tuning trains models to follow human instructions
+RLHF uses human feedback to align models with human preferences
+Constitutional AI provides principles for model behavior
+Prompt engineering designs effective inputs for language models
+Few shot learning adapts to new tasks with minimal examples
+Zero shot learning generalizes to tasks without examples
+Retrieval augmented generation grounds model outputs in documents
+Tool use enables models to call external APIs and functions
+Agentic behavior allows models to plan and execute multi step tasks
+Speculative decoding speeds up generation with smaller draft models
+Quantization reduces model size by lowering parameter precision
 TinyAI is a Java based deep learning framework for education and research
 NdArray is the core multidimensional array abstraction in TinyAI
 The autograd engine in TinyAI enables automatic differentiation
@@ -148,3 +315,373 @@ Loss functions quantify prediction errors during training
 Optimizer algorithms minimize loss by updating model parameters
 TinyAI implements common activation functions like ReLU and GELU
 The framework supports saving and loading trained model checkpoints
+Shape class represents tensor dimensions in TinyAI
+Operations like matmul and add are implemented for NdArray
+The computational graph tracks dependencies between operations
+Gradients flow backward through the graph via chain rule
+Parameter initialization methods include Xavier and Kaiming
+Learning rate schedulers adjust optimizer rates during training
+Regularization techniques prevent overfitting in TinyAI models
+The framework provides utilities for text processing and tokenization
+Model serialization enables saving and loading trained weights
+Training callbacks allow custom behavior at training events
+Linear algebra is fundamental to machine learning and deep learning
+Vectors are one dimensional arrays of numbers used to represent data
+Matrices are two dimensional arrays used for linear transformations
+Matrix multiplication combines two matrices following specific rules
+The dot product measures similarity between two vectors
+Eigenvalues and eigenvectors characterize linear transformations
+Matrix decomposition breaks matrices into simpler components
+Singular value decomposition factorizes matrices into orthogonal components
+QR decomposition factorizes matrices into orthogonal and upper triangular
+LU decomposition factorizes matrices into lower and upper triangular
+Calculus provides tools for optimization in machine learning
+Derivatives measure the rate of change of functions
+Gradients are vectors of partial derivatives for multivariate functions
+The chain rule enables backpropagation through composite functions
+Partial derivatives measure change with respect to one variable
+Integration computes areas under curves and accumulations
+Jacobian matrices contain all first order partial derivatives
+Hessian matrices contain second order partial derivatives
+Taylor series approximate functions using polynomial expansions
+Gradient descent uses derivatives to find function minima
+Probability theory provides foundations for machine learning
+Random variables represent outcomes of random processes
+Probability distributions describe likelihood of different outcomes
+The normal distribution is a bell shaped continuous distribution
+Bayes theorem relates conditional and marginal probabilities
+Expected value represents the average outcome of a random variable
+Variance measures spread around the expected value
+Covariance measures how two variables change together
+Maximum likelihood estimation finds parameters that best explain data
+Hypothesis testing determines if results are statistically significant
+Information theory provides measures for machine learning
+Entropy quantifies uncertainty in probability distributions
+Cross entropy measures difference between probability distributions
+Kullback Leibler divergence measures distance between distributions
+Mutual information measures dependence between random variables
+Information gain measures reduction in entropy from splitting data
+The softmax function converts logits to probability distributions
+Cross entropy loss is derived from information theory principles
+Bits and nats are units for measuring information
+Coding theory connects information theory to data compression
+Programming is the process of writing instructions for computers
+Variables store data values that can be modified during execution
+Functions encapsulate reusable blocks of code
+Control flow determines the order of statement execution
+Loops repeat code blocks until a condition is met
+Conditional statements execute code based on boolean conditions
+Arrays store multiple values of the same type contiguously
+Objects encapsulate data and methods together
+Classes define blueprints for creating objects
+Inheritance allows classes to inherit properties from parent classes
+Data structures organize and store data efficiently
+Linked lists connect nodes through references
+Stacks follow last in first out ordering
+Queues follow first in first out ordering
+Trees organize data in hierarchical structures
+Binary trees have at most two children per node
+Hash tables provide fast key value lookups
+Graphs represent relationships between entities
+Heaps maintain ordering for priority queue operations
+Tries store strings for efficient prefix matching
+Algorithms are step by step procedures for solving problems
+Sorting algorithms arrange elements in order
+Searching algorithms find elements in data structures
+Dynamic programming solves problems by breaking them into subproblems
+Greedy algorithms make locally optimal choices at each step
+Divide and conquer splits problems into smaller subproblems
+Recursion solves problems by having functions call themselves
+Backtracking explores all possible solutions systematically
+Graph algorithms traverse or analyze graph structures
+String algorithms process and manipulate text data
+Programming paradigms are approaches to structuring code
+Object oriented programming organizes code around objects
+Functional programming treats computation as function evaluation
+Imperative programming uses statements to change program state
+Declarative programming describes what to compute not how
+Procedural programming organizes code into procedures
+Event driven programming responds to events or messages
+Concurrent programming handles multiple computations simultaneously
+Generic programming writes code that works with multiple types
+Metaprogramming writes code that manipulates code
+Artificial intelligence began as a field in the 1950s
+The Turing test was proposed by Alan Turing in 1950
+The Dartmouth Conference in 1956 founded AI as a discipline
+Early AI focused on symbolic reasoning and rule based systems
+Expert systems were popular AI applications in the 1980s
+The first AI winter occurred in the 1970s due to funding cuts
+Machine learning gained prominence in the 1990s
+Deep Blue defeated the world chess champion in 1997
+Support vector machines became popular in the late 1990s
+Neural networks experienced a revival in the 2000s
+Deep learning achieved breakthrough results around 2012
+AlexNet won ImageNet competition using GPU training in 2012
+Word2Vec introduced powerful word embeddings in 2013
+GANs introduced generative adversarial training in 2014
+ResNet enabled training of very deep networks in 2015
+AlphaGo defeated the world Go champion in 2016
+Transformer architecture was introduced in 2017
+BERT revolutionized NLP with bidirectional pretraining in 2018
+GPT-2 demonstrated impressive text generation in 2019
+GPT-3 showed emergent abilities with 175 billion parameters in 2020
+Large language models have transformed AI capabilities
+ChatGPT brought conversational AI to mainstream users in 2022
+Instruction tuning improved model following of human instructions
+RLHF aligned language models with human preferences
+Multimodal models process text images and other modalities
+Diffusion models revolutionized image generation
+Code generation models assist programmers with writing code
+AI assistants help with writing analysis and creativity
+Foundation models provide general purpose AI capabilities
+AI safety research addresses risks of powerful AI systems
+AI has transformed many industries and applications
+Computer vision enables machines to understand images
+Natural language processing helps machines understand text
+Speech recognition converts spoken language to text
+Recommendation systems personalize user experiences
+Autonomous vehicles use AI for navigation and control
+Medical AI assists in diagnosis and drug discovery
+Financial AI enables algorithmic trading and fraud detection
+Robotics combines AI with physical systems
+Scientific discovery is accelerated by AI methods
+Gradient descent is the core optimization algorithm for neural networks
+Stochastic gradient descent uses random subsets of data
+Mini batch gradient descent balances efficiency and accuracy
+Batch gradient descent computes gradients over all data
+Learning rate controls step size in parameter updates
+Momentum accelerates convergence by accumulating past gradients
+Nesterov momentum looks ahead before computing gradients
+Gradient clipping prevents exploding gradients
+Learning rate schedules adjust rates during training
+Warmup gradually increases learning rate at training start
+Adaptive optimizers adjust learning rates per parameter
+Adagrad adapts rates based on historical gradient magnitudes
+RMSprop uses exponential moving average of squared gradients
+Adam combines momentum with adaptive learning rates
+AdamW adds weight decay regularization to Adam
+AdaFactor reduces memory usage for large models
+LAMB enables large batch training for distributed settings
+LARS supports layer wise adaptive learning rates
+NovoGrad is memory efficient for large batch training
+Shampoo uses preconditioning for faster convergence
+Second order methods use curvature information
+Newton method uses the Hessian for faster convergence
+Quasi Newton methods approximate the Hessian
+BFGS is a popular quasi Newton optimization algorithm
+L BFGS is memory efficient for large problems
+Natural gradient uses Fisher information matrix
+K FAC approximates Fisher for neural networks
+Hessian free optimization avoids storing the full Hessian
+Trust region methods constrain parameter updates
+Line search finds optimal step size along gradient
+Constrained optimization handles restrictions on parameters
+Lagrange multipliers incorporate constraints into objectives
+Penalty methods add penalties for constraint violations
+Barrier methods prevent constraint violations
+Projected gradient descent projects onto feasible sets
+Proximal methods handle non smooth regularization
+ADMM splits problems into alternating subproblems
+Dual ascent optimizes the dual problem
+Interior point methods traverse feasible region
+Augmented Lagrangian combines penalties and multipliers
+Computer vision enables machines to understand images
+Images are represented as arrays of pixel values
+Convolution extracts features using sliding filters
+Pooling reduces spatial dimensions while retaining information
+Edge detection identifies boundaries in images
+Image filtering removes noise or enhances features
+Histogram equalization improves image contrast
+Morphological operations process image shapes
+Color spaces represent colors in different formats
+Image augmentation increases training data diversity
+Convolutional neural networks revolutionized image recognition
+Convolutional layers share weights across spatial positions
+Receptive fields determine the region each neuron sees
+Feature maps are output channels from convolutional layers
+Strided convolution reduces spatial resolution
+Dilated convolution expands receptive field without parameters
+Depthwise separable convolution reduces computation
+Batch normalization stabilizes CNN training
+Global average pooling reduces spatial dimensions
+Skip connections enable very deep CNN architectures
+Image classification assigns labels to entire images
+Object detection finds and classifies objects in images
+Semantic segmentation labels each pixel with a class
+Instance segmentation separates individual object instances
+Pose estimation detects human body keypoints
+Face recognition identifies or verifies individuals
+Optical flow estimates motion between video frames
+Image generation creates new images from noise or text
+Image super resolution enhances image quality
+Style transfer applies artistic styles to images
+VGGNet demonstrated the power of deep networks
+Inception modules use multiple filter sizes in parallel
+ResNet enabled training of hundreds of layers
+DenseNet connects layers densely for feature reuse
+EfficientNet scales network dimensions optimally
+YOLO enables real time object detection
+R CNN family introduced region based detection
+U Net is popular for biomedical image segmentation
+Vision transformer applies transformer to image patches
+CLIP learns joint image text representations
+Reinforcement learning trains agents through interaction
+Agents take actions in environments to maximize rewards
+States represent the current situation of the environment
+Actions are choices available to the agent
+Rewards provide feedback on action quality
+Policies map states to actions
+Value functions estimate expected cumulative rewards
+The discount factor weights future rewards
+Episodes are sequences from start to terminal state
+The exploration exploitation tradeoff balances learning and acting
+Value based methods learn value functions
+Q learning learns action values without a model
+Deep Q networks use neural networks for Q values
+Experience replay stores transitions for learning
+Target networks stabilize Q learning
+Double Q learning reduces overestimation
+Dueling networks separate value and advantage
+Prioritized replay samples important transitions more
+Noisy networks enable exploration through parameter noise
+Distributional RL learns value distributions
+Policy based methods directly learn policies
+REINFORCE uses Monte Carlo policy gradients
+Actor critic methods combine policy and value learning
+Advantage functions reduce variance in policy gradients
+Trust region policy optimization constrains policy updates
+Proximal policy optimization clips policy updates
+Deterministic policy gradients handle continuous actions
+Soft actor critic maximizes entropy for exploration
+Natural policy gradient uses Fisher information
+Important sampling reuses past experience
+Model based RL learns environment dynamics
+Planning uses models to simulate futures
+Monte Carlo tree search plans through simulations
+AlphaGo combined deep learning with tree search
+Curiosity driven exploration seeks novel states
+Inverse reinforcement learning learns from demonstrations
+Imitation learning copies expert behavior
+Multi agent RL handles multiple interacting agents
+Hierarchical RL decomposes tasks into subtasks
+Meta RL learns to learn across many tasks
+Data collection is the first step in machine learning
+Web scraping extracts data from websites
+APIs provide structured access to data sources
+Surveys collect labeled data from human respondents
+Sensors capture real world signals for analysis
+Crowdsourcing leverages many people for data labeling
+Synthetic data is generated programmatically
+Data augmentation expands datasets through transformations
+Active learning selects informative samples for labeling
+Data labeling assigns ground truth to examples
+Data cleaning removes errors and inconsistencies
+Missing values can be imputed or removed
+Outliers may be genuine or errors requiring handling
+Duplicate records should be identified and resolved
+Data normalization scales features to similar ranges
+Standardization centers and scales features
+Encoding converts categorical variables to numbers
+Text cleaning removes noise from text data
+Data validation ensures data quality standards
+Data profiling summarizes data characteristics
+Feature engineering creates informative inputs for models
+Feature extraction derives features from raw data
+Feature selection chooses the most relevant features
+Polynomial features capture non linear relationships
+Binning converts continuous features to categorical
+Interaction features combine multiple features
+Time series features capture temporal patterns
+Text features represent documents as vectors
+Image features extract visual characteristics
+Feature importance ranks features by contribution
+Data pipelines automate data processing workflows
+ETL processes extract transform and load data
+Data validation checks data quality automatically
+Data versioning tracks changes to datasets
+Feature stores manage and serve features
+Data lineage tracks data origins and transformations
+Streaming data is processed in real time
+Batch processing handles data in large chunks
+Data partitioning distributes data for parallel processing
+Data caching speeds up repeated data access
+Model evaluation measures how well models perform
+Accuracy measures the fraction of correct predictions
+Precision measures the fraction of positive predictions that are correct
+Recall measures the fraction of actual positives that are found
+F1 score balances precision and recall
+ROC curves plot true positive rate against false positive rate
+AUC summarizes ROC curve performance in one number
+Mean squared error measures regression prediction error
+Mean absolute error is robust to outliers
+R squared measures variance explained by the model
+Cross validation estimates model performance robustly
+K fold cross validation splits data into k folds
+Stratified cross validation maintains class distributions
+Leave one out cross validation uses each sample as a test
+Nested cross validation handles hyperparameter tuning
+Time series cross validation respects temporal order
+Group cross validation keeps related samples together
+Repeated cross validation reduces variance in estimates
+Cross validation helps detect overfitting
+Cross validation provides confidence intervals
+Model selection chooses between different models
+Hyperparameter tuning optimizes model settings
+Grid search exhaustively searches parameter combinations
+Random search samples parameter combinations randomly
+Bayesian optimization uses probabilistic models for search
+Early stopping prevents overfitting during training
+Model ensembling combines multiple models
+Bagging reduces variance through bootstrap sampling
+Boosting sequentially corrects previous errors
+Stacking uses meta models to combine base models
+Model diagnosis identifies problems with models
+Learning curves show performance versus training size
+Validation curves show performance versus hyperparameters
+Confusion matrices reveal classification error patterns
+Residual analysis checks regression assumptions
+Feature importance identifies influential features
+Partial dependence plots show feature effects
+SHAP values explain individual predictions
+Model calibration compares predicted versus actual probabilities
+Fairness metrics detect bias in predictions
+Distributed training scales training across multiple devices
+Data parallelism replicates models across devices
+Model parallelism splits models across devices
+Pipeline parallelism partitions layers across devices
+Tensor parallelism splits tensors across devices
+Hybrid parallelism combines multiple strategies
+ZeRO optimizer reduces memory for data parallelism
+FSDP shards model states across devices
+Mesh strategies arrange devices in multidimensional grids
+Megatron LM uses tensor parallelism for large models
+Communication is a key challenge in distributed training
+All reduce aggregates gradients across devices
+All gather collects tensors from all devices
+Reduce scatter distributes aggregation results
+Ring all reduce organizes devices in a ring topology
+Parameter servers centralize gradient aggregation
+Gradient compression reduces communication volume
+Overlapping computation and communication improves efficiency
+Communication efficient algorithms reduce synchronization
+Asynchronous updates allow devices to proceed independently
+System optimizations improve training efficiency
+Mixed precision training uses lower precision arithmetic
+Gradient checkpointing trades computation for memory
+Memory efficient attention reduces memory for transformers
+Faster attention implementations speed up transformers
+Operator fusion combines operations for efficiency
+Just in time compilation optimizes computational graphs
+Profiling identifies performance bottlenecks
+Batch size scaling improves hardware utilization
+Dynamic batching groups similar inputs together
+Fault tolerance handles failures in distributed training
+Checkpointing saves training state for recovery
+Elastic training adapts to available resources
+Preemption handling manages interrupted training
+Distributed optimizers coordinate across devices
+Scalable data loading prevents bottlenecks
+Distributed sampling ensures data diversity
+Synchronization points coordinate training steps
+Consistency models trade freshness for efficiency
+Straggler mitigation handles slow devices

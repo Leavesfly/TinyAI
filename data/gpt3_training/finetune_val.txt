@@ -1,0 +1,6 @@
+Instruction: What is top-k sampling? Response: Top-k sampling restricts generation to the k most likely next tokens at each step.
+Instruction: What is nucleus sampling? Response: Nucleus sampling selects from the smallest token set whose cumulative probability exceeds threshold p.
+Instruction: Explain beam search. Response: Beam search explores multiple generation paths simultaneously to find the most likely output sequence.
+Instruction: What is in-context learning? Response: In-context learning allows models to adapt to new tasks from examples without updating model weights.
+Instruction: What is positional encoding? Response: Positional encoding adds position information to token embeddings since attention has no inherent order.
+Instruction: Explain the feed-forward network. Response: The feed-forward network applies two linear transformations with activation between them in each transformer layer.

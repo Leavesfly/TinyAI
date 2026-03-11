@@ -1,0 +1,24 @@
+Instruction: What is deep learning? Response: Deep learning is a machine learning approach using neural networks with multiple layers to learn hierarchical representations from data.
+Instruction: Explain the transformer architecture. Response: Transformers use self-attention mechanisms to process sequences in parallel and capture long-range dependencies between tokens.
+Instruction: What is GPT-3? Response: GPT-3 is a large language model with 175 billion parameters that uses autoregressive language modeling with parallel attention and MLP computation.
+Instruction: What is backpropagation? Response: Backpropagation computes gradients by applying the chain rule backward through the network to update weights using gradient descent.
+Instruction: What is attention mechanism? Response: Attention computes weighted combinations of values based on query-key similarity scores, allowing models to focus on relevant parts of the input.
+Instruction: Explain gradient clipping. Response: Gradient clipping rescales gradients when their norm exceeds a threshold, preventing exploding gradients during training.
+Instruction: What is KV cache? Response: KV cache stores key and value tensors from previous tokens to avoid recomputing them at each inference step, enabling O(n) generation efficiency.
+Instruction: What is rotary position embedding? Response: RoPE encodes positional information by rotating query and key vectors, allowing relative position information to be captured in dot-product attention.
+Instruction: Explain sparse attention. Response: Sparse attention reduces computational cost by only attending to local windows and strided global positions rather than all token pairs.
+Instruction: What is gradient checkpointing? Response: Gradient checkpointing saves memory by not storing intermediate activations and recomputing them during the backward pass.
+Instruction: What is batch normalization? Response: Batch normalization normalizes layer inputs during training to stabilize and accelerate deep network training.
+Instruction: Explain dropout regularization. Response: Dropout randomly deactivates neurons during training to prevent overfitting and improve model generalization.
+Instruction: What is the learning rate? Response: The learning rate controls the step size during gradient descent optimization affecting convergence speed and stability.
+Instruction: What is transfer learning? Response: Transfer learning fine-tunes pretrained models on new tasks leveraging knowledge from large-scale pretraining.
+Instruction: Explain multi-head attention. Response: Multi-head attention runs multiple attention operations in parallel to capture different types of relationships.
+Instruction: What is causal language modeling? Response: Causal language modeling trains models to predict each token from only previous tokens in the sequence.
+Instruction: What is tokenization? Response: Tokenization splits text into subword units using algorithms like BPE to create a fixed vocabulary for language models.
+Instruction: Explain softmax function. Response: Softmax converts logits to probability distributions by exponentiating and normalizing to sum to one.
+Instruction: What is cross-entropy loss? Response: Cross-entropy measures the difference between predicted probability distributions and true labels for classification.
+Instruction: What is the Adam optimizer? Response: Adam combines momentum and adaptive learning rates for efficient gradient-based optimization.
+Instruction: Explain residual connections. Response: Residual connections add layer inputs to outputs allowing gradients to flow directly through skip connections.
+Instruction: What is layer normalization? Response: Layer normalization normalizes across the feature dimension and is commonly used in transformer architectures.
+Instruction: What is few-shot learning? Response: Few-shot learning enables models to perform tasks from just a few examples provided in the context.
+Instruction: Explain temperature in generation. Response: Temperature controls randomness in text generation with higher values producing more diverse outputs.

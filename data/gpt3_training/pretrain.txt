@@ -1,0 +1,100 @@
+deep learning is a subset of machine learning that uses neural networks with many layers
+neural networks learn representations from data through gradient descent optimization
+backpropagation computes gradients by applying the chain rule through the network layers
+convolutional neural networks excel at image recognition by learning spatial features
+recurrent neural networks process sequential data by maintaining hidden state over time
+batch normalization stabilizes training by normalizing layer inputs during forward pass
+dropout regularization prevents overfitting by randomly deactivating neurons during training
+residual connections allow gradients to flow directly through skip connections in deep networks
+layer normalization normalizes across the feature dimension and is used in transformers
+the adam optimizer combines momentum and adaptive learning rates for efficient optimization
+learning rate scheduling adjusts the learning rate during training to improve convergence
+transfer learning fine-tunes pretrained models on new tasks with limited data
+data augmentation artificially expands training data to improve model generalization
+regularization techniques like weight decay prevent neural networks from overfitting
+gradient clipping prevents exploding gradients by rescaling them to a maximum norm
+activation functions introduce non-linearity into neural networks enabling them to learn complex patterns
+the vanishing gradient problem occurs when gradients become too small in deep networks
+weight initialization strategies like xavier and he initialization help with training stability
+early stopping prevents overfitting by halting training when validation loss increases
+mini-batch gradient descent computes gradients on small subsets of data for efficiency
+momentum accelerates gradient descent by accumulating velocity in consistent directions
+the learning rate controls the step size during gradient descent optimization
+batch size affects the noise in gradient estimates and training dynamics
+epoch refers to one complete pass through the entire training dataset
+validation data is used to tune hyperparameters and monitor model performance
+test data provides final evaluation of model performance on unseen examples
+overfitting occurs when a model memorizes training data instead of learning patterns
+underfitting happens when a model is too simple to capture underlying patterns
+the bias-variance tradeoff balances model complexity with generalization ability
+cross-validation estimates model performance by partitioning data into multiple folds
+the transformer architecture uses self-attention to capture long-range dependencies
+multi-head attention allows the model to attend to different positions simultaneously
+the attention mechanism computes query key value products to weight token importance
+positional encoding adds position information to token embeddings in transformers
+causal language modeling trains the model to predict each token from previous tokens
+the feed-forward network in transformers applies two linear transformations with activation
+pre-layernorm applies normalization before attention and feed-forward sublayers
+the softmax function converts attention scores to probability distributions over tokens
+masked self-attention prevents future tokens from influencing current token predictions
+token embeddings map discrete token ids to continuous vector representations
+the encoder-decoder architecture processes input sequences and generates output sequences
+attention heads learn different patterns and relationships in the input data
+the residual connection adds the input of a sublayer to its output
+transformer models can be parallelized across sequence positions during training
+the key query and value projections transform embeddings for attention computation
+scaled dot-product attention divides attention scores by the square root of dimension
+the decoder uses cross-attention to attend to encoder outputs
+attention masks prevent attending to padding tokens or future positions
+the transformer was introduced in the attention is all you need paper
+bert uses bidirectional attention while gpt uses unidirectional causal attention
+gpt3 introduced parallel attention and mlp computation for improved efficiency
+rotary position embedding encodes position information through rotation in vector space
+sparse attention reduces computation by only attending to local and strided global positions
+gradient checkpointing trades computation for memory by recomputing activations backward
+kv cache stores key and value tensors to avoid redundant computation during inference
+few-shot learning allows gpt3 to perform tasks from a small number of examples in context
+in-context learning enables language models to adapt to tasks without gradient updates
+scaling laws show that model performance improves predictably with more compute and data
+the gpt3 model has 175 billion parameters trained on 300 billion tokens of text data
+autoregressive generation produces text one token at a time using the previous tokens
+the context window limits how many tokens a model can attend to at once
+temperature controls randomness in text generation with higher values increasing diversity
+top-k sampling restricts generation to the k most likely next tokens
+nucleus sampling selects from the smallest set of tokens whose cumulative probability exceeds p
+beam search explores multiple generation paths to find the most likely sequence
+the vocabulary size determines how many unique tokens the model can represent
+tokenization algorithms like bpe split words into frequent subword units
+the embedding dimension determines the size of token representation vectors
+larger models generally perform better but require more compute and memory
+zero-shot learning tests model ability to perform tasks without any examples
+natural language processing enables computers to understand and generate human language
+tokenization splits text into subword units using byte pair encoding or wordpiece
+word embeddings represent words as dense vectors in a continuous semantic space
+language models assign probabilities to sequences of tokens in natural language
+text generation produces coherent and contextually relevant text from a given prompt
+question answering systems extract or generate answers to questions from context
+text summarization condenses long documents into shorter informative summaries
+named entity recognition identifies and classifies named entities in text
+sentiment analysis determines the emotional tone or opinion expressed in text
+machine translation converts text from one language to another automatically
+part-of-speech tagging assigns grammatical categories to words in a sentence
+dependency parsing analyzes grammatical structure by identifying relationships between words
+coreference resolution determines which expressions refer to the same entity
+text classification assigns predefined categories to documents or sentences
+information extraction identifies structured information from unstructured text
+semantic similarity measures how close two pieces of text are in meaning
+language identification determines the language of a given text sample
+keyword extraction identifies the most important terms in a document
+text segmentation divides documents into coherent sections or topics
+speech recognition converts spoken language into written text
+matrix multiplication is the fundamental operation in neural network forward passes
+the cross entropy loss measures the difference between predicted and true distributions
+softmax converts logits to probability distributions by exponentiating and normalizing
+the gradient of a function indicates the direction of steepest ascent at each point
+the chain rule allows gradients to be propagated backward through composite functions
+the dot product measures similarity between two vectors in vector space
+the relu activation function outputs zero for negative inputs and passes positive values
+the sigmoid function maps inputs to values between zero and one
+the tanh activation function maps inputs to values between negative one and one
+normalization scales values to have zero mean and unit variance

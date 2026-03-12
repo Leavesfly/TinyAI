@@ -1,25 +1,100 @@
-[CODING] Question: How to define a function in Python? Answer: Use def keyword followed by function name parentheses for parameters and colon then indent the function body
-[CODING] Question: What is list comprehension in Python? Answer: List comprehension provides concise syntax to create lists using bracket notation with for loop and optional if condition
-[CODING] Question: How to handle exceptions in Python? Answer: Use try block for code that may raise exceptions except block to catch and handle specific exception types and finally for cleanup
-[CODING] Question: What are Python decorators? Answer: Decorators are functions that modify behavior of other functions using at symbol syntax wrapping the original function with additional functionality
-[CODING] Question: How to read files in Python? Answer: Use open function with file path and mode then read content with read or readlines method always close file or use with statement
-[CODING] Question: How to declare a class in Java? Answer: Use public class keyword followed by class name then curly braces containing fields methods and constructors
-[CODING] Question: What is inheritance in Java? Answer: Inheritance allows a class to inherit fields and methods from parent class using extends keyword promoting code reuse
-[CODING] Question: How to create an interface in Java? Answer: Use interface keyword followed by name declare method signatures without implementation classes implement interface with implements keyword
-[CODING] Question: What is Java generics? Answer: Generics enable types to be parameters when defining classes interfaces and methods providing compile time type safety
-[CODING] Question: How to handle null in Java? Answer: Check for null before dereferencing use Optional class or annotations like NonNull to prevent null pointer exceptions
-[CODING] Question: What are arrow functions in JavaScript? Answer: Arrow functions provide shorter syntax using arrow notation capture this from enclosing scope unlike regular functions
-[CODING] Question: How to handle async operations in JavaScript? Answer: Use promises with then and catch or async await syntax for cleaner asynchronous code handling
-[CODING] Question: What is closure in JavaScript? Answer: Closure is a function that remembers variables from its outer scope even after outer function has finished executing
-[CODING] Question: How to iterate arrays in JavaScript? Answer: Use for loop forEach map filter or for of loop depending on whether you need transformation filtering or simple iteration
-[CODING] Question: What is destructuring in JavaScript? Answer: Destructuring extracts values from arrays or objects into distinct variables using bracket or curly brace syntax
-[CODING] Question: What are pointers in C plus plus? Answer: Pointers store memory addresses enabling dynamic memory allocation direct memory access and efficient data structure implementation
-[CODING] Question: How to use templates in C plus plus? Answer: Templates enable generic programming using template keyword with type parameters allowing code to work with different data types
-[CODING] Question: What is RAII in C plus plus? Answer: Resource Acquisition Is Initialization ties resource lifetime to object lifetime using constructors and destructors for automatic resource management
-[CODING] Question: How to handle memory in C plus plus? Answer: Use new for dynamic allocation delete to free memory or prefer smart pointers like unique ptr and shared ptr
-[CODING] Question: What are virtual functions in C plus plus? Answer: Virtual functions enable polymorphism allowing derived classes to override base class methods using virtual keyword
-[CODING] Question: What is time complexity? Answer: Time complexity measures how algorithm runtime grows with input size using big O notation like O of n or O of n squared
-[CODING] Question: How to optimize code performance? Answer: Profile code identify bottlenecks use efficient algorithms and data structures minimize memory allocations and avoid premature optimization
-[CODING] Question: What is recursion? Answer: Recursion is when function calls itself to solve problem by breaking it into smaller subproblems requires base case to terminate
-[CODING] Question: How to debug code effectively? Answer: Use debugger set breakpoints inspect variables trace execution flow write unit tests and use logging strategically
-[CODING] Question: What is code refactoring? Answer: Refactoring improves code structure readability and maintainability without changing external behavior through small incremental changes
+[CODING] <|im_start|>user
+How to define a function in Python?<|im_end|>
+<|im_start|>assistant
+Use def keyword followed by function name parentheses for parameters and colon then indent the function body<|im_end|>
+[CODING] <|im_start|>user
+What is list comprehension in Python?<|im_end|>
+<|im_start|>assistant
+List comprehension provides concise syntax to create lists using bracket notation with for loop and optional if condition<|im_end|>
+[CODING] <|im_start|>user
+How to handle exceptions in Python?<|im_end|>
+<|im_start|>assistant
+Use try block for code that may raise exceptions except block to catch and handle specific exception types and finally for cleanup<|im_end|>
+[CODING] <|im_start|>user
+What are Python decorators?<|im_end|>
+<|im_start|>assistant
+Decorators are functions that modify behavior of other functions using at symbol syntax wrapping the original function with additional functionality<|im_end|>
+[CODING] <|im_start|>user
+How to read files in Python?<|im_end|>
+<|im_start|>assistant
+Use open function with file path and mode then read content with read or readlines method always close file or use with statement<|im_end|>
+[CODING] <|im_start|>user
+How to declare a class in Java?<|im_end|>
+<|im_start|>assistant
+Use public class keyword followed by class name then curly braces containing fields methods and constructors<|im_end|>
+[CODING] <|im_start|>user
+What is inheritance in Java?<|im_end|>
+<|im_start|>assistant
+Inheritance allows a class to inherit fields and methods from parent class using extends keyword promoting code reuse<|im_end|>
+[CODING] <|im_start|>user
+How to create an interface in Java?<|im_end|>
+<|im_start|>assistant
+Use interface keyword followed by name declare method signatures without implementation classes implement interface with implements keyword<|im_end|>
+[CODING] <|im_start|>user
+What is Java generics?<|im_end|>
+<|im_start|>assistant
+Generics enable types to be parameters when defining classes interfaces and methods providing compile time type safety<|im_end|>
+[CODING] <|im_start|>user
+How to handle null in Java?<|im_end|>
+<|im_start|>assistant
+Check for null before dereferencing use Optional class or annotations like NonNull to prevent null pointer exceptions<|im_end|>
+[CODING] <|im_start|>user
+What are arrow functions in JavaScript?<|im_end|>
+<|im_start|>assistant
+Arrow functions provide shorter syntax using arrow notation capture this from enclosing scope unlike regular functions<|im_end|>
+[CODING] <|im_start|>user
+How to handle async operations in JavaScript?<|im_end|>
+<|im_start|>assistant
+Use promises with then and catch or async await syntax for cleaner asynchronous code handling<|im_end|>
+[CODING] <|im_start|>user
+What is closure in JavaScript?<|im_end|>
+<|im_start|>assistant
+Closure is a function that remembers variables from its outer scope even after outer function has finished executing<|im_end|>
+[CODING] <|im_start|>user
+How to iterate arrays in JavaScript?<|im_end|>
+<|im_start|>assistant
+Use for loop forEach map filter or for of loop depending on whether you need transformation filtering or simple iteration<|im_end|>
+[CODING] <|im_start|>user
+What is destructuring in JavaScript?<|im_end|>
+<|im_start|>assistant
+Destructuring extracts values from arrays or objects into distinct variables using bracket or curly brace syntax<|im_end|>
+[CODING] <|im_start|>user
+What are pointers in C plus plus?<|im_end|>
+<|im_start|>assistant
+Pointers store memory addresses enabling dynamic memory allocation direct memory access and efficient data structure implementation<|im_end|>
+[CODING] <|im_start|>user
+How to use templates in C plus plus?<|im_end|>
+<|im_start|>assistant
+Templates enable generic programming using template keyword with type parameters allowing code to work with different data types<|im_end|>
+[CODING] <|im_start|>user
+What is RAII in C plus plus?<|im_end|>
+<|im_start|>assistant
+Resource Acquisition Is Initialization ties resource lifetime to object lifetime using constructors and destructors for automatic resource management<|im_end|>
+[CODING] <|im_start|>user
+How to handle memory in C plus plus?<|im_end|>
+<|im_start|>assistant
+Use new for dynamic allocation delete to free memory or prefer smart pointers like unique ptr and shared ptr<|im_end|>
+[CODING] <|im_start|>user
+What are virtual functions in C plus plus?<|im_end|>
+<|im_start|>assistant
+Virtual functions enable polymorphism allowing derived classes to override base class methods using virtual keyword<|im_end|>
+[CODING] <|im_start|>user
+What is time complexity?<|im_end|>
+<|im_start|>assistant
+Time complexity measures how algorithm runtime grows with input size using big O notation like O of n or O of n squared<|im_end|>
+[CODING] <|im_start|>user
+How to optimize code performance?<|im_end|>
+<|im_start|>assistant
+Profile code identify bottlenecks use efficient algorithms and data structures minimize memory allocations and avoid premature optimization<|im_end|>
+[CODING] <|im_start|>user
+What is recursion?<|im_end|>
+<|im_start|>assistant
+Recursion is when function calls itself to solve problem by breaking it into smaller subproblems requires base case to terminate<|im_end|>
+[CODING] <|im_start|>user
+How to debug code effectively?<|im_end|>
+<|im_start|>assistant
+Use debugger set breakpoints inspect variables trace execution flow write unit tests and use logging strategically<|im_end|>
+[CODING] <|im_start|>user
+What is code refactoring?<|im_end|>
+<|im_start|>assistant
+Refactoring improves code structure readability and maintainability without changing external behavior through small incremental changes<|im_end|>

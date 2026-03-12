@@ -1,15 +1,60 @@
-[REASONING] Question: What is Mixture of Experts? Answer: Mixture of Experts is an architecture that uses multiple specialized expert networks with a gating mechanism to route inputs efficiently
-[REASONING] Question: How does MoE routing work? Answer: MoE routing uses a gating network to compute scores for each expert and selects the top K experts to process each input token
-[REASONING] Question: Why is load balancing important in MoE? Answer: Load balancing ensures all experts are utilized evenly preventing some experts from being overused while others remain idle
-[REASONING] Question: What is sparse activation? Answer: Sparse activation means only a subset of model parameters are active for each input reducing computational cost significantly
-[MATH] Question: If MoE has 8 experts and uses top 2 routing what is the activation ratio? Answer: The activation ratio is 2 divided by 8 which equals 0.25 or 25 percent
-[GENERAL] Question: What is DeepSeek V3? Answer: DeepSeek V3 is an advanced language model combining MoE architecture with task aware routing for efficient and high quality text generation
-[REASONING] Question: How does task aware architecture help? Answer: Task aware architecture adapts model behavior based on task type routing inputs to experts specialized for reasoning coding math or other domains
-[CODING] Question: What languages does DeepSeek support? Answer: DeepSeek supports ten programming languages including Python Java C plus plus JavaScript Go Rust TypeScript Ruby PHP and Swift
-[CODING] Question: How is code quality evaluated? Answer: Code quality is evaluated on four dimensions correctness readability efficiency and adherence to style guidelines
-[GENERAL] Question: What are DeepSeek advantages? Answer: DeepSeek advantages include efficient sparse computation task adaptive routing strong code generation and fast inference speed
-[CODING] Question: What is Python used for? Answer: Python is used for machine learning data science web development automation scientific computing and general purpose programming
-[CODING] Question: Explain object oriented programming. Answer: Object oriented programming organizes code into objects that combine data and methods providing encapsulation inheritance and polymorphism
-[CODING] Question: What is algorithm complexity? Answer: Algorithm complexity measures computational resources required typically expressed as time complexity and space complexity using big O notation
-[CODING] Question: Why is code readability important? Answer: Code readability makes programs easier to understand maintain debug and extend by other developers or future self
-[CODING] Question: What are design patterns? Answer: Design patterns are reusable solutions to common software design problems providing tested templates for solving recurring challenges
+[REASONING] <|im_start|>user
+What is Mixture of Experts?<|im_end|>
+<|im_start|>assistant
+Mixture of Experts is an architecture that uses multiple specialized expert networks with a gating mechanism to route inputs efficiently<|im_end|>
+[REASONING] <|im_start|>user
+How does MoE routing work?<|im_end|>
+<|im_start|>assistant
+MoE routing uses a gating network to compute scores for each expert and selects the top K experts to process each input token<|im_end|>
+[REASONING] <|im_start|>user
+Why is load balancing important in MoE?<|im_end|>
+<|im_start|>assistant
+Load balancing ensures all experts are utilized evenly preventing some experts from being overused while others remain idle<|im_end|>
+[REASONING] <|im_start|>user
+What is sparse activation?<|im_end|>
+<|im_start|>assistant
+Sparse activation means only a subset of model parameters are active for each input reducing computational cost significantly<|im_end|>
+[MATH] <|im_start|>user
+If MoE has 8 experts and uses top 2 routing what is the activation ratio?<|im_end|>
+<|im_start|>assistant
+The activation ratio is 2 divided by 8 which equals 0.25 or 25 percent<|im_end|>
+[GENERAL] <|im_start|>user
+What is DeepSeek V3?<|im_end|>
+<|im_start|>assistant
+DeepSeek V3 is an advanced language model combining MoE architecture with task aware routing for efficient and high quality text generation<|im_end|>
+[REASONING] <|im_start|>user
+How does task aware architecture help?<|im_end|>
+<|im_start|>assistant
+Task aware architecture adapts model behavior based on task type routing inputs to experts specialized for reasoning coding math or other domains<|im_end|>
+[CODING] <|im_start|>user
+What languages does DeepSeek support?<|im_end|>
+<|im_start|>assistant
+DeepSeek supports ten programming languages including Python Java C plus plus JavaScript Go Rust TypeScript Ruby PHP and Swift<|im_end|>
+[CODING] <|im_start|>user
+How is code quality evaluated?<|im_end|>
+<|im_start|>assistant
+Code quality is evaluated on four dimensions correctness readability efficiency and adherence to style guidelines<|im_end|>
+[GENERAL] <|im_start|>user
+What are DeepSeek advantages?<|im_end|>
+<|im_start|>assistant
+DeepSeek advantages include efficient sparse computation task adaptive routing strong code generation and fast inference speed<|im_end|>
+[CODING] <|im_start|>user
+What is Python used for?<|im_end|>
+<|im_start|>assistant
+Python is used for machine learning data science web development automation scientific computing and general purpose programming<|im_end|>
+[CODING] <|im_start|>user
+Explain object oriented programming.<|im_end|>
+<|im_start|>assistant
+Object oriented programming organizes code into objects that combine data and methods providing encapsulation inheritance and polymorphism<|im_end|>
+[CODING] <|im_start|>user
+What is algorithm complexity?<|im_end|>
+<|im_start|>assistant
+Algorithm complexity measures computational resources required typically expressed as time complexity and space complexity using big O notation<|im_end|>
+[CODING] <|im_start|>user
+Why is code readability important?<|im_end|>
+<|im_start|>assistant
+Code readability makes programs easier to understand maintain debug and extend by other developers or future self<|im_end|>
+[CODING] <|im_start|>user
+What are design patterns?<|im_end|>
+<|im_start|>assistant
+Design patterns are reusable solutions to common software design problems providing tested templates for solving recurring challenges<|im_end|>

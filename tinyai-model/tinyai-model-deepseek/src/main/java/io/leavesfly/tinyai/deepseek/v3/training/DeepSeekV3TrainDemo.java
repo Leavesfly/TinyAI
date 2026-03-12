@@ -38,7 +38,7 @@ import java.util.*;
  * @author leavesfly
  * @version 2.0
  */
-public class DeepSeekV3TrainDemoV2 {
+public class DeepSeekV3TrainDemo {
     
     private static SimpleTokenizer sharedTokenizer = new SimpleTokenizer();
     
@@ -872,7 +872,19 @@ public class DeepSeekV3TrainDemoV2 {
             
             if (useTaskLabels && cleanText.contains("<|im_start|>assistant")) {
                 // ChatML 格式：分别编码 user 和 assistant 部分，生成 loss mask
-                int assistantContentStart = cleanText.indexOf("<|im_start|>assistant\n");
+                int assistantContentStart = cleanText.indexOf("<|im_start|>assistant");
+                if (assistantContentStart < 0) {
+                    // 防御性检查：如果找不到 assistant 标记，按普通文本处理
+                    List<Integer> tokens = sharedTokenizer.encode(cleanText);
+                    int[] sequence = tokens.stream().mapToInt(Integer::intValue).toArray();
+                    int[] paddedSeq = new int[maxSeqLength];
+                    Arrays.fill(paddedSeq, SimpleTokenizer.PAD_TOKEN_ID);
+                    int copyLen = Math.min(sequence.length, maxSeqLength);
+                    System.arraycopy(sequence, 0, paddedSeq, 0, copyLen);
+                    sequences.add(paddedSeq);
+                    taskTypes.add(taskType);
+                    continue;
+                }
                 String userPart = cleanText.substring(0, assistantContentStart);
                 String assistantPart = cleanText.substring(assistantContentStart);
                 

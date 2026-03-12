@@ -78,6 +78,29 @@ public class DeepSeekR1Dataset extends DeepSeekBaseDataset<DeepSeekR1Dataset.Bat
     }
     
     /**
+     * 构造函数（RLHF模式，带 Loss Mask + 奖励）
+     * 
+     * 行业标准 RLHF 训练：结合 Answer-only Loss Mask 和奖励加权回归，
+     * 只对 assistant 回复部分计算 loss，并按奖励分数加权梯度。
+     * 
+     * @param sequences token序列列表
+     * @param reasoning 推理过程文本列表
+     * @param rewards 奖励分数列表
+     * @param lossMasks 每个样本的 loss mask
+     * @param maxSeqLength 最大序列长度
+     * @param batchSize 批次大小
+     * @param shuffle 是否打乱数据
+     */
+    public DeepSeekR1Dataset(List<int[]> sequences, List<String> reasoning,
+                             List<Float> rewards, List<float[]> lossMasks,
+                             int maxSeqLength, int batchSize, boolean shuffle) {
+        super(sequences, maxSeqLength, batchSize, shuffle);
+        this.reasoning = reasoning;
+        this.rewards = rewards;
+        this.lossMasks = lossMasks;
+    }
+    
+    /**
      * 获取下一批数据
      * 
      * 复用基类的 createInputTargetData 构建 input/target，

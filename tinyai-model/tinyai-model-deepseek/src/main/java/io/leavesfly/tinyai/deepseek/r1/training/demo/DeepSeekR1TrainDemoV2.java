@@ -293,9 +293,11 @@ public class DeepSeekR1TrainDemoV2 {
         );
         
         System.out.println("  ✓ RLHF训练样本: " + rlhfDataset.getSampleCount());
+        System.out.println("  ✓ Loss Mask: 启用（Answer-only Loss）");
+        System.out.println("  ✓ 数据格式: Chat Template + 奖励标注");
         
         // 3. 配置RLHF训练器
-        System.out.println("\n📝 配置RLHF训练器...");
+        System.out.println("\n📝 配置RLHF训练器（Reward-weighted Regression）...");
         DeepSeekR1RLHFTrainer rlhfTrainer = new DeepSeekR1RLHFTrainer(
             finetunedModel,
             rlhfDataset
@@ -310,6 +312,7 @@ public class DeepSeekR1TrainDemoV2 {
         
         System.out.println("  ✓ 最大轮次: 2");
         System.out.println("  ✓ 学习率: 5e-4");
+        System.out.println("  ✓ 算法: Reward-weighted Regression");
         
         // 4. 开始RLHF训练
         System.out.println("\n📝 开始RLHF强化学习训练...");
@@ -320,9 +323,10 @@ public class DeepSeekR1TrainDemoV2 {
         System.out.println("\n✅ RLHF训练完成!");
         System.out.println("\n💡 RLHF阶段总结:");
         System.out.println("  - 目标: 通过人类反馈对齐模型行为");
-        System.out.println("  - 任务: 最大化人类偏好奖励");
-        System.out.println("  - 数据: 带奖励标注的推理样本");
-        System.out.println("  - R1特色: 平衡人类反馈与模型自评质量");
+        System.out.println("  - 算法: Reward-weighted Regression（奖励加权回归）");
+        System.out.println("  - 数据: Chat Template 格式 + 奖励标注（高/中/低三档）");
+        System.out.println("  - 技巧: Answer-only Loss Mask + 奖励加权梯度");
+        System.out.println("  - R1特色: 高奖励样本被强化，低奖励样本被弱化");
         
         return finetunedModel;
     }
@@ -354,9 +358,10 @@ public class DeepSeekR1TrainDemoV2 {
         );
         
         System.out.println("  ✓ RLVR训练样本: " + rlvrDataset.getSampleCount());
+        System.out.println("  ✓ 数据格式: Chat Template prompt + 标准答案");
         
         // 3. 配置RLVR训练器
-        System.out.println("\n📝 配置RLVR训练器...");
+        System.out.println("\n📝 配置RLVR训练器（GRPO算法）...");
         DeepSeekR1RLVRTrainer rlvrTrainer = new DeepSeekR1RLVRTrainer(
             rlhfModel,
             rlvrDataset
@@ -372,6 +377,9 @@ public class DeepSeekR1TrainDemoV2 {
         
         System.out.println("  ✓ 最大轮次: 50");
         System.out.println("  ✓ 学习率: 0.05");
+        System.out.println("  ✓ 算法: GRPO（Group Relative Policy Optimization）");
+        System.out.println("  ✓ 组采样大小: 4");
+        System.out.println("  ✓ PPO clip ε: 0.2");
         
         // 4. 开始RLVR训练
         System.out.println("\n📝 开始RLVR强化学习训练...");
@@ -382,9 +390,10 @@ public class DeepSeekR1TrainDemoV2 {
         System.out.println("\n✅ RLVR训练完成!");
         System.out.println("\n💡 RLVR阶段总结:");
         System.out.println("  - 目标: 通过可验证标准优化正确性");
-        System.out.println("  - 任务: 最大化二值验证奖励(0或1)");
-        System.out.println("  - 数据: 带标准答案的可验证问题");
-        System.out.println("  - 优势: RLHF + RLVR 结合提升模型能力");
+        System.out.println("  - 算法: GRPO（组采样 + 相对优势 + PPO clip）");
+        System.out.println("  - 数据: Chat Template prompt + 可验证标准答案");
+        System.out.println("  - 验证器: 数学验证器 + 逻辑验证器");
+        System.out.println("  - R1特色: 无需价值函数网络，用组内相对优势替代");
         
         return rlhfModel;
     }
@@ -543,7 +552,11 @@ public class DeepSeekR1TrainDemoV2 {
     }
     
     /**
-     * 从RLHF文本创建数据集（包含奖励）
+     * 从 RLHF Chat Template 文本创建带 Loss Mask 和奖励的数据集
+     * 
+     * 行业标准做法：RLHF 数据使用 Answer-only Loss Mask + 奖励加权回归，
+     * 只对 assistant 回复部分计算 loss，并按奖励分数加权梯度。
+     * 高奖励样本的梯度更大（被强化），低奖励样本的梯度更小（被弱化）。
      */
     private static DeepSeekR1Dataset createRLHFDatasetFromTexts(
             List<String> texts,
@@ -554,30 +567,38 @@ public class DeepSeekR1TrainDemoV2 {
         List<int[]> sequences = new ArrayList<>();
         List<String> reasoning = new ArrayList<>();
         List<Float> rewards = new ArrayList<>();
+        List<float[]> lossMasks = new ArrayList<>();
         
         for (String text : texts) {
             // 提取奖励值
             float reward = DeepSeekR1TokenizerUtil.extractReward(text);
             String cleanText = DeepSeekR1TokenizerUtil.removeLabels(text);
             
-            // 编码文本
+            // 编码文本（Chat Template 中的特殊 Token 会被正确识别）
             List<Integer> tokens = sharedTokenizer.encode(cleanText);
-            
-            // 转换为数组
             int[] sequence = tokens.stream().mapToInt(Integer::intValue).toArray();
             
-            // 截断或填充
+            // 在原始序列上计算 Loss Mask（填充前，确保 mask 与实际内容对齐）
+            float[] rawMask = sharedTokenizer.computeLossMaskWithTokenizer(sequence);
+            
+            // 截断或填充序列到 maxSeqLength
             int[] paddedSeq = new int[maxSeqLength];
             Arrays.fill(paddedSeq, DeepSeekR1TokenizerUtil.PAD_TOKEN_ID);
             int copyLen = Math.min(sequence.length, maxSeqLength);
             System.arraycopy(sequence, 0, paddedSeq, 0, copyLen);
             
+            // 同步截断或填充 Loss Mask
+            float[] paddedMask = new float[maxSeqLength];
+            int maskCopyLen = Math.min(rawMask.length, maxSeqLength);
+            System.arraycopy(rawMask, 0, paddedMask, 0, maskCopyLen);
+            
             sequences.add(paddedSeq);
             reasoning.add(cleanText);
             rewards.add(reward);
+            lossMasks.add(paddedMask);
         }
         
-        return new DeepSeekR1Dataset(sequences, reasoning, rewards, 
+        return new DeepSeekR1Dataset(sequences, reasoning, rewards, lossMasks,
                                      maxSeqLength, batchSize, true);
     }
     

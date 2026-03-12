@@ -113,10 +113,15 @@ public class DeepSeekR1DatasetGenerator {
     
     /**
      * 生成RLHF强化学习数据集
-     * 包含推理过程和人类反馈奖励
+     * 
+     * 使用 Chat Template 格式 + 奖励标注：
+     * [REWARD:score] <|im_start|>user Q<|im_end|><|im_start|>assistant <|begin_of_thought|>CoT<|end_of_thought|> A<|im_end|>
+     * 
+     * 行业标准做法：RLHF 数据使用与 SFT 相同的 Chat Template 格式，
+     * 训练时结合 Answer-only Loss Mask 和奖励加权回归。
      */
     private static void generateRLHFDataset() throws IOException {
-        System.out.println("\n📝 生成RLHF强化学习数据集...");
+        System.out.println("\n📝 生成RLHF强化学习数据集（Chat Template 格式）...");
         
         List<String> rlhfTexts = new ArrayList<>();
         
@@ -128,15 +133,20 @@ public class DeepSeekR1DatasetGenerator {
         writeToFile(rlhfTexts, rlhfPath);
         System.out.println("  ✓ RLHF训练集: " + rlhfTexts.size() + " 条");
         System.out.println("  ✓ 保存路径: " + rlhfPath);
-        System.out.println("  ✓ 数据格式: [REWARD:score] 推理过程");
+        System.out.println("  ✓ 数据格式: [REWARD:score] <|im_start|>user Q<|im_end|><|im_start|>assistant CoT A<|im_end|>");
     }
     
     /**
      * 生成RLVR可验证奖励数据集
-     * 包含问题、标准答案和验证类型
+     * 
+     * 使用 Chat Template 格式标记 prompt：
+     * [TYPE:verifier_type] <|im_start|>user Q<|im_end|> | GroundTruth
+     * 
+     * RLVR 场景中，只有 user prompt 是预定义的，
+     * assistant 回复由模型在训练时自行生成并通过验证器评分。
      */
     private static void generateRLVRDataset() throws IOException {
-        System.out.println("\n📝 生成RLVR可验证奖励数据集...");
+        System.out.println("\n📝 生成RLVR可验证奖励数据集（Chat Template 格式）...");
         
         List<String> rlvrTexts = new ArrayList<>();
         
@@ -151,7 +161,7 @@ public class DeepSeekR1DatasetGenerator {
         writeToFile(rlvrTexts, rlvrPath);
         System.out.println("  ✓ RLVR训练集: " + rlvrTexts.size() + " 条");
         System.out.println("  ✓ 保存路径: " + rlvrPath);
-        System.out.println("  ✓ 数据格式: [TYPE:verifier_type] Question | GroundTruth");
+        System.out.println("  ✓ 数据格式: [TYPE:type] <|im_start|>user Q<|im_end|> | GroundTruth");
     }
     
     // ========== 文本生成方法 ==========
@@ -376,102 +386,128 @@ public class DeepSeekR1DatasetGenerator {
         return qa;
     }
     
+    /**
+     * 生成 RLHF 推理数据（Chat Template 格式 + 奖励标注）
+     * 
+     * 格式: [REWARD:score] <|im_start|>user Q<|im_end|><|im_start|>assistant <|begin_of_thought|>CoT<|end_of_thought|> A<|im_end|>
+     * 
+     * 包含三个奖励等级：
+     * - 高奖励 (0.8-1.0): 推理正确、步骤清晰
+     * - 中等奖励 (0.5-0.7): 答案正确但推理不够详细
+     * - 低奖励 (0.2-0.4): 推理有错误或答案错误
+     */
     private static List<String> generateRLHFReasoningData() {
         List<String> rlhfData = new ArrayList<>();
         
         // 高奖励的正确推理 (10条, reward 0.8-1.0)
-        rlhfData.add("[REWARD:0.95] Question: 5 plus 3. Think: 5 plus 3 equals 8. Verified by counting. Answer: 8. Correct and clear.");
-        rlhfData.add("[REWARD:0.90] Question: What is 12 divided by 4? Reasoning: 12 divided by 4 means how many 4s in 12. 4 times 3 is 12. Answer: 3");
-        rlhfData.add("[REWARD:0.92] Question: All dogs bark. Rex is a dog. Does Rex bark? Logic: Major premise says all dogs bark. Rex is a dog. Therefore Rex barks. Answer: Yes");
-        rlhfData.add("[REWARD:0.88] Question: If today is Monday what is tomorrow? Step 1: Days follow Monday Tuesday order. Step 2: Day after Monday is Tuesday. Answer: Tuesday");
-        rlhfData.add("[REWARD:0.93] Question: Which is larger 7 or 5? Compare: 7 is greater than 5 because 7 minus 5 equals 2 which is positive. Answer: 7");
-        rlhfData.add("[REWARD:0.91] Question: Half of 10 is what? Calculate: Half means divide by 2. 10 divided by 2 equals 5. Answer: 5");
-        rlhfData.add("[REWARD:0.89] Question: 3 times 4 equals? Multiply: 3 groups of 4 is 4 plus 4 plus 4 which equals 12. Answer: 12");
-        rlhfData.add("[REWARD:0.94] Question: If A then B and A is true what is B? Apply modus ponens: Given A implies B and A is true, B must be true. Answer: B is true");
-        rlhfData.add("[REWARD:0.87] Question: 20 minus 8 is? Subtract: Start with 20, take away 8. 20 minus 8 equals 12. Verify: 12 plus 8 is 20. Answer: 12");
-        rlhfData.add("[REWARD:0.96] Question: Is 15 odd or even? Check: Odd numbers are not divisible by 2. 15 divided by 2 is 7.5 which is not integer. Answer: 15 is odd");
+        rlhfData.add("[REWARD:0.95] " + DeepSeekR1TokenizerUtil.buildSFTText("5 plus 3", "5 plus 3 equals 8. Verified by counting.", "8"));
+        rlhfData.add("[REWARD:0.90] " + DeepSeekR1TokenizerUtil.buildSFTText("What is 12 divided by 4", "12 divided by 4 means how many 4s in 12. 4 times 3 is 12.", "3"));
+        rlhfData.add("[REWARD:0.92] " + DeepSeekR1TokenizerUtil.buildSFTText("All dogs bark. Rex is a dog. Does Rex bark", "Major premise says all dogs bark. Rex is a dog. Therefore Rex barks by syllogism.", "Yes"));
+        rlhfData.add("[REWARD:0.88] " + DeepSeekR1TokenizerUtil.buildSFTText("If today is Monday what is tomorrow", "Days follow Monday Tuesday order. Day after Monday is Tuesday.", "Tuesday"));
+        rlhfData.add("[REWARD:0.93] " + DeepSeekR1TokenizerUtil.buildSFTText("Which is larger 7 or 5", "7 is greater than 5 because 7 minus 5 equals 2 which is positive.", "7"));
+        rlhfData.add("[REWARD:0.91] " + DeepSeekR1TokenizerUtil.buildSFTText("Half of 10 is what", "Half means divide by 2. 10 divided by 2 equals 5.", "5"));
+        rlhfData.add("[REWARD:0.89] " + DeepSeekR1TokenizerUtil.buildSFTText("3 times 4 equals what", "3 groups of 4 is 4 plus 4 plus 4 which equals 12.", "12"));
+        rlhfData.add("[REWARD:0.94] " + DeepSeekR1TokenizerUtil.buildSFTText("If A then B and A is true what is B", "Apply modus ponens: Given A implies B and A is true, B must be true.", "B is true"));
+        rlhfData.add("[REWARD:0.87] " + DeepSeekR1TokenizerUtil.buildSFTText("20 minus 8 is what", "Start with 20, take away 8. 20 minus 8 equals 12. Verify: 12 plus 8 is 20.", "12"));
+        rlhfData.add("[REWARD:0.96] " + DeepSeekR1TokenizerUtil.buildSFTText("Is 15 odd or even", "Odd numbers are not divisible by 2. 15 divided by 2 is 7.5 which is not integer.", "15 is odd"));
         
         // 中等奖励的可接受推理 (10条, reward 0.5-0.7)
-        rlhfData.add("[REWARD:0.65] Question: 6 plus 7. Answer: 13. Reasoning was brief but correct. Could show more steps.");
-        rlhfData.add("[REWARD:0.60] Question: What is 9 times 2? Answer: 18. Correct answer but no reasoning shown.");
-        rlhfData.add("[REWARD:0.70] Question: Is a square a rectangle? Answer: Yes because it has four right angles. Partially correct but missing some details.");
-        rlhfData.add("[REWARD:0.55] Question: 100 divided by 5. Answer: 20. Correct but verification would improve confidence.");
-        rlhfData.add("[REWARD:0.68] Question: Sum of 4 and 9. Answer: 13. Add ones digit 4 plus 9 is 13. Brief but adequate.");
-        rlhfData.add("[REWARD:0.62] Question: Next number after 7? Answer: 8. Counting sequence continues to 8. Simple but correct.");
-        rlhfData.add("[REWARD:0.58] Question: Double of 6. Answer: 12. Double means multiply by 2, 6 times 2 is 12.");
-        rlhfData.add("[REWARD:0.66] Question: Is 10 greater than 3? Answer: Yes. 10 is clearly larger. Could quantify difference.");
-        rlhfData.add("[REWARD:0.72] Question: What comes before 5? Answer: 4. In counting order 4 precedes 5. Correct reasoning.");
-        rlhfData.add("[REWARD:0.64] Question: 8 minus 3. Answer: 5. Subtraction gives 5. Could verify by addition.");
+        rlhfData.add("[REWARD:0.65] " + DeepSeekR1TokenizerUtil.buildSFTText("6 plus 7", "Brief calculation.", "13"));
+        rlhfData.add("[REWARD:0.60] " + DeepSeekR1TokenizerUtil.buildSFTText("What is 9 times 2", "Direct multiplication.", "18"));
+        rlhfData.add("[REWARD:0.70] " + DeepSeekR1TokenizerUtil.buildSFTText("Is a square a rectangle", "It has four right angles.", "Yes"));
+        rlhfData.add("[REWARD:0.55] " + DeepSeekR1TokenizerUtil.buildSFTText("100 divided by 5", "Simple division.", "20"));
+        rlhfData.add("[REWARD:0.68] " + DeepSeekR1TokenizerUtil.buildSFTText("Sum of 4 and 9", "Add ones digit 4 plus 9 is 13.", "13"));
+        rlhfData.add("[REWARD:0.62] " + DeepSeekR1TokenizerUtil.buildSFTText("Next number after 7", "Counting sequence.", "8"));
+        rlhfData.add("[REWARD:0.58] " + DeepSeekR1TokenizerUtil.buildSFTText("Double of 6", "Double means multiply by 2.", "12"));
+        rlhfData.add("[REWARD:0.66] " + DeepSeekR1TokenizerUtil.buildSFTText("Is 10 greater than 3", "10 is clearly larger.", "Yes"));
+        rlhfData.add("[REWARD:0.72] " + DeepSeekR1TokenizerUtil.buildSFTText("What comes before 5", "In counting order 4 precedes 5.", "4"));
+        rlhfData.add("[REWARD:0.64] " + DeepSeekR1TokenizerUtil.buildSFTText("8 minus 3", "Subtraction gives 5.", "5"));
         
         // 低奖励的需改进推理 (10条, reward 0.2-0.4)
-        rlhfData.add("[REWARD:0.25] Question: 7 plus 8. Answer: 14. Error: 7 plus 8 should be 15 not 14. Arithmetic mistake.");
-        rlhfData.add("[REWARD:0.30] Question: All cats are pets. Some pets are dogs. Are all cats dogs? Answer: Yes. Error: Invalid syllogism, conclusion does not follow.");
-        rlhfData.add("[REWARD:0.35] Question: 5 times 5. Answer: 20. Error: 5 times 5 is 25 not 20. Calculation wrong.");
-        rlhfData.add("[REWARD:0.28] Question: 12 divided by 3. Answer: 3. Error: 12 divided by 3 is 4 not 3. Division error.");
-        rlhfData.add("[REWARD:0.40] Question: Is 8 even? Answer: Maybe. Error: Should definitively state 8 is even since 8 divided by 2 is 4.");
-        rlhfData.add("[REWARD:0.32] Question: What is 15 minus 7? Answer: 7. Error: 15 minus 7 equals 8 not 7. Arithmetic mistake.");
-        rlhfData.add("[REWARD:0.38] Question: If P then Q and Q is true what about P? Answer: P is true. Error: Affirming consequent is a fallacy, we cannot conclude P.");
-        rlhfData.add("[REWARD:0.22] Question: 9 plus 4. Answer: 12. Error: 9 plus 4 equals 13 not 12. Off by one error.");
-        rlhfData.add("[REWARD:0.35] Question: 6 times 7. Answer: 43. Error: 6 times 7 equals 42 not 43. Multiplication error.");
-        rlhfData.add("[REWARD:0.29] Question: Half of 14. Answer: 8. Error: Half of 14 is 7 not 8. Division mistake.");
+        rlhfData.add("[REWARD:0.25] " + DeepSeekR1TokenizerUtil.buildSFTText("7 plus 8", "I think it is 14.", "14"));
+        rlhfData.add("[REWARD:0.30] " + DeepSeekR1TokenizerUtil.buildSFTText("All cats are pets. Some pets are dogs. Are all cats dogs", "Since cats are pets and some pets are dogs, cats must be dogs.", "Yes"));
+        rlhfData.add("[REWARD:0.35] " + DeepSeekR1TokenizerUtil.buildSFTText("5 times 5", "5 times 5 should be around 20.", "20"));
+        rlhfData.add("[REWARD:0.28] " + DeepSeekR1TokenizerUtil.buildSFTText("12 divided by 3", "12 divided by 3 is 3.", "3"));
+        rlhfData.add("[REWARD:0.40] " + DeepSeekR1TokenizerUtil.buildSFTText("Is 8 even", "Not sure about this.", "Maybe"));
+        rlhfData.add("[REWARD:0.32] " + DeepSeekR1TokenizerUtil.buildSFTText("What is 15 minus 7", "15 minus 7 is 7.", "7"));
+        rlhfData.add("[REWARD:0.38] " + DeepSeekR1TokenizerUtil.buildSFTText("If P then Q and Q is true what about P", "Since Q is true and P implies Q, P must be true.", "P is true"));
+        rlhfData.add("[REWARD:0.22] " + DeepSeekR1TokenizerUtil.buildSFTText("9 plus 4", "9 plus 4 is 12.", "12"));
+        rlhfData.add("[REWARD:0.35] " + DeepSeekR1TokenizerUtil.buildSFTText("6 times 7", "6 times 7 is 43.", "43"));
+        rlhfData.add("[REWARD:0.29] " + DeepSeekR1TokenizerUtil.buildSFTText("Half of 14", "Half of 14 is 8.", "8"));
         
         return rlhfData;
     }
     
+    /**
+     * 生成数学验证数据（Chat Template 格式）
+     * 
+     * 格式: [TYPE:math] <|im_start|>user Q<|im_end|> | GroundTruth
+     * RLVR 场景中 prompt 使用 Chat Template 的 user 部分，
+     * assistant 回复由模型在训练时自行生成。
+     */
     private static List<String> generateMathVerificationData() {
         List<String> mathData = new ArrayList<>();
+        String imStart = DeepSeekR1TokenizerUtil.IM_START_TOKEN;
+        String imEnd = DeepSeekR1TokenizerUtil.IM_END_TOKEN;
+        String userRole = DeepSeekR1TokenizerUtil.ROLE_USER;
         
         // 算术运算
-        mathData.add("[TYPE:math] What is 15 + 27? | 42");
-        mathData.add("[TYPE:math] Calculate 8 * 6 | 48");
-        mathData.add("[TYPE:math] What is 100 / 4? | 25");
-        mathData.add("[TYPE:math] 50 - 23 equals? | 27");
-        mathData.add("[TYPE:math] What is 7 * 9? | 63");
-        mathData.add("[TYPE:math] Calculate 144 / 12 | 12");
-        mathData.add("[TYPE:math] 25 + 75 equals? | 100");
-        mathData.add("[TYPE:math] What is 60 - 18? | 42");
-        mathData.add("[TYPE:math] 11 * 11 equals? | 121");
-        mathData.add("[TYPE:math] What is 81 / 9? | 9");
+        mathData.add("[TYPE:math] " + imStart + userRole + " What is 15 + 27?" + imEnd + " | 42");
+        mathData.add("[TYPE:math] " + imStart + userRole + " Calculate 8 * 6" + imEnd + " | 48");
+        mathData.add("[TYPE:math] " + imStart + userRole + " What is 100 / 4?" + imEnd + " | 25");
+        mathData.add("[TYPE:math] " + imStart + userRole + " 50 - 23 equals?" + imEnd + " | 27");
+        mathData.add("[TYPE:math] " + imStart + userRole + " What is 7 * 9?" + imEnd + " | 63");
+        mathData.add("[TYPE:math] " + imStart + userRole + " Calculate 144 / 12" + imEnd + " | 12");
+        mathData.add("[TYPE:math] " + imStart + userRole + " 25 + 75 equals?" + imEnd + " | 100");
+        mathData.add("[TYPE:math] " + imStart + userRole + " What is 60 - 18?" + imEnd + " | 42");
+        mathData.add("[TYPE:math] " + imStart + userRole + " 11 * 11 equals?" + imEnd + " | 121");
+        mathData.add("[TYPE:math] " + imStart + userRole + " What is 81 / 9?" + imEnd + " | 9");
         
         // 代数问题
-        mathData.add("[TYPE:math] Solve: 2x + 5 = 13 | 4");
-        mathData.add("[TYPE:math] Solve: 3x - 7 = 14 | 7");
-        mathData.add("[TYPE:math] Solve: x / 2 = 8 | 16");
-        mathData.add("[TYPE:math] Solve: 4x + 3 = 19 | 4");
-        mathData.add("[TYPE:math] Solve: 5x = 35 | 7");
+        mathData.add("[TYPE:math] " + imStart + userRole + " Solve: 2x + 5 = 13" + imEnd + " | 4");
+        mathData.add("[TYPE:math] " + imStart + userRole + " Solve: 3x - 7 = 14" + imEnd + " | 7");
+        mathData.add("[TYPE:math] " + imStart + userRole + " Solve: x / 2 = 8" + imEnd + " | 16");
+        mathData.add("[TYPE:math] " + imStart + userRole + " Solve: 4x + 3 = 19" + imEnd + " | 4");
+        mathData.add("[TYPE:math] " + imStart + userRole + " Solve: 5x = 35" + imEnd + " | 7");
         
         // 数值比较
-        mathData.add("[TYPE:math] Which is larger: 15 or 23? | 23");
-        mathData.add("[TYPE:math] Is 42 greater than 38? | true");
-        mathData.add("[TYPE:math] What is the maximum of 7, 12, 5? | 12");
+        mathData.add("[TYPE:math] " + imStart + userRole + " Which is larger: 15 or 23?" + imEnd + " | 23");
+        mathData.add("[TYPE:math] " + imStart + userRole + " Is 42 greater than 38?" + imEnd + " | true");
+        mathData.add("[TYPE:math] " + imStart + userRole + " What is the maximum of 7, 12, 5?" + imEnd + " | 12");
         
         // 幂运算
-        mathData.add("[TYPE:math] What is 2^5? | 32");
-        mathData.add("[TYPE:math] Calculate 3^3 | 27");
-        mathData.add("[TYPE:math] What is 10^2? | 100");
+        mathData.add("[TYPE:math] " + imStart + userRole + " What is 2^5?" + imEnd + " | 32");
+        mathData.add("[TYPE:math] " + imStart + userRole + " Calculate 3^3" + imEnd + " | 27");
+        mathData.add("[TYPE:math] " + imStart + userRole + " What is 10^2?" + imEnd + " | 100");
         
         return mathData;
     }
     
+    /**
+     * 生成逻辑验证数据（Chat Template 格式）
+     */
     private static List<String> generateLogicVerificationData() {
         List<String> logicData = new ArrayList<>();
+        String imStart = DeepSeekR1TokenizerUtil.IM_START_TOKEN;
+        String imEnd = DeepSeekR1TokenizerUtil.IM_END_TOKEN;
+        String userRole = DeepSeekR1TokenizerUtil.ROLE_USER;
         
-        // 布尔逻辑 (可解析为0/1)
-        logicData.add("[TYPE:logic] Is the statement 'true AND false' true or false? | false");
-        logicData.add("[TYPE:logic] Is 'true OR false' true or false? | true");
-        logicData.add("[TYPE:logic] What is NOT true? | false");
-        logicData.add("[TYPE:logic] Is '(true AND true) OR false' true? | true");
-        logicData.add("[TYPE:logic] Is 'false AND false' true or false? | false");
-        logicData.add("[TYPE:logic] Is 'true AND true' true or false? | true");
-        logicData.add("[TYPE:logic] Is 'false OR false' true or false? | false");
-        logicData.add("[TYPE:logic] Is NOT false true? | true");
+        // 布尔逻辑
+        logicData.add("[TYPE:logic] " + imStart + userRole + " Is the statement true AND false true or false?" + imEnd + " | false");
+        logicData.add("[TYPE:logic] " + imStart + userRole + " Is true OR false true or false?" + imEnd + " | true");
+        logicData.add("[TYPE:logic] " + imStart + userRole + " What is NOT true?" + imEnd + " | false");
+        logicData.add("[TYPE:logic] " + imStart + userRole + " Is true AND true OR false true?" + imEnd + " | true");
+        logicData.add("[TYPE:logic] " + imStart + userRole + " Is false AND false true or false?" + imEnd + " | false");
+        logicData.add("[TYPE:logic] " + imStart + userRole + " Is true AND true true or false?" + imEnd + " | true");
+        logicData.add("[TYPE:logic] " + imStart + userRole + " Is false OR false true or false?" + imEnd + " | false");
+        logicData.add("[TYPE:logic] " + imStart + userRole + " Is NOT false true?" + imEnd + " | true");
         
-        // 矛盾判断 (可解析为0/1)
-        logicData.add("[TYPE:logic] Can 'X is both true and false' be valid? | false");
-        logicData.add("[TYPE:logic] Is 'All A are B and some A are not B' consistent? | false");
-        logicData.add("[TYPE:logic] Is a contradiction always false? | true");
-        logicData.add("[TYPE:logic] Can a statement be both true and false? | false");
-        logicData.add("[TYPE:logic] Is 'P AND NOT P' ever true? | false");
+        // 矛盾判断
+        logicData.add("[TYPE:logic] " + imStart + userRole + " Can X is both true and false be valid?" + imEnd + " | false");
+        logicData.add("[TYPE:logic] " + imStart + userRole + " Is All A are B and some A are not B consistent?" + imEnd + " | false");
+        logicData.add("[TYPE:logic] " + imStart + userRole + " Is a contradiction always false?" + imEnd + " | true");
+        logicData.add("[TYPE:logic] " + imStart + userRole + " Can a statement be both true and false?" + imEnd + " | false");
+        logicData.add("[TYPE:logic] " + imStart + userRole + " Is P AND NOT P ever true?" + imEnd + " | false");
         
         return logicData;
     }

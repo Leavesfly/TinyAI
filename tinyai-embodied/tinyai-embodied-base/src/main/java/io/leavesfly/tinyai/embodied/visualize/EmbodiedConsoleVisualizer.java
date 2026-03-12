@@ -3,22 +3,10 @@ package io.leavesfly.tinyai.embodied.visualize;
 import io.leavesfly.tinyai.embodied.model.*;
 
 /**
- * 具身智能控制台可视化工具
- * 
- * <p>提供具身智能场景的ASCII艺术可视化，包括：
- * <ul>
- *   <li>驾驶场景可视化 - 显示道路、车辆、车道线</li>
- *   <li>传感器数据可视化 - 显示雷达点云、相机视野</li>
- *   <li>决策状态可视化 - 显示策略、Q值、置信度</li>
- *   <li>学习曲线可视化 - 显示奖励、损失曲线</li>
- * </ul>
- * 
- * <p>使用示例：
- * <pre>{@code
- * EmbodiedVisualizer visualizer = new EmbodiedVisualizer();
- * visualizer.visualizeDrivingScene(agent.getPerceptionState(), agent.getAction());
- * }</pre>
- * 
+ * 具身智能控制台可视化工具。
+ *
+ * 提供 ASCII 艺术可视化：驾驶场景、雷达点云、Q 值、学习曲线等。
+ *
  * @author TinyAI Team
  */
 public class EmbodiedConsoleVisualizer {
@@ -69,17 +57,9 @@ public class EmbodiedConsoleVisualizer {
     // ==================== 驾驶场景可视化 ====================
 
     /**
-     * 可视化驾驶场景
-     * 
-     * <p>将当前驾驶状态渲染为ASCII艺术，包括：
-     * <ul>
-     *   <li>自车位置和朝向</li>
-     *   <li>车道线和道路边界</li>
-     *   <li>前车和障碍物</li>
-     *   <li>当前速度和加速度</li>
-     * </ul>
-     * 
-     * @param state 当前感知状态
+     * 将当前驾驶状态渲染为 ASCII 艺术：自车、车道线、障碍物、速度等。
+     *
+     * @param state  当前感知状态
      * @param action 当前执行的动作（可选）
      */
     public void visualizeDrivingScene(PerceptionState state, DrivingAction action) {
@@ -271,11 +251,8 @@ public class EmbodiedConsoleVisualizer {
     // ==================== 传感器数据可视化 ====================
 
     /**
-     * 可视化激光雷达点云
-     * 
-     * <p>将激光雷达扫描数据可视化为ASCII点云图，
-     * 展示障碍物的距离和角度分布。
-     * 
+     * 将激光雷达扫描数据可视化为 ASCII 点云图，展示障碍物的距离和角度分布。
+     *
      * @param lidarData 激光雷达数据
      */
     public void visualizeLidarPoints(float[] lidarData) {
@@ -319,12 +296,9 @@ public class EmbodiedConsoleVisualizer {
     // ==================== 学习曲线可视化 ====================
 
     /**
-     * 可视化训练奖励曲线
-     * 
-     * <p>使用ASCII字符绘制奖励随训练进程的变化曲线，
-     * 帮助理解学习进度和收敛情况。
-     * 
-     * @param rewards 每回合的总奖励列表
+     * 使用 ASCII 字符绘制奖励随训练进程的变化曲线。
+     *
+     * @param rewards    每回合的总奖励列表
      * @param windowSize 平滑窗口大小
      */
     public void visualizeLearningCurve(double[] rewards, int windowSize) {
@@ -419,12 +393,9 @@ public class EmbodiedConsoleVisualizer {
     // ==================== Q值可视化 ====================
 
     /**
-     * 可视化Q值分布
-     * 
-     * <p>以热力图形式展示不同状态-动作对的Q值分布，
-     * 便于理解策略的质量。
-     * 
-     * @param qValues Q值数组
+     * 以热力图形式展示不同状态-动作对的 Q 值分布。
+     *
+     * @param qValues     Q 值数组
      * @param actionNames 动作名称
      */
     public void visualizeQValues(double[] qValues, String[] actionNames) {

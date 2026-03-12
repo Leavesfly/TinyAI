@@ -7,23 +7,11 @@ import io.leavesfly.tinyai.embodied.visualize.EmbodiedConsoleVisualizer;
 import java.util.*;
 
 /**
- * 具身智能（自动驾驶）交互式演示
- * 
- * <p>提供交互式的自动驾驶场景演示，包括：
- * <ul>
- *   <li>多种驾驶场景选择（高速、城市、停车场等）</li>
- *   <li>实时参数调整（速度限制、安全距离等）</li>
- *   <li>可视化驾驶过程和传感器数据</li>
- *   <li>多策略对比实验</li>
- * </ul>
- * 
- * <p>学习目标：
- * <ul>
- *   <li>理解具身智能的感知-决策-执行闭环</li>
- *   <li>了解自动驾驶系统的核心组件</li>
- *   <li>掌握强化学习在自动驾驶中的应用</li>
- * </ul>
- * 
+ * 具身智能（自动驾驶）交互式演示。
+ *
+ * 功能：多种驾驶场景、实时参数调整、可视化、多策略对比。
+ * 学习目标：感知-决策-执行闭环、自动驾驶核心组件、强化学习应用。
+ *
  * @author TinyAI Team
  */
 public class InteractiveDrivingDemo {
@@ -41,13 +29,11 @@ public class InteractiveDrivingDemo {
     private final Scanner scanner;
     private boolean running;
 
-    // 当前配置
     private EnvironmentConfig currentConfig;
     private String currentScenario = "测试场";
     private int maxSteps = 100;
     private boolean autoMode = false;
 
-    // 统计信息
     private List<Double> rewardHistory = new ArrayList<>();
 
     public InteractiveDrivingDemo() {
@@ -281,6 +267,7 @@ public class InteractiveDrivingDemo {
         agent.reset();
 
         int step = 0;
+        double totalReward = 0;
 
         while (step < maxSteps) {
             visualizer.println("\n" + "-".repeat(40), CYAN);
@@ -500,16 +487,6 @@ public class InteractiveDrivingDemo {
     }
 
     /**
-     * 打印带颜色的菜单
-     */
-    private void printMenu(String title, String[] options) {
-        visualizer.println("\n" + title + ":", BOLD);
-        for (int i = 0; i < options.length; i++) {
-            visualizer.println("  " + (i + 1) + ". " + options[i], YELLOW);
-        }
-    }
-
-    /**
      * 获取整数输入
      */
     private int getIntInput(String prompt, int min, int max) {
@@ -545,9 +522,6 @@ public class InteractiveDrivingDemo {
         visualizer.println("希望您对自动驾驶的感知-决策-执行有了更深的理解", CYAN);
         visualizer.println("=".repeat(50), CYAN);
     }
-
-    // 临时变量
-    private double totalReward = 0;
 
     /**
      * 主方法 - 启动演示

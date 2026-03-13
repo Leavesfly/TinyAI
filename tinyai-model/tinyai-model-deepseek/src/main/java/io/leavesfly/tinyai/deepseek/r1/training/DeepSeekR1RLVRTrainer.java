@@ -223,8 +223,8 @@ public class DeepSeekR1RLVRTrainer {
     
             if (globalStep % logInterval == 0) {
                 System.out.printf(
-                    "Epoch %d | Step %d | GRPO: %d | Fallback: %d | Reward: %.4f | MoE: %.4f%n",
-                    currentEpoch + 1, globalStep, br.grpoSamples, br.fallbackSamples, batchAvgReward, result.moeLoss
+                    "Epoch %d | Step %d | GRPO: %d | Fallback: %d | Reward: %.4f%n",
+                    currentEpoch + 1, globalStep, br.grpoSamples, br.fallbackSamples, batchAvgReward
                 );
             }
             epochGrpoTotal += br.grpoSamples;

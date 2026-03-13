@@ -177,7 +177,7 @@ public class GPT3TrainDemo {
 
         // 配置预训练器
         GPT3Pretrain pretrain = new GPT3Pretrain(model, trainDataset)
-                .configure(50, 6e-4f, 25, 1.0f)
+                .configure(30, 6e-4f, 25, 1.0f)
                 .setCheckpoint(CHECKPOINT_DIR + "/pretrain", 5);
 
         pretrain.train();

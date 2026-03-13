@@ -1,8 +1,8 @@
 package io.leavesfly.tinyai.deepseek.v3.training;
 
-import io.leavesfly.tinyai.deepseek.base.TaskType;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Config;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Model;
+import io.leavesfly.tinyai.deepseek.base.TaskType;
 
 import java.io.*;
 import java.util.*;
@@ -14,14 +14,15 @@ import java.util.*;
  * 1. 准备真实的教学数据集（适用于教育学习）
  * 2. 预训练阶段 - 基础语言建模训练
  * 3. 后训练阶段 - 任务特定微调
- * 4. 推理阶段 - 多种生成策略演示
+ * 4. RLHF阶段 - 人类反馈强化学习训练
+ * 5. 推理阶段 - 多种生成策略演示
  * 
  * 改进点：
  * - 使用真实文本数据而非随机数据
  * - 支持从文件加载数据集
  * - 包含数据集自动生成功能
  * - 详细的训练过程说明和日志
- * - 完整的预训练-后训练-推理流程
+ * - 完整的预训练-后训练-RLHF-推理流程
  * - 后训练采用行业主流的 ChatML 对话模板格式
  * - 实现 Answer-Only Loss Masking（仅对回答部分计算损失）
  * 
@@ -29,11 +30,14 @@ import java.util.*;
  * - MoE架构的负载均衡训练
  * - 任务感知的数据标注和训练
  * - 代码生成任务的专门支持
+ * - RLHF对齐人类偏好
  * 
- * 预训练 vs 后训练数据格式对比：
+ * 预训练 vs 后训练 vs RLHF数据格式对比：
  * - 预训练: 纯文本句子 → 全序列因果语言建模(CLM) loss
  * - 后训练: ChatML 对话模板 → Answer-Only loss（只对 assistant 回答计算损失）
  *   格式: [TASK] &lt;|im_start|&gt;user\n{问题}&lt;|im_end|&gt;\n&lt;|im_start|&gt;assistant\n{回答}&lt;|im_end|&gt;
+ * - RLHF: ChatML 对话模板 + 奖励标注 → Reward-weighted loss（奖励加权回归）
+ *   格式: [REWARD:0.9] &lt;|im_start|&gt;user\n{问题}&lt;|im_end|&gt;\n&lt;|im_start|&gt;assistant\n{回答}&lt;|im_end|&gt;
  * 
  * @author leavesfly
  * @version 2.0
@@ -65,8 +69,12 @@ public class DeepSeekV3TrainDemo {
             // 说明：此步骤强化MoE专家对代码任务的特化能力
             DeepSeekV3Model codeSpecializedModel = runCodePosttraining(finetunedModel);
             
-            // 步骤3: 推理测试
-            runInference(codeSpecializedModel);
+            // 步骤3: RLHF强化学习训练（人类反馈强化学习）
+            // 说明：RLHF 是 V3 训练流程的标准步骤，用于对齐人类偏好
+            DeepSeekV3Model rlhfModel = runRLHFTraining(codeSpecializedModel);
+            
+            // 步骤4: 推理测试
+            runInference(rlhfModel);
             
             System.out.println("\n" + "=".repeat(80));
             System.out.println("✅ 完整训练流程演示成功!");
@@ -98,6 +106,9 @@ public class DeepSeekV3TrainDemo {
         
         // 生成后训练数据集
         generatePosttrainDataset();
+        
+        // 生成RLHF数据集
+        generateRLHFDataset();
         
         System.out.println("\n✅ 数据集准备完成!");
     }
@@ -200,6 +211,139 @@ public class DeepSeekV3TrainDemo {
         writeToFile(codeValTexts, codeValPath);
         System.out.println("  ✓ 代码专项验证集: " + codeValTexts.size() + " 条");
         System.out.println("  ✓ 保存路径: " + codeValPath);
+    }
+    
+    /**
+     * 生成RLHF数据集
+     * 包含带奖励标注的ChatML对话数据，用于人类反馈强化学习
+     */
+    private static void generateRLHFDataset() throws IOException {
+        System.out.println("\n📝 生成RLHF强化学习数据集...");
+        
+        List<String> rlhfTexts = new ArrayList<>();
+        
+        // 高奖励样本 (0.8-1.0) - 20条
+        rlhfTexts.addAll(generateHighRewardRLHF());
+        
+        // 中奖励样本 (0.4-0.7) - 20条
+        rlhfTexts.addAll(generateMediumRewardRLHF());
+        
+        // 低奖励样本 (0.1-0.3) - 10条
+        rlhfTexts.addAll(generateLowRewardRLHF());
+        
+        // 写入文件
+        String filePath = DATA_DIR + "/rlhf_train.txt";
+        writeToFile(rlhfTexts, filePath);
+        
+        System.out.println("  ✓ RLHF训练数据: " + rlhfTexts.size() + " 条");
+        System.out.println("  ✓ 高奖励样本: 20 条");
+        System.out.println("  ✓ 中奖励样本: 20 条");
+        System.out.println("  ✓ 低奖励样本: 10 条");
+        System.out.println("  ✓ 保存路径: " + filePath);
+    }
+    
+    /**
+     * 生成高奖励RLHF样本 (0.8-1.0)
+     */
+    private static List<String> generateHighRewardRLHF() {
+        List<String> samples = new ArrayList<>();
+        
+        // MoE相关 - 高质量回答
+        samples.add("[REWARD:0.95] <|im_start|>user\nWhat is Mixture of Experts and how does it work?<|im_end|>\n<|im_start|>assistant\nMixture of Experts (MoE) is a neural network architecture that uses multiple specialized expert networks. A gating network learns to route each input token to the most relevant experts. Only the selected experts are activated, enabling sparse computation. For example, DeepSeek V3 uses 8 experts with top-2 routing, activating only 25% of parameters per token, achieving high efficiency while maintaining performance.<|im_end|>");
+        samples.add("[REWARD:0.92] <|im_start|>user\nExplain load balancing in MoE systems.<|im_end|>\n<|im_start|>assistant\nLoad balancing in MoE ensures all experts are utilized evenly during training. Without load balancing, the gating network might always route to the same experts, causing expert collapse. An auxiliary loss term penalizes uneven expert utilization, encouraging the model to distribute tokens across all experts. This improves model capacity and prevents some experts from becoming underutilized.<|im_end|>");
+        samples.add("[REWARD:0.90] <|im_start|>user\nWhat are the advantages of sparse activation?<|im_end|>\n<|im_start|>assistant\nSparse activation in MoE models provides three key advantages: 1) Computational efficiency - only a fraction of parameters are active per forward pass, reducing FLOPs; 2) Scalability - models can have billions of parameters while maintaining fast inference; 3) Specialization - different experts can specialize in different types of content, improving overall model capacity and performance on diverse tasks.<|im_end|>");
+        
+        // DeepSeek相关 - 高质量回答
+        samples.add("[REWARD:0.93] <|im_start|>user\nWhat makes DeepSeek V3 special compared to other models?<|im_end|>\n<|im_start|>assistant\nDeepSeek V3 combines three key innovations: 1) Mixture of Experts architecture with 8 experts and top-2 routing for 25% parameter activation; 2) Task-aware routing that adapts expert selection based on input type (reasoning, coding, math, general); 3) Multi-head latent attention for efficient processing. This combination enables state-of-the-art performance on code generation benchmarks while being 4x faster than equivalent dense models.<|im_end|>");
+        samples.add("[REWARD:0.91] <|im_start|>user\nHow does task-aware architecture improve performance?<|im_end|>\n<|im_start|>assistant\nTask-aware architecture in DeepSeek V3 improves performance by dynamically selecting specialized experts based on the input task type. For reasoning tasks, it activates experts trained on logical inference; for coding tasks, it activates programming-specialized experts; for math tasks, it activates mathematical reasoning experts. This task-specific expert selection allows the model to leverage specialized knowledge more effectively than a one-size-fits-all approach.<|im_end|>");
+        
+        // 代码相关 - 高质量回答
+        samples.add("[REWARD:0.94] <|im_start|>user\nWrite a Python function to implement binary search.<|im_end|>\n<|im_start|>assistant\n```python\ndef binary_search(arr, target):\n    left, right = 0, len(arr) - 1\n    while left <= right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid + 1\n        else:\n            right = mid - 1\n    return -1\n```\nThis implementation has O(log n) time complexity and O(1) space complexity. The array must be sorted for binary search to work correctly.<|im_end|>");
+        samples.add("[REWARD:0.89] <|im_start|>user\nExplain the difference between list and tuple in Python.<|im_end|>\n<|im_start|>assistant\nIn Python, lists and tuples are both sequence types, but they have key differences: 1) Mutability - lists are mutable (can be modified), tuples are immutable (cannot be changed after creation); 2) Syntax - lists use square brackets [], tuples use parentheses (); 3) Performance - tuples are slightly faster and use less memory; 4) Use case - lists for collections that may change, tuples for fixed collections like coordinates or database records.<|im_end|>");
+        
+        // Transformer相关 - 高质量回答
+        samples.add("[REWARD:0.90] <|im_start|>user\nWhat is self-attention in Transformers?<|im_end|>\n<|im_start|>assistant\nSelf-attention is a mechanism that allows each position in a sequence to attend to all other positions, computing weighted representations. For each token, it computes query, key, and value vectors. The attention weight between positions i and j is the softmax of the dot product between query_i and key_j. This allows the model to capture long-range dependencies and contextual relationships regardless of distance in the sequence.<|im_end|>");
+        
+        // 数学相关 - 高质量回答
+        samples.add("[REWARD:0.93] <|im_start|>user\nSolve: If f(x) = 2x + 3, what is f(f(2))?<|im_end|>\n<|im_start|>assistant\nTo solve f(f(2)), we first compute f(2): f(2) = 2*2 + 3 = 7. Then we compute f(7): f(7) = 2*7 + 3 = 17. Therefore, f(f(2)) = 17.<|im_end|>");
+        samples.add("[REWARD:0.91] <|im_start|>user\nWhat is the derivative of sin(x²)?<|im_end|>\n<|im_start|>assistant\nUsing the chain rule: d/dx[sin(x²)] = cos(x²) * d/dx[x²] = cos(x²) * 2x = 2x*cos(x²).<|im_end|>");
+        
+        // 更多高质量样本
+        samples.add("[REWARD:0.88] <|im_start|>user\nExplain backpropagation in neural networks.<|im_end|>\n<|im_start|>assistant\nBackpropagation is an algorithm for training neural networks by computing gradients efficiently. It works by: 1) Forward pass - compute the output and loss; 2) Backward pass - compute the gradient of the loss with respect to each parameter using the chain rule; 3) Update parameters using gradient descent. The key insight is that gradients can be computed recursively from the output layer back to the input layer, reusing intermediate computations.<|im_end|>");
+        samples.add("[REWARD:0.87] <|im_start|>user\nWhat is overfitting and how to prevent it?<|im_end|>\n<|im_start|>assistant\nOverfitting occurs when a model learns the training data too well, including noise and patterns that don't generalize. Prevention techniques include: 1) Regularization (L1/L2) to penalize complex models; 2) Dropout to randomly disable neurons during training; 3) Early stopping to halt training when validation performance degrades; 4) Data augmentation to increase training diversity; 5) Using more training data; 6) Reducing model complexity.<|im_end|>");
+        samples.add("[REWARD:0.86] <|im_start|>user\nWhat is the difference between supervised and unsupervised learning?<|im_end|>\n<|im_start|>assistant\nSupervised learning uses labeled data where the model learns to map inputs to known outputs (e.g., classification, regression). Unsupervised learning uses unlabeled data to discover hidden patterns (e.g., clustering, dimensionality reduction). Supervised learning typically achieves higher accuracy on specific tasks but requires labeled data, while unsupervised learning can work with raw data but is more exploratory.<|im_end|>");
+        samples.add("[REWARD:0.85] <|im_start|>user\nExplain the concept of gradient descent.<|im_end|>\n<|im_start|>assistant\nGradient descent is an optimization algorithm used to minimize a loss function. It works by: 1) Computing the gradient of the loss with respect to parameters; 2) Moving parameters in the opposite direction of the gradient (downhill) by a small step size (learning rate); 3) Repeating until convergence. The gradient points in the direction of steepest ascent, so moving opposite reduces the loss. Variants include SGD, Adam, and RMSprop for faster convergence.<|im_end|>");
+        samples.add("[REWARD:0.84] <|im_start|>user\nWhat is a neural network?<|im_end|>\n<|im_start|>assistant\nA neural network is a computational model inspired by biological neurons. It consists of layers of interconnected nodes (neurons). Each connection has a weight that is learned during training. Input data flows through the network, with each layer transforming the representation. Deep learning uses networks with many layers (deep networks) to learn hierarchical feature representations automatically from data.<|im_end|>");
+        samples.add("[REWARD:0.83] <|im_start|>user\nExplain the bias-variance tradeoff.<|im_end|>\n<|im_start|>assistant\nThe bias-variance tradeoff describes the balance between underfitting (high bias) and overfitting (high variance). High bias models are too simple and underfit the training data. High variance models are too complex and overfit noise. The goal is to find the sweet spot with low bias and low variance. Techniques like regularization, cross-validation, and ensemble methods help manage this tradeoff.<|im_end|>");
+        samples.add("[REWARD:0.82] <|im_start|>user\nWhat is cross-validation?<|im_end|>\n<|im_start|>assistant\nCross-validation is a technique for evaluating model performance by partitioning data into multiple subsets. The most common is k-fold cross-validation: data is split into k folds, the model is trained on k-1 folds and tested on the remaining fold, repeated k times. This provides a more robust estimate of model performance than a single train-test split, especially with limited data.<|im_end|>");
+        samples.add("[REWARD:0.81] <|im_start|>user\nExplain the concept of embeddings.<|im_end|>\n<|im_start|>assistant\nEmbeddings are dense vector representations of discrete items (words, users, products) that capture semantic relationships. Unlike one-hot encoding (sparse and high-dimensional), embeddings are learned continuous vectors where similar items are close in vector space. For example, word embeddings capture that 'king' - 'man' + 'woman' ≈ 'queen'. They enable neural networks to process categorical data efficiently and discover meaningful patterns.<|im_end|>");
+        
+        return samples;
+    }
+    
+    /**
+     * 生成中奖励RLHF样本 (0.4-0.7)
+     */
+    private static List<String> generateMediumRewardRLHF() {
+        List<String> samples = new ArrayList<>();
+        
+        // MoE相关 - 中等质量回答
+        samples.add("[REWARD:0.65] <|im_start|>user\nWhat is MoE?<|im_end|>\n<|im_start|>assistant\nMoE stands for Mixture of Experts. It's a type of neural network that uses multiple expert networks and routes inputs to them. Only some experts are used for each input, which makes it efficient.<|im_end|>");
+        samples.add("[REWARD:0.60] <|im_start|>user\nHow many experts does DeepSeek V3 use?<|im_end|>\n<|im_start|>assistant\nDeepSeek V3 uses 8 expert networks in its MoE architecture.<|im_end|>");
+        samples.add("[REWARD:0.55] <|im_start|>user\nWhat is load balancing?<|im_end|>\n<|im_start|>assistant\nLoad balancing in MoE is about making sure all experts are used evenly during training so none are idle or overused.<|im_end|>");
+        
+        // DeepSeek相关 - 中等质量回答
+        samples.add("[REWARD:0.63] <|im_start|>user\nWhat is DeepSeek V3?<|im_end|>\n<|im_start|>assistant\nDeepSeek V3 is a language model that uses MoE architecture and task-aware routing to be efficient and perform well on various tasks like coding and reasoning.<|im_end|>");
+        samples.add("[REWARD:0.58] <|im_start|>user\nWhat programming languages does DeepSeek support?<|im_end|>\n<|im_start|>assistant\nDeepSeek supports multiple programming languages including Python, Java, C++, JavaScript, and others.<|im_end|>");
+        
+        // 代码相关 - 中等质量回答
+        samples.add("[REWARD:0.67] <|im_start|>user\nWrite a function to reverse a string in Python.<|im_end|>\n<|im_start|>assistant\n```python\ndef reverse_string(s):\n    return s[::-1]\n```\nThis uses Python slicing to reverse the string.<|im_end|>");
+        samples.add("[REWARD:0.62] <|im_start|>user\nWhat is a list in Python?<|im_end|>\n<|im_start|>assistant\nA list in Python is a mutable sequence that can hold multiple items. You can create one with square brackets like [1, 2, 3].<|im_end|>");
+        samples.add("[REWARD:0.57] <|im_start|>user\nHow do you define a function in Python?<|im_end|>\n<|im_start|>assistant\nYou use the def keyword followed by the function name and parameters. For example: def my_function(): pass<|im_end|>");
+        
+        // Transformer相关 - 中等质量回答
+        samples.add("[REWARD:0.64] <|im_start|>user\nWhat is attention in Transformers?<|im_end|>\n<|im_start|>assistant\nAttention is a mechanism that lets the model focus on relevant parts of the input. Self-attention lets each position look at all other positions.<|im_end|>");
+        samples.add("[REWARD:0.59] <|im_start|>user\nWhat is multi-head attention?<|im_end|>\n<|im_start|>assistant\nMulti-head attention runs multiple attention mechanisms in parallel, each learning different aspects of the relationships between tokens.<|im_end|>");
+        
+        // 数学相关 - 中等质量回答
+        samples.add("[REWARD:0.66] <|im_start|>user\nWhat is 2 + 2?<|im_end|>\n<|im_start|>assistant\n2 + 2 = 4<|im_end|>");
+        samples.add("[REWARD:0.61] <|im_start|>user\nWhat is the square root of 16?<|im_end|>\n<|im_start|>assistant\nThe square root of 16 is 4.<|im_end|>");
+        samples.add("[REWARD:0.56] <|im_start|>user\nWhat is a derivative?<|im_end|>\n<|im_start|>assistant\nA derivative measures how a function changes as its input changes. It's the slope of the function at a point.<|im_end|>");
+        
+        // 更多中等质量样本
+        samples.add("[REWARD:0.54] <|im_start|>user\nWhat is machine learning?<|im_end|>\n<|im_start|>assistant\nMachine learning is a field where computers learn from data to make predictions or decisions without being explicitly programmed.<|im_end|>");
+        samples.add("[REWARD:0.53] <|im_start|>user\nWhat is a neural network layer?<|im_end|>\n<|im_start|>assistant\nA neural network layer is a set of neurons that processes inputs and produces outputs. Each layer transforms the data in some way.<|im_end|>");
+        samples.add("[REWARD:0.52] <|im_start|>user\nWhat is activation function?<|im_end|>\n<|im_start|>assistant\nAn activation function introduces non-linearity into a neural network. Common ones include ReLU, sigmoid, and tanh.<|im_end|>");
+        samples.add("[REWARD:0.51] <|im_start|>user\nWhat is regularization?<|im_end|>\n<|im_start|>assistant\nRegularization is a technique to prevent overfitting by adding a penalty term to the loss function. L1 and L2 are common types.<|im_end|>");
+        samples.add("[REWARD:0.50] <|im_start|>user\nWhat is batch normalization?<|im_end|>\n<|im_start|>assistant\nBatch normalization normalizes the inputs of each layer to improve training stability and speed.<|im_end|>");
+        samples.add("[REWARD:0.49] <|im_start|>user\nWhat is dropout?<|im_end|>\n<|im_start|>assistant\nDropout randomly disables some neurons during training to prevent overfitting and improve generalization.<|im_end|>");
+        samples.add("[REWARD:0.48] <|im_start|>user\nWhat is gradient clipping?<|im_end|>\n<|im_start|>assistant\nGradient clipping limits the maximum value of gradients during training to prevent exploding gradients.<|im_end|>");
+        samples.add("[REWARD:0.47] <|im_start|>user\nWhat is learning rate?<|im_end|>\n<|im_start|>assistant\nLearning rate controls how much the model parameters are updated during training. Too high can cause divergence, too slow can cause slow convergence.<|im_end|>");
+        samples.add("[REWARD:0.46] <|im_start|>user\nWhat is an epoch?<|im_end|>\n<|im_start|>assistant\nAn epoch is one complete pass through the entire training dataset during model training.<|im_end|>");
+        samples.add("[REWARD:0.45] <|im_start|>user\nWhat is a batch?<|im_end|>\n<|im_start|>assistant\nA batch is a subset of the training data used in one iteration of training. Batch size affects memory usage and training stability.<|im_end|>");
+        
+        return samples;
+    }
+    
+    /**
+     * 生成低奖励RLHF样本 (0.1-0.3)
+     */
+    private static List<String> generateLowRewardRLHF() {
+        List<String> samples = new ArrayList<>();
+        
+        // 低质量回答 - 错误、不完整或不相关
+        samples.add("[REWARD:0.25] <|im_start|>user\nWhat is Mixture of Experts?<|im_end|>\n<|im_start|>assistant\nIt's a type of neural network thing.<|im_end|>");
+        samples.add("[REWARD:0.20] <|im_start|>user\nHow does MoE routing work?<|im_end|>\n<|im_start|>assistant\nI don't know.<|im_end|>");
+        samples.add("[REWARD:0.22] <|im_start|>user\nWhat is DeepSeek V3?<|im_end|>\n<|im_start|>assistant\nIt's a model.<|im_end|>");
+        samples.add("[REWARD:0.18] <|im_start|>user\nWrite a Python function to sort a list.<|im_end|>\n<|im_start|>assistant\n```python\ndef sort_list(lst):\n    # This is wrong\n    return lst\n```<|im_end|>");
+        samples.add("[REWARD:0.15] <|im_start|>user\nWhat is self-attention?<|im_end|>\n<|im_start|>assistant\nIt's attention on itself.<|im_end|>");
+        samples.add("[REWARD:0.12] <|im_start|>user\nWhat is backpropagation?<|im_end|>\n<|im_start|>assistant\nBackpropagation is when you go backwards.<|im_end|>");
+        samples.add("[REWARD:0.10] <|im_start|>user\nExplain overfitting.<|im_end|>\n<|im_start|>assistant\nOverfitting is bad.<|im_end|>");
+        samples.add("[REWARD:0.28] <|im_start|>user\nWhat is the derivative of x²?<|im_end|>\n<|im_start|>assistant\n2x is the derivative.<|im_end|>");
+        samples.add("[REWARD:0.23] <|im_start|>user\nWhat is a neural network?<|im_end|>\n<|im_start|>assistant\nIt's like a brain but with math.<|im_end|>");
+        samples.add("[REWARD:0.30] <|im_start|>user\nHow do you prevent overfitting?<|im_end|>\n<|im_start|>assistant\nUse more data maybe.<|im_end|>");
+        
+        return samples;
     }
     
     /**
@@ -771,11 +915,176 @@ public class DeepSeekV3TrainDemo {
     }
     
     /**
+     * 执行RLHF训练（人类反馈强化学习）
+     */
+    private static DeepSeekV3Model runRLHFTraining(DeepSeekV3Model model) throws IOException {
+        System.out.println("\n" + "=".repeat(80));
+        System.out.println("🏆 步骤3: DeepSeek-V3 RLHF训练 - 人类反馈强化学习");
+        System.out.println("=".repeat(80));
+        System.out.println("💡 目标：通过人类反馈对齐模型行为");
+        System.out.println("💡 算法：Reward-weighted Regression（奖励加权回归）");
+        
+        // 1. 加载RLHF数据
+        System.out.println("\n📝 加载RLHF训练数据...");
+        String rlhfPath = DATA_DIR + "/rlhf_train.txt";
+        List<String> rlhfTexts = readFromFile(rlhfPath);
+        
+        System.out.println("  ✓ RLHF样本: " + rlhfTexts.size() + " 条");
+        
+        // 2. 解析RLHF数据并构建数据集
+        System.out.println("\n📝 准备RLHF数据集...");
+        DeepSeekV3Config config = model.getConfig();
+        
+        DeepSeekV3Dataset rlhfDataset = createRLHFDatasetFromTexts(
+            rlhfTexts,
+            config.getNPositions(),
+            2,  // batch size
+            config.getVocabSize()
+        );
+        
+        System.out.println("  ✓ RLHF训练样本: " + rlhfDataset.getSampleCount());
+        System.out.println("  ✓ Loss Mask: 启用（Answer-only Loss）");
+        System.out.println("  ✓ 数据格式: ChatML 模板 + 奖励标注");
+        
+        // 3. 配置RLHF训练器
+        System.out.println("\n📝 配置RLHF训练器（Reward-weighted Regression）...");
+        DeepSeekV3RLHFTrainer rlhfTrainer = new DeepSeekV3RLHFTrainer(
+            model,
+            rlhfDataset
+        );
+        
+        rlhfTrainer.configure(
+            2,          // maxEpochs
+            5e-4f,      // learningRate
+            1.0f,       // rewardWeight
+            0.5f        // moeQualityWeight
+        );
+        
+        System.out.println("  ✓ 最大轮次: 2");
+        System.out.println("  ✓ 学习率: 5e-4");
+        System.out.println("  ✓ 算法: Reward-weighted Regression");
+        
+        // 4. 开始RLHF训练
+        System.out.println("\n📝 开始RLHF强化学习训练...");
+        System.out.println("-".repeat(80));
+        rlhfTrainer.train();
+        System.out.println("-".repeat(80));
+        
+        System.out.println("\n✅ RLHF训练完成!");
+        System.out.println("\n💡 RLHF阶段总结:");
+        System.out.println("  - 目标: 通过人类反馈对齐模型行为");
+        System.out.println("  - 算法: Reward-weighted Regression（奖励加权回归）");
+        System.out.println("  - 数据: ChatML 模板 + 奖励标注（高/中/低三档）");
+        System.out.println("  - 技巧: Answer-only Loss Mask + 奖励加权梯度");
+        System.out.println("  - 效果: 高奖励样本被强化，低奖励样本被弱化");
+        System.out.println("  - 结果: 模型更符合人类偏好，回答更礼貌、更安全");
+        
+        return model;
+    }
+    
+    /**
+     * 从RLHF文本创建数据集
+     * 解析奖励标注和ChatML内容，构建带loss mask和rewards的数据集
+     */
+    private static DeepSeekV3Dataset createRLHFDatasetFromTexts(
+            List<String> texts,
+            int maxSeqLength,
+            int batchSize,
+            int vocabSize) {
+        
+        List<int[]> sequences = new ArrayList<>();
+        List<float[]> lossMasks = new ArrayList<>();
+        List<float[]> rewards = new ArrayList<>();
+        
+        for (String text : texts) {
+            // 解析奖励标注
+            float reward = 0.5f;  // 默认奖励
+            String content = text;
+            
+            // 提取奖励标注 [REWARD:0.x]
+            int rewardStart = text.indexOf("[REWARD:");
+            if (rewardStart >= 0) {
+                int rewardEnd = text.indexOf("]", rewardStart);
+                if (rewardEnd > rewardStart) {
+                    String rewardStr = text.substring(rewardStart + 8, rewardEnd);
+                    try {
+                        reward = Float.parseFloat(rewardStr);
+                    } catch (NumberFormatException e) {
+                        reward = 0.5f;
+                    }
+                    content = text.substring(rewardEnd + 1).trim();
+                }
+            }
+            
+            // 解析ChatML内容并构建loss mask
+            if (content.contains("<|im_start|>assistant")) {
+                int assistantContentStart = content.indexOf("<|im_start|>assistant");
+                String userPart = content.substring(0, assistantContentStart);
+                String assistantPart = content.substring(assistantContentStart);
+                
+                // 分别编码
+                List<Integer> userTokens = sharedTokenizer.encode(userPart);
+                List<Integer> assistantTokens = sharedTokenizer.encode(assistantPart);
+                
+                // 合并 token 序列
+                List<Integer> allTokens = new ArrayList<>(userTokens);
+                allTokens.addAll(assistantTokens);
+                int[] sequence = allTokens.stream().mapToInt(Integer::intValue).toArray();
+                
+                // 构建 loss mask：user 部分为 0.0，assistant 部分为 1.0
+                float[] mask = new float[maxSeqLength];
+                int userLen = userTokens.size();
+                int totalLen = Math.min(allTokens.size(), maxSeqLength);
+                for (int j = 0; j < totalLen; j++) {
+                    mask[j] = (j >= userLen) ? 1.0f : 0.0f;
+                }
+                
+                // Padding
+                int[] paddedSeq = new int[maxSeqLength];
+                Arrays.fill(paddedSeq, SimpleTokenizer.PAD_TOKEN_ID);
+                int copyLen = Math.min(sequence.length, maxSeqLength);
+                System.arraycopy(sequence, 0, paddedSeq, 0, copyLen);
+                
+                sequences.add(paddedSeq);
+                lossMasks.add(mask);
+                
+                // 添加奖励
+                float[] rewardArray = new float[1];
+                rewardArray[0] = reward;
+                rewards.add(rewardArray);
+            }
+        }
+        
+        // 构建任务类型列表（默认为GENERAL）
+        List<TaskType> taskTypeList = new ArrayList<>();
+        for (int i = 0; i < sequences.size(); i++) {
+            taskTypeList.add(TaskType.GENERAL);
+        }
+        
+        // 转换奖励列表
+        List<Float> rewardList = new ArrayList<>();
+        for (float[] rewardArray : rewards) {
+            rewardList.add(rewardArray[0]);
+        }
+        
+        // 创建RLHF数据集
+        return new DeepSeekV3Dataset(
+            sequences,
+            taskTypeList,
+            lossMasks,
+            rewardList,
+            maxSeqLength,
+            batchSize,
+            true  // shuffle
+        );
+    }
+    
+    /**
      * 执行推理测试
      */
     private static void runInference(DeepSeekV3Model model) {
         System.out.println("\n" + "=".repeat(80));
-        System.out.println("🚀 步骤3: DeepSeek-V3 推理与文本生成");
+        System.out.println("🚀 步骤4: DeepSeek-V3 推理与文本生成");
         System.out.println("=".repeat(80));
         
         // 1. 创建推理器
@@ -786,10 +1095,10 @@ public class DeepSeekV3TrainDemo {
         
         // 2. 测试用例
         TestCase[] testCases = {
-            new TestCase("Mixture of Experts is", TaskType.GENERAL),
-            new TestCase("DeepSeek V3 combines", TaskType.REASONING),
-            new TestCase("Python is used for", TaskType.CODING),
-            new TestCase("Self attention computes", TaskType.REASONING)
+            new TestCase("Mixture of Experts is"),
+            new TestCase("DeepSeek V3 combines"),
+            new TestCase("Python is used for"),
+            new TestCase("Self attention computes")
         };
         
         System.out.println("\n📝 执行文本生成测试...\n");
@@ -797,7 +1106,6 @@ public class DeepSeekV3TrainDemo {
         for (int i = 0; i < testCases.length; i++) {
             TestCase testCase = testCases[i];
             System.out.println("测试 " + (i + 1) + ": \"" + testCase.prompt + "\"");
-            System.out.println("任务类型: " + testCase.taskType);
             System.out.println("-".repeat(80));
             
             try {
@@ -806,21 +1114,21 @@ public class DeepSeekV3TrainDemo {
                 
                 // Greedy解码
                 System.out.println("  策略1 [Greedy贪婪]: ");
-                var greedyResult = inference.generateGreedy(promptIds, 12, testCase.taskType);
+                var greedyResult = inference.generateGreedy(promptIds, 12);
                 String greedyText = sharedTokenizer.decode(greedyResult.tokens);
                 System.out.println("    → " + greedyText);
                 
                 // Temperature采样
                 System.out.println("  策略2 [Temperature=0.8]: ");
                 var tempResult = inference.generateWithTemperature(
-                    promptIds, 12, 0.8f, testCase.taskType
+                    promptIds, 12, 0.8f
                 );
                 String tempText = sharedTokenizer.decode(tempResult.tokens);
                 System.out.println("    → " + tempText);
                 
                 // Top-K采样
                 System.out.println("  策略3 [Top-K=50]: ");
-                var topKResult = inference.generateTopK(promptIds, 12, 50, testCase.taskType);
+                var topKResult = inference.generateTopK(promptIds, 12, 50);
                 String topKText = sharedTokenizer.decode(topKResult.tokens);
                 System.out.println("    → " + topKText);
                 
@@ -833,11 +1141,11 @@ public class DeepSeekV3TrainDemo {
         
         System.out.println("✅ 推理测试完成!");
         System.out.println("\n💡 推理阶段总结:");
-        System.out.println("  - 输入: 提示词 + 任务类型");
-        System.out.println("  - 处理: 任务感知的自回归生成");
+        System.out.println("  - 输入: 提示词");
+        System.out.println("  - 处理: 自回归生成");
         System.out.println("  - 输出: 生成的完整文本");
         System.out.println("  - 策略: Greedy/Temperature/TopK/TopP");
-        System.out.println("  - 特色: MoE稀疏激活 + 任务路由");
+        System.out.println("  - 特色: MoE稀疏激活");
     }
     
     /**
@@ -857,16 +1165,13 @@ public class DeepSeekV3TrainDemo {
             boolean useTaskLabels) {
         
         List<int[]> sequences = new ArrayList<>();
-        List<TaskType> taskTypes = new ArrayList<>();
         List<float[]> lossMasks = new ArrayList<>();
         
         for (String text : texts) {
-            TaskType taskType = TaskType.GENERAL;
             String cleanText = text;
             
             if (useTaskLabels) {
-                // 提取任务标签
-                taskType = extractTaskType(text);
+                // 移除任务标签
                 cleanText = removeTaskLabel(text);
             }
             
@@ -882,7 +1187,6 @@ public class DeepSeekV3TrainDemo {
                     int copyLen = Math.min(sequence.length, maxSeqLength);
                     System.arraycopy(sequence, 0, paddedSeq, 0, copyLen);
                     sequences.add(paddedSeq);
-                    taskTypes.add(taskType);
                     continue;
                 }
                 String userPart = cleanText.substring(0, assistantContentStart);
@@ -913,7 +1217,6 @@ public class DeepSeekV3TrainDemo {
                 System.arraycopy(sequence, 0, paddedSeq, 0, copyLen);
                 
                 sequences.add(paddedSeq);
-                taskTypes.add(taskType);
                 lossMasks.add(mask);
             } else {
                 // 预训练模式或非 ChatML 格式：整条文本编码，无 loss mask
@@ -926,27 +1229,15 @@ public class DeepSeekV3TrainDemo {
                 System.arraycopy(sequence, 0, paddedSeq, 0, copyLen);
                 
                 sequences.add(paddedSeq);
-                taskTypes.add(taskType);
             }
         }
         
         // 如果有 loss mask 数据，使用带 mask 的构造函数
         if (!lossMasks.isEmpty()) {
-            return new DeepSeekV3Dataset(sequences, taskTypes, lossMasks,
+            return new DeepSeekV3Dataset(sequences, new ArrayList<>(), lossMasks,
                 maxSeqLength, batchSize, true, true);
         }
-        return new DeepSeekV3Dataset(sequences, taskTypes, maxSeqLength, batchSize, true);
-    }
-    
-    /**
-     * 提取任务类型标签
-     */
-    private static TaskType extractTaskType(String text) {
-        if (text.startsWith("[REASONING]")) return TaskType.REASONING;
-        if (text.startsWith("[CODING]")) return TaskType.CODING;
-        if (text.startsWith("[MATH]")) return TaskType.MATH;
-        if (text.startsWith("[MULTIMODAL]")) return TaskType.MULTIMODAL;
-        return TaskType.GENERAL;
+        return new DeepSeekV3Dataset(sequences, maxSeqLength, batchSize, true);
     }
     
     /**
@@ -977,11 +1268,9 @@ public class DeepSeekV3TrainDemo {
      */
     private static class TestCase {
         final String prompt;
-        final TaskType taskType;
         
-        TestCase(String prompt, TaskType taskType) {
+        TestCase(String prompt) {
             this.prompt = prompt;
-            this.taskType = taskType;
         }
     }
     

@@ -8,12 +8,16 @@ import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
 
 /**
- * DeepSeek 通用 Token 嵌入基类
+ * DeepSeek 通用 Token 嵌入基类（对标 DeepSeek-V3/R1 论文架构）
  *
  * 统一实现：
  * 1. Token Embedding - 将 token ID 映射到嵌入向量
- * 2. Position Embedding - 为每个位置添加位置信息
- * 3. Dropout - 嵌入层正则化
+ * 2. Dropout - 嵌入层正则化
+ *
+ * 注意：位置信息由注意力层中的 RoPE（旋转位置编码）提供，
+ * 嵌入层不包含学习式位置嵌入，这与 DeepSeek-V3/R1 论文一致。
+ *
+ * 输出 = Dropout(TokenEmbed)
  *
  * 前向计算完全在 Variable 层面完成，方便自动求导和计算图管理。
  */
@@ -23,7 +27,7 @@ public class DeepSeekTokenEmbeddingBase extends Module {
     protected final int vocabSize;
     /** 嵌入维度 */
     protected final int embeddingDim;
-    /** 最大位置数 */
+    /** 最大位置数（用于序列长度校验） */
     protected final int maxPositions;
     /** Dropout 概率 */
     protected final float dropoutProb;
@@ -32,8 +36,6 @@ public class DeepSeekTokenEmbeddingBase extends Module {
 
     /** Token 嵌入参数 [vocabSize, embeddingDim] */
     protected Parameter tokenEmbedding;
-    /** 位置嵌入参数 [maxPositions, embeddingDim] */
-    protected Parameter positionEmbedding;
     /** Dropout 层 */
     protected Dropout dropout;
 
@@ -43,7 +45,7 @@ public class DeepSeekTokenEmbeddingBase extends Module {
      * @param name             模块名称
      * @param vocabSize        词汇表大小
      * @param embeddingDim     嵌入维度
-     * @param maxPositions     最大位置数
+     * @param maxPositions     最大位置数（用于序列长度校验）
      * @param dropoutProb      Dropout 概率
      * @param initializerRange 权重初始化范围
      */
@@ -73,14 +75,7 @@ public class DeepSeekTokenEmbeddingBase extends Module {
         tokenEmbedding = new Parameter(tokenEmbedData);
         registerParameter("token_embedding", tokenEmbedding);
 
-        // 2. 初始化位置嵌入矩阵 [maxPositions, embeddingDim]
-        NdArray positionEmbedData = NdArray
-                .likeRandomN(Shape.of(maxPositions, embeddingDim))
-                .mulNum((float) initializerRange);
-        positionEmbedding = new Parameter(positionEmbedData);
-        registerParameter("position_embedding", positionEmbedding);
-
-        // 3. 初始化 Dropout 层
+        // 2. 初始化 Dropout 层
         dropout = new Dropout("embedding_dropout", dropoutProb);
         registerModule("dropout", dropout);
     }
@@ -118,79 +113,41 @@ public class DeepSeekTokenEmbeddingBase extends Module {
             );
         }
 
-        // ✅ 使用 Variable 层面的算子
+        // Token 嵌入查找
         Variable tokenEmbedParam = new Variable(tokenEmbedding.data());
-        Variable tokenEmbeds = getTokenEmbeddingsV2(tokenIds, tokenEmbedParam, batchSize, sequenceLength);
+        Variable flatTokenIds = tokenIds.reshape(Shape.of(batchSize * sequenceLength));
+        Variable flatEmbeds = tokenEmbedParam.indexSelect(0, flatTokenIds);
+        Variable tokenEmbeds = flatEmbeds.reshape(Shape.of(batchSize, sequenceLength, embeddingDim));
 
-        Variable posEmbedParam = new Variable(positionEmbedding.data());
-        Variable positionEmbeds = getPositionEmbeddingsV2(posEmbedParam, batchSize, sequenceLength);
-
-        // 合并嵌入并应用 dropout
-        Variable combined = tokenEmbeds.add(positionEmbeds);
-        return dropout.forward(combined);
+        // 应用 Dropout（位置信息由注意力层的 RoPE 提供）
+        return dropout.forward(tokenEmbeds);
     }
 
     /**
-     * 获取 token 嵌入向量 (使用 Variable 算子)
-     *
-     * @param tokenIds       token ID 变量 [batch_size, seq_len]
-     * @param tokenEmbedParam token 嵌入参数 [vocabSize, embeddingDim]
-     * @param batchSize      批次大小
-     * @param sequenceLength 序列长度
-     * @return token 嵌入变量 [batch_size, seq_len, embeddingDim]
-     */
-    protected Variable getTokenEmbeddingsV2(Variable tokenIds,
-                                            Variable tokenEmbedParam,
-                                            int batchSize,
-                                            int sequenceLength) {
-        // 1. 展平 tokenIds: [batch_size, seq_len] -> [batch_size * seq_len]
-        Variable flatIds = tokenIds.reshape(Shape.of(batchSize * sequenceLength));
-
-        // 2. 使用 indexSelect 选择嵌入: [batch_size * seq_len, embeddingDim]
-        Variable flatEmbeds = tokenEmbedParam.indexSelect(0, flatIds);
-
-        // 3. Reshape 回 3D: [batch_size, seq_len, embeddingDim]
-        return flatEmbeds.reshape(Shape.of(batchSize, sequenceLength, embeddingDim));
-    }
-
-    /**
-     * 获取位置嵌入向量 (使用 Variable 算子)
-     *
-     * @param posEmbedParam  位置嵌入参数 [maxPositions, embeddingDim]
-     * @param batchSize      批次大小（当前仅用于接口统一，可不参与计算）
-     * @param sequenceLength 序列长度
-     * @return 位置嵌入变量 [1, seq_len, embeddingDim] - 依赖广播机制自动扩展
-     */
-    protected Variable getPositionEmbeddingsV2(Variable posEmbedParam,
-                                               int batchSize,
-                                               int sequenceLength) {
-        // 1. 创建位置索引 [0, 1, ..., sequenceLength - 1]
-        float[] posIndices = new float[sequenceLength];
-        for (int i = 0; i < sequenceLength; i++) {
-            posIndices[i] = i;
-        }
-
-        Variable posIds = new Variable(NdArray.of(posIndices));
-        posIds.setRequireGrad(false);
-
-        // 2. 使用 indexSelect 选择位置嵌入: [sequenceLength, embeddingDim]
-        Variable posEmbeds = posEmbedParam.indexSelect(0, posIds);
-
-        // 3. Reshape 到 [1, seq_len, embeddingDim]，依赖 add 的广播机制自动扩展 batch 维
-        return posEmbeds.reshape(Shape.of(1, sequenceLength, embeddingDim));
-    }
-
-    /**
-     * 获取 token 嵌入参数
+     * 获取 token 嵌入参数（供 MTP 头等共享使用）
      */
     public Parameter getTokenEmbedding() {
         return tokenEmbedding;
     }
 
     /**
-     * 获取位置嵌入参数
+     * 获取嵌入维度
      */
-    public Parameter getPositionEmbedding() {
-        return positionEmbedding;
+    public int getEmbeddingDim() {
+        return embeddingDim;
+    }
+
+    /**
+     * 获取词汇表大小
+     */
+    public int getVocabSize() {
+        return vocabSize;
+    }
+
+    /**
+     * 获取最大位置数
+     */
+    public int getMaxPositions() {
+        return maxPositions;
     }
 }

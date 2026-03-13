@@ -22,17 +22,39 @@ import java.util.*;
  */
 public class GPT1Inference {
     
+    /** 默认EOS token ID，表示不启用EOS终止 */
+    private static final int NO_EOS_TOKEN = -1;
+    
     private final GPT1Model model;
     private final int maxSeqLen;
+    private final int eosTokenId;
     
     /**
-     * 构造函数
+     * 构造函数（不启用EOS终止）
      * 
      * @param model GPT-1模型
      */
     public GPT1Inference(GPT1Model model) {
+        this(model, NO_EOS_TOKEN);
+    }
+    
+    /**
+     * 构造函数（启用EOS终止）
+     * 
+     * @param model GPT-1模型
+     * @param eosTokenId EOS token的ID，生成到该token时提前终止；传入-1表示不启用
+     */
+    public GPT1Inference(GPT1Model model, int eosTokenId) {
         this.model = model;
         this.maxSeqLen = model.getConfig().getNPositions();
+        this.eosTokenId = eosTokenId;
+    }
+    
+    /**
+     * 判断是否应因生成EOS而终止
+     */
+    private boolean isEosToken(int tokenId) {
+        return eosTokenId != NO_EOS_TOKEN && tokenId == eosTokenId;
     }
     
     /**
@@ -66,6 +88,9 @@ public class GPT1Inference {
             int lastPos = currentSeq.length - 1;
             int nextToken = argmax(logitsArray, 0, lastPos);
             
+            if (isEosToken(nextToken)) {
+                break;
+            }
             generated.add(nextToken);
         }
         
@@ -126,6 +151,10 @@ public class GPT1Inference {
             
             // 采样
             int nextToken = sample(probs, random);
+            
+            if (isEosToken(nextToken)) {
+                break;
+            }
             generated.add(nextToken);
         }
         
@@ -194,6 +223,10 @@ public class GPT1Inference {
             // 从top-k中采样
             int sampledIdx = sample(topKProbs, random);
             int nextToken = topKIndices[sampledIdx];
+            
+            if (isEosToken(nextToken)) {
+                break;
+            }
             generated.add(nextToken);
         }
         
@@ -288,6 +321,10 @@ public class GPT1Inference {
             // 采样
             int sampledIdx = sample(nucleusProbs, random);
             int nextToken = indices[sampledIdx];
+            
+            if (isEosToken(nextToken)) {
+                break;
+            }
             generated.add(nextToken);
         }
         
@@ -312,12 +349,16 @@ public class GPT1Inference {
         initialBeam.score = 0.0f;
         beams.add(initialBeam);
         
+        // 已完成的beam（生成了EOS的beam）
+        List<Beam> finishedBeams = new ArrayList<>();
+        
         // Beam search循环
         for (int step = 0; step < maxNewTokens; step++) {
             List<Beam> candidates = new ArrayList<>();
             
             for (Beam beam : beams) {
-                if (beam.tokens.size() >= maxSeqLen) {
+                // 已完成的beam直接保留，不再扩展
+                if (beam.finished || beam.tokens.size() >= maxSeqLen) {
                     candidates.add(beam);
                     continue;
                 }
@@ -358,17 +399,42 @@ public class GPT1Inference {
                     newBeam.tokens.addAll(beam.tokens);
                     newBeam.tokens.add(idx);
                     newBeam.score = beam.score + logProbs[idx];
+                    // 生成EOS的beam标记为已完成
+                    if (isEosToken(idx)) {
+                        newBeam.finished = true;
+                        finishedBeams.add(newBeam);
+                    }
                     candidates.add(newBeam);
                 }
             }
             
             // 选择top-k beams
             candidates.sort((a, b) -> Float.compare(b.score, a.score));
-            beams = candidates.subList(0, Math.min(beamSize, candidates.size()));
+            beams = new ArrayList<>(candidates.subList(0, Math.min(beamSize, candidates.size())));
+            
+            // 如果所有活跃beam都已完成，提前终止
+            boolean allFinished = true;
+            for (Beam beam : beams) {
+                if (!beam.finished) {
+                    allFinished = false;
+                    break;
+                }
+            }
+            if (allFinished) {
+                break;
+            }
         }
         
-        // 返回得分最高的序列
-        return toArray(beams.get(0).tokens);
+        // 合并已完成和未完成的beam，选择得分最高的序列
+        List<Beam> allBeams = new ArrayList<>(finishedBeams);
+        for (Beam beam : beams) {
+            if (!finishedBeams.contains(beam)) {
+                allBeams.add(beam);
+            }
+        }
+        allBeams.sort((a, b) -> Float.compare(b.score, a.score));
+        
+        return toArray(allBeams.get(0).tokens);
     }
     
     // ========== 辅助方法 ==========
@@ -379,6 +445,7 @@ public class GPT1Inference {
     private static class Beam {
         List<Integer> tokens = new ArrayList<>();
         float score = 0.0f;
+        boolean finished = false;
     }
     
     /**

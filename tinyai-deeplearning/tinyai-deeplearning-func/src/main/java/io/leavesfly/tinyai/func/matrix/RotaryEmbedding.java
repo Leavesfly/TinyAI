@@ -5,6 +5,7 @@ import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -229,7 +230,10 @@ public class RotaryEmbedding extends Function {
         // 反向旋转：使用 -θ（即交换 sin 的符号）
         NdArray xGrad = applyInverseRotation(yGrad, startPos, is3D, batchSize, numHeads, seqLen);
         
-        // 返回两个梯度：输入x的梯度 和 startPos的梯度(不可导)
+        // 根据实际输入数量返回对应数量的梯度
+        if (inputs.length == 1) {
+            return Collections.singletonList(xGrad);
+        }
         return Arrays.asList(xGrad, null);
     }
 

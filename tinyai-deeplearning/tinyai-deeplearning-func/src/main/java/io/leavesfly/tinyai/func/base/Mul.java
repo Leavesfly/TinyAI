@@ -33,16 +33,22 @@ public class Mul extends Function {
             // 形状相同，直接相乘
             return input0.mul(input1);
         } else {
-            // 需要广播
             Shape shape0 = input0.getShape();
             Shape shape1 = input1.getShape();
             
-            // 判断广播方向
+            // 标量优化：当其中一个操作数是标量（size==1）时，
+            // 直接用 mulNum 避免 broadcastTo 的维度限制
+            if (shape1.size() == 1) {
+                return input0.mulNum(input1.getNumber().floatValue());
+            }
+            if (shape0.size() == 1) {
+                return input1.mulNum(input0.getNumber().floatValue());
+            }
+            
+            // 非标量的广播
             if (isScalarOrBroadcastable(shape1, shape0)) {
-                // input1 需要广播到 input0 的形状
                 return input0.mul(input1.broadcastTo(shape0));
             } else if (isScalarOrBroadcastable(shape0, shape1)) {
-                // input0 需要广播到 input1 的形状
                 return input0.broadcastTo(shape1).mul(input1);
             } else {
                 throw new IllegalArgumentException(
@@ -110,26 +116,28 @@ public class Mul extends Function {
         Shape shape1 = ndArray1.getShape();
         Shape yGradShape = yGrad.getShape();
         
-        // 计算 dx = yGrad * y，需要处理广播
+        // 计算 dx = yGrad * y
         NdArray grad0;
-        if (shape1.equals(yGradShape)) {
+        if (shape1.size() == 1) {
+            grad0 = yGrad.mulNum(ndArray1.getNumber().floatValue());
+        } else if (shape1.equals(yGradShape)) {
             grad0 = yGrad.mul(ndArray1);
         } else {
             grad0 = yGrad.mul(ndArray1.broadcastTo(yGradShape));
         }
-        // 如果 x 的形状与 yGrad 不同，需要 sumTo 回原始形状
         if (!shape0.equals(yGradShape)) {
             grad0 = sumToShape(grad0, shape0, yGradShape);
         }
         
-        // 计算 dy = yGrad * x，需要处理广播
+        // 计算 dy = yGrad * x
         NdArray grad1;
-        if (shape0.equals(yGradShape)) {
+        if (shape0.size() == 1) {
+            grad1 = yGrad.mulNum(ndArray0.getNumber().floatValue());
+        } else if (shape0.equals(yGradShape)) {
             grad1 = yGrad.mul(ndArray0);
         } else {
             grad1 = yGrad.mul(ndArray0.broadcastTo(yGradShape));
         }
-        // 如果 y 的形状与 yGrad 不同，需要 sumTo 回原始形状
         if (!shape1.equals(yGradShape)) {
             grad1 = sumToShape(grad1, shape1, yGradShape);
         }
@@ -143,6 +151,11 @@ public class Mul extends Function {
     private NdArray sumToShape(NdArray grad, Shape targetShape, Shape gradShape) {
         int targetNdim = targetShape.getDimNum();
         int gradNdim = gradShape.getDimNum();
+        
+        // 目标是标量（size==1），直接对所有元素求和
+        if (targetShape.size() == 1) {
+            return NdArray.of(grad.sum().getNumber().floatValue());
+        }
         
         if (targetNdim < gradNdim) {
             // 目标维度数较小，需要先扩展目标形状

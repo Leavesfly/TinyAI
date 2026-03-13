@@ -420,7 +420,9 @@ public class Variable implements Serializable {
                     : _creator.backward(grad);
 
             if (_inputs.length != grads.size()) {
-                throw new RuntimeException("Variable backward grads size error!");
+                throw new RuntimeException(String.format(
+                    "Variable backward grads size error! Function: %s, inputs: %d, grads: %d",
+                    _creator.getClass().getSimpleName(), _inputs.length, grads.size()));
             }
 
             int index = 0;

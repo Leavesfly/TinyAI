@@ -1,6 +1,5 @@
 package io.leavesfly.tinyai.deepseek.v3.training;
 
-import io.leavesfly.tinyai.deepseek.base.TaskType;
 import io.leavesfly.tinyai.deepseek.base.inference.DeepSeekBaseInference;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Model;
 import io.leavesfly.tinyai.func.Variable;
@@ -18,6 +17,7 @@ import java.util.List;
  * 1. Greedy贪婪解码 - 选择概率最高的token
  * 2. Temperature采样 - 控制生成随机性
  * 3. Top-K采样 - 从Top-K个候选中采样
+ *  fremium
  * 4. Top-P(Nucleus)采样 - 累积概率采样
  * 
  * @author leavesfly
@@ -42,11 +42,9 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
      * 
      * @param promptIds 提示词token序列 [1, prompt_len]
      * @param maxNewTokens 最大生成token数
-     * @param taskType 任务类型
      * @return 生成结果
      */
-    public GenerationResult generateGreedy(int[] promptIds, int maxNewTokens, 
-                                           TaskType taskType) {
+    public GenerationResult generateGreedy(int[] promptIds, int maxNewTokens) {
         List<Integer> generated = new ArrayList<>();
         for (int id : promptIds) {
             generated.add(id);
@@ -58,17 +56,31 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
             int[] currentSeq = toIntArray(generated);
             Variable inputVar = new Variable(createInputArray(currentSeq));
             
-            // 推理（带详细信息）
-            var result = model.predictWithDetails(inputVar, taskType);
+            var result = model.predictWithDetails(inputVar);
             NdArray logits = result.logits.getValue();
             
-            // 选择最后一个位置的logits
             int seqLen = currentSeq.length;
-            int nextToken = argmax(logits, 0, seqLen - 1);
+            int vocabSize = logits.getShape().getDimension(2);
             
+            // 获取并排序概率，跳过PAD token (id=0)
+            float[] probs = new float[vocabSize];
+            probs[0] = 0.0f;  // PAD token概率设为0
+            float sum = 0.0f;
+            for (int j = 1; j < vocabSize; j++) {
+                float logit = logits.get(0, seqLen - 1, j);
+                probs[j] = (float) Math.exp(logit);
+                sum += probs[j];
+            }
+            
+            // 归一化
+            for (int j = 0; j < vocabSize; j++) {
+                probs[j] /= sum;
+            }
+            
+            // 采样
+            int nextToken = sampleFromProbs(probs);
             generated.add(nextToken);
             
-            // 记录推理步骤
             reasoningSteps.add(new ReasoningStep(
                 i,
                 0.0,  // confidence不再可用（MoE自然涌现）
@@ -87,11 +99,10 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
      * @param promptIds 提示词token序列
      * @param maxNewTokens 最大生成token数
      * @param temperature 温度参数（0.1-2.0）,越高越随机
-     * @param taskType 任务类型
      * @return 生成结果
      */
     public GenerationResult generateWithTemperature(int[] promptIds, int maxNewTokens,
-                                                    float temperature, TaskType taskType) {
+                                                    float temperature) {
         List<Integer> generated = new ArrayList<>();
         for (int id : promptIds) {
             generated.add(id);
@@ -103,7 +114,7 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
             int[] currentSeq = toIntArray(generated);
             Variable inputVar = new Variable(createInputArray(currentSeq));
             
-            var result = model.predictWithDetails(inputVar, taskType);
+            var result = model.predictWithDetails(inputVar);
             NdArray logits = result.logits.getValue();
             
             int seqLen = currentSeq.length;
@@ -146,11 +157,10 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
      * @param promptIds 提示词token序列
      * @param maxNewTokens 最大生成token数
      * @param topK 保留前K个候选
-     * @param taskType 任务类型
      * @return 生成结果
      */
     public GenerationResult generateTopK(int[] promptIds, int maxNewTokens,
-                                         int topK, TaskType taskType) {
+                                         int topK) {
         List<Integer> generated = new ArrayList<>();
         for (int id : promptIds) {
             generated.add(id);
@@ -162,36 +172,56 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
             int[] currentSeq = toIntArray(generated);
             Variable inputVar = new Variable(createInputArray(currentSeq));
             
-            var result = model.predictWithDetails(inputVar, taskType);
+            var result = model.predictWithDetails(inputVar);
             NdArray logits = result.logits.getValue();
             
             int seqLen = currentSeq.length;
             int vocabSize = logits.getShape().getDimension(2);
             
-            // 获取logits，PAD token (id=0)设为负无穷大
-            float[] logitArray = new float[vocabSize];
-            logitArray[0] = Float.NEGATIVE_INFINITY;  // 排除PAD token
-            for (int j = 1; j < vocabSize; j++) {
-                logitArray[j] = logits.get(0, seqLen - 1, j);
-            }
-            
-            // Top-K过滤
-            int[] topKIndices = getTopKIndices(logitArray, topK);
-            float[] topKProbs = new float[topK];
+            // 获取并排序概率，跳过PAD token (id=0)
+            float[] probs = new float[vocabSize];
+            probs[0] = 0.0f;  // PAD token概率设为0
             float sum = 0.0f;
-            for (int j = 0; j < topK; j++) {
-                topKProbs[j] = (float) Math.exp(logitArray[topKIndices[j]]);
-                sum += topKProbs[j];
+            for (int j = 1; j < vocabSize; j++) {
+                float logit = logits.get(0, seqLen - 1, j);
+                probs[j] = (float) Math.exp(logit);
+                sum += probs[j];
             }
             
             // 归一化
-            for (int j = 0; j < topK; j++) {
-                topKProbs[j] /= sum;
+            for (int j = 0; j < vocabSize; j++) {
+                probs[j] /= sum;
             }
             
-            // 采样
-            int sampledIdx = sampleFromProbs(topKProbs);
-            int nextToken = topKIndices[sampledIdx];
+            // 排序并累积
+            int[] sortedIndices = argsort(probs);
+            float cumProb = 0.0f;
+            List<Integer> nucleusIndices = new ArrayList<>();
+            List<Float> nucleusProbs = new ArrayList<>();
+            
+            for (int j = sortedIndices.length - 1; j >= 0; j--) {
+                int idx = sortedIndices[j];
+                nucleusIndices.add(idx);
+                nucleusProbs.add(probs[idx]);
+                cumProb += probs[idx];
+                if (cumProb >= topK) {
+                    break;
+                }
+            }
+            
+            // 重新归一化并采样
+            float[] nucleusProbArray = new float[nucleusProbs.size()];
+            float nucleusSum = 0.0f;
+            for (int j = 0; j < nucleusProbs.size(); j++) {
+                nucleusProbArray[j] = nucleusProbs.get(j);
+                nucleusSum += nucleusProbArray[j];
+            }
+            for (int j = 0; j < nucleusProbArray.length; j++) {
+                nucleusProbArray[j] /= nucleusSum;
+            }
+            
+            int sampledIdx = sampleFromProbs(nucleusProbArray);
+            int nextToken = nucleusIndices.get(sampledIdx);
             generated.add(nextToken);
             
             reasoningSteps.add(new ReasoningStep(
@@ -212,11 +242,10 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
      * @param promptIds 提示词token序列
      * @param maxNewTokens 最大生成token数
      * @param topP 累积概率阈值（0.9-0.95典型值）
-     * @param taskType 任务类型
      * @return 生成结果
      */
     public GenerationResult generateTopP(int[] promptIds, int maxNewTokens,
-                                         float topP, TaskType taskType) {
+                                         float topP) {
         List<Integer> generated = new ArrayList<>();
         for (int id : promptIds) {
             generated.add(id);
@@ -228,7 +257,7 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
             int[] currentSeq = toIntArray(generated);
             Variable inputVar = new Variable(createInputArray(currentSeq));
             
-            var result = model.predictWithDetails(inputVar, taskType);
+            var result = model.predictWithDetails(inputVar);
             NdArray logits = result.logits.getValue();
             
             int seqLen = currentSeq.length;

@@ -61,25 +61,51 @@ public class Concat extends Function {
         
         int currentOffset = 0;
         
-        // 使用新的高性能API代替逐点赋值
-        if (baseShape.getDimNum() == 2) {
+        // 基于行优先内存布局的通用拼接实现，支持任意维度
+        float[] resultData = result.getArray();
+        int rank = baseShape.getDimNum();
+        
+        if (rank == 2) {
+            // 2D 快速路径：使用 setBlock 高效赋值
             for (int i = 0; i < inputs.length; i++) {
                 NdArray input = inputs[i];
                 int rows = input.getShape().getRow();
                 int cols = input.getShape().getColumn();
                 
-                // 使用setBlock高效赋值
-                if (targetDim == 0) { // 垂直拼接
+                if (targetDim == 0) {
                     result.setBlock(currentOffset, currentOffset + rows, 0, cols, input.getArray());
                     currentOffset += rows;
-                } else { // 水平拼接
+                } else {
                     result.setBlock(0, rows, currentOffset, currentOffset + cols, input.getArray());
                     currentOffset += cols;
                 }
             }
         } else {
-            // 对于高维，暂时抛出异常或仅支持 flatten 后的拼接
-            throw new UnsupportedOperationException("Concat currently only supports 2D tensors.");
+            // 通用路径：支持 3D 及更高维度
+            // 行优先布局中，将维度分为 outer（targetDim 之前）、concat（targetDim）、inner（targetDim 之后）
+            int outerSize = 1;
+            for (int d = 0; d < targetDim; d++) {
+                outerSize *= newDims[d];
+            }
+            int innerSize = 1;
+            for (int d = targetDim + 1; d < rank; d++) {
+                innerSize *= newDims[d];
+            }
+            
+            for (int outer = 0; outer < outerSize; outer++) {
+                int resultDimOffset = 0;
+                for (int i = 0; i < inputs.length; i++) {
+                    float[] inputData = inputs[i].getArray();
+                    int inputDimSize = splitSizes[i];
+                    int inputInnerStride = inputDimSize * innerSize;
+                    
+                    int srcOffset = outer * inputInnerStride;
+                    int dstOffset = outer * totalSizeInDim * innerSize + resultDimOffset * innerSize;
+                    
+                    System.arraycopy(inputData, srcOffset, resultData, dstOffset, inputInnerStride);
+                    resultDimOffset += inputDimSize;
+                }
+            }
         }
         
         return result;
@@ -87,19 +113,19 @@ public class Concat extends Function {
 
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        // Split yGrad into parts
         List<NdArray> grads = new ArrayList<>();
-        int currentOffset = 0;
         int targetDim = dim < 0 ? yGrad.getShape().getDimNum() + dim : dim;
+        int rank = yGrad.getShape().getDimNum();
         
-        if (yGrad.getShape().getDimNum() == 2) {
+        if (rank == 2) {
+            // 2D 快速路径
+            int currentOffset = 0;
             for (int i = 0; i < splitSizes.length; i++) {
                 int size = splitSizes[i];
                 int rows = inputShapes[i].getRow();
                 int cols = inputShapes[i].getColumn();
                 
                 int startRow, endRow, startCol, endCol;
-                
                 if (targetDim == 0) {
                     startRow = currentOffset;
                     endRow = currentOffset + size;
@@ -114,13 +140,42 @@ public class Concat extends Function {
                     currentOffset += size;
                 }
                 
-                // 使用 subNdArray 获取子视图，然后复制数据（因为我们需要独立的梯度数组）
                 NdArray subGrad = yGrad.subNdArray(startRow, endRow, startCol, endCol);
+                grads.add(subGrad.mulNum(1.0f));
+            }
+        } else {
+            // 通用路径：支持 3D 及更高维度，与 forward 的通用路径对称
+            int[] gradDims = yGrad.getShape().getShapeDims();
+            int totalSizeInDim = gradDims[targetDim];
+            
+            int outerSize = 1;
+            for (int d = 0; d < targetDim; d++) {
+                outerSize *= gradDims[d];
+            }
+            int innerSize = 1;
+            for (int d = targetDim + 1; d < rank; d++) {
+                innerSize *= gradDims[d];
+            }
+            
+            float[] gradData = yGrad.getArray();
+            
+            for (int i = 0; i < splitSizes.length; i++) {
+                int inputDimSize = splitSizes[i];
+                int inputTotalSize = outerSize * inputDimSize * innerSize;
+                float[] splitData = new float[inputTotalSize];
                 
-                // subNdArray 返回的可能是 view，我们需要确保它是独立的 NdArray
-                // 可以通过 mul(1.0) 或者 clone (如果支持)
-                // 这里假设 mul(1) 会产生新数组
-                grads.add(subGrad.mulNum(1.0f)); 
+                int dimOffset = 0;
+                for (int j = 0; j < i; j++) {
+                    dimOffset += splitSizes[j];
+                }
+                
+                for (int outer = 0; outer < outerSize; outer++) {
+                    int srcOffset = outer * totalSizeInDim * innerSize + dimOffset * innerSize;
+                    int dstOffset = outer * inputDimSize * innerSize;
+                    System.arraycopy(gradData, srcOffset, splitData, dstOffset, inputDimSize * innerSize);
+                }
+                
+                grads.add(NdArray.of(splitData, inputShapes[i]));
             }
         }
         

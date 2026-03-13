@@ -1,9 +1,10 @@
 package io.leavesfly.tinyai.deepseek.v3;
 
-import io.leavesfly.tinyai.deepseek.base.TaskType;
+
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
+import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
 import io.leavesfly.tinyai.nnet.v2.layer.norm.RMSNorm;
 
@@ -37,6 +38,9 @@ public class DeepSeekV3Block extends Module {
     private List<DeepSeekV3TransformerBlock> transformerBlocks;
     private RMSNorm finalLayerNorm;
     private Linear outputProjection;
+    
+    // Multi-Token Prediction 头（DeepSeek-V3 论文核心创新）
+    private DeepSeekV3MTPHead mtpHead;
     
     /**
      * 构造函数
@@ -83,6 +87,14 @@ public class DeepSeekV3Block extends Module {
             false  // 通常不使用偏置
         );
         registerModule("output_proj", outputProjection);
+        
+        // 5. 初始化 MTP 头（如果 mtpDepth > 0）
+        if (config.getMtpDepth() > 0) {
+            Parameter sharedTokenEmbed = tokenEmbedding.getTokenEmbedding();
+            mtpHead = new DeepSeekV3MTPHead(
+                name + "_mtp", config, outputProjection, sharedTokenEmbed);
+            registerModule("mtp_head", mtpHead);
+        }
     }
     
     /**
@@ -118,13 +130,12 @@ public class DeepSeekV3Block extends Module {
     }
     
     /**
-     * 带详细输出的前向传播（包含MoE损失和任务类型）
+     * 带详细输出的前向传播（包含MoE损失和MTP隐藏状态）
      * 
      * @param tokenIds token ID序列 [batch_size, seq_len]
-     * @param taskType 任务类型（可选）
-     * @return 详细输出结果
+     * @return 详细输出结果（包含隐藏状态，供 MTP 使用）
      */
-    public DetailedForwardResult forwardWithDetails(Variable tokenIds, TaskType taskType) {
+    public DetailedForwardResult forwardWithDetails(Variable tokenIds) {
         validateInput(tokenIds);
         
         // 1. Token嵌入
@@ -134,7 +145,7 @@ public class DeepSeekV3Block extends Module {
         double totalMoELoss = 0.0;
         for (DeepSeekV3TransformerBlock block : transformerBlocks) {
             DeepSeekV3TransformerBlock.DetailedForwardResult blockResult = 
-                block.forwardWithDetails(x, taskType);
+                block.forwardWithDetails(x);
             x = blockResult.output;
             totalMoELoss += blockResult.getLoadBalanceLoss();
         }
@@ -146,11 +157,8 @@ public class DeepSeekV3Block extends Module {
         // 4. 输出投影
         Variable logits = outputProjection.forward(normalized);
         
-        return new DetailedForwardResult(
-            logits, 
-            avgMoELoss,
-            taskType != null ? taskType : TaskType.GENERAL
-        );
+        // 保留 normalized 隐藏状态供 MTP 使用
+        return new DetailedForwardResult(logits, avgMoELoss, normalized);
     }
     
     /**
@@ -222,26 +230,25 @@ public class DeepSeekV3Block extends Module {
     }
     
     /**
-     * 详细前向传播结果类（简化版，仅包含MoE信息）
+     * 详细前向传播结果类（包含MoE信息和MTP所需的隐藏状态）
      */
     public static class DetailedForwardResult {
         /** 最终logits输出 */
         public final Variable logits;
         /** 平均MoE负载均衡损失 */
         public final double avgMoELoss;
-        /** 任务类型 */
-        public final TaskType taskType;
+        /** Transformer 最后一层归一化后的隐藏状态（供 MTP 使用） */
+        public final Variable hiddenStates;
         
-        public DetailedForwardResult(Variable logits, double avgMoELoss, TaskType taskType) {
+        public DetailedForwardResult(Variable logits, double avgMoELoss, Variable hiddenStates) {
             this.logits = logits;
             this.avgMoELoss = avgMoELoss;
-            this.taskType = taskType;
+            this.hiddenStates = hiddenStates;
         }
         
         @Override
         public String toString() {
-            return String.format("DetailedForwardResult{taskType=%s, MoE损失=%.6f}", 
-                taskType, avgMoELoss);
+            return String.format("DetailedForwardResult{MoE损失=%.6f}", avgMoELoss);
         }
     }
     
@@ -257,5 +264,26 @@ public class DeepSeekV3Block extends Module {
      */
     public List<DeepSeekV3TransformerBlock> getTransformerBlocks() {
         return transformerBlocks;
+    }
+    
+    /**
+     * 获取 MTP 头（如果启用）
+     */
+    public DeepSeekV3MTPHead getMtpHead() {
+        return mtpHead;
+    }
+    
+    /**
+     * 获取 Token 嵌入层
+     */
+    public DeepSeekV3TokenEmbedding getTokenEmbedding() {
+        return tokenEmbedding;
+    }
+    
+    /**
+     * 获取输出投影层
+     */
+    public Linear getOutputProjection() {
+        return outputProjection;
     }
 }

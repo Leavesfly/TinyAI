@@ -22,6 +22,7 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
     private final List<TaskType> taskTypes;   // 任务类型（V3特有）
     private final List<String> codeLanguages; // 代码语言（代码任务专用）
     private final List<float[]> lossMasks;    // 每个样本的 loss mask（后训练 answer-only loss 使用）
+    private final List<Float> rewards;        // 奖励分数（RLHF 训练用）
     
     /**
      * 构造函数（预训练模式）
@@ -37,6 +38,7 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
         this.taskTypes = new ArrayList<>();
         this.codeLanguages = new ArrayList<>();
         this.lossMasks = new ArrayList<>();
+        this.rewards = new ArrayList<>();
     }
     
     /**
@@ -54,6 +56,7 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
         this.taskTypes = taskTypes;
         this.codeLanguages = new ArrayList<>();
         this.lossMasks = new ArrayList<>();
+        this.rewards = new ArrayList<>();
     }
     
     /**
@@ -73,6 +76,7 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
         this.taskTypes = taskTypes;
         this.codeLanguages = codeLanguages;
         this.lossMasks = new ArrayList<>();
+        this.rewards = new ArrayList<>();
     }
     
     /**
@@ -92,6 +96,31 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
         this.taskTypes = taskTypes;
         this.codeLanguages = new ArrayList<>();
         this.lossMasks = lossMasks;
+        this.rewards = new ArrayList<>();
+    }
+    
+    /**
+     * 构造函数（RLHF 模式，带 loss mask + 奖励分数）
+     * 
+     * 用于 RLHF 训练：结合 Answer-only Loss Mask 和奖励加权回归，
+     * 只对 assistant 回复部分计算 loss，并按奖励分数加权梯度。
+     * 
+     * @param sequences token序列列表
+     * @param taskTypes 任务类型列表
+     * @param lossMasks 每个样本的 loss mask
+     * @param rewards 每个样本的奖励分数
+     * @param maxSeqLength 最大序列长度
+     * @param batchSize 批次大小
+     * @param shuffle 是否打乱数据
+     */
+    public DeepSeekV3Dataset(List<int[]> sequences, List<TaskType> taskTypes,
+                             List<float[]> lossMasks, List<Float> rewards,
+                             int maxSeqLength, int batchSize, boolean shuffle) {
+        super(sequences, maxSeqLength, batchSize, shuffle);
+        this.taskTypes = taskTypes;
+        this.codeLanguages = new ArrayList<>();
+        this.lossMasks = lossMasks;
+        this.rewards = rewards;
     }
     
     /**
@@ -113,6 +142,7 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
         // 构建 V3 特有的任务类型和代码语言
         TaskType[] batchTaskTypes = new TaskType[actualBatchSize];
         String[] batchLanguages = new String[actualBatchSize];
+        float[] batchRewards = new float[actualBatchSize];
         List<Integer> batchIndices = getCurrentBatchIndices(actualBatchSize);
         
         // 构建 loss mask（如果有的话）
@@ -130,6 +160,10 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
             
             if (!codeLanguages.isEmpty() && dataIndex < codeLanguages.size()) {
                 batchLanguages[i] = codeLanguages.get(dataIndex);
+            }
+            
+            if (!rewards.isEmpty() && dataIndex < rewards.size()) {
+                batchRewards[i] = rewards.get(dataIndex);
             }
             
             // 构建该样本的 loss mask
@@ -150,7 +184,7 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
         NdArray targetIds = NdArray.of(inputTarget[1]);
         NdArray batchLossMask = hasLossMaskData ? NdArray.of(batchLossMaskData) : null;
         
-        return new Batch(inputIds, targetIds, batchTaskTypes, batchLanguages, batchLossMask);
+        return new Batch(inputIds, targetIds, batchTaskTypes, batchLanguages, batchLossMask, batchRewards);
     }
     
     /**
@@ -167,19 +201,27 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
         private final TaskType[] taskTypes;
         private final String[] codeLanguages;
         private final NdArray lossMask;
+        private final float[] rewards;
         
         public Batch(NdArray inputIds, NdArray targetIds, 
                     TaskType[] taskTypes, String[] codeLanguages) {
-            this(inputIds, targetIds, taskTypes, codeLanguages, null);
+            this(inputIds, targetIds, taskTypes, codeLanguages, null, null);
         }
         
         public Batch(NdArray inputIds, NdArray targetIds, 
                     TaskType[] taskTypes, String[] codeLanguages, NdArray lossMask) {
+            this(inputIds, targetIds, taskTypes, codeLanguages, lossMask, null);
+        }
+        
+        public Batch(NdArray inputIds, NdArray targetIds, 
+                    TaskType[] taskTypes, String[] codeLanguages, 
+                    NdArray lossMask, float[] rewards) {
             this.inputIds = inputIds;
             this.targetIds = targetIds;
             this.taskTypes = taskTypes;
             this.codeLanguages = codeLanguages;
             this.lossMask = lossMask;
+            this.rewards = rewards;
         }
         
         public NdArray getInputIds() {
@@ -196,6 +238,15 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
         
         public String[] getCodeLanguages() {
             return codeLanguages;
+        }
+        
+        /**
+         * 获取奖励分数（RLHF 训练用）
+         * 
+         * @return 奖励分数数组，null 表示无奖励数据
+         */
+        public float[] getRewards() {
+            return rewards;
         }
         
         /**
@@ -242,6 +293,13 @@ public class DeepSeekV3Dataset extends DeepSeekBaseDataset<DeepSeekV3Dataset.Bat
             
             return TaskType.fromId(maxIdx);
         }
+    }
+    
+    /**
+     * 判断数据集是否包含 Loss Mask
+     */
+    public boolean hasLossMasks() {
+        return !lossMasks.isEmpty();
     }
     
     // ==================== 静态工厂方法 ====================

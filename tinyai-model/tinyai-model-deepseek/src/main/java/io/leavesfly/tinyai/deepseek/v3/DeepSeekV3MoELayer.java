@@ -1,10 +1,11 @@
 package io.leavesfly.tinyai.deepseek.v3;
 
-import io.leavesfly.tinyai.deepseek.base.TaskType;
+import io.leavesfly.tinyai.deepseek.base.DeepSeekBaseConfig;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
+import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 import io.leavesfly.tinyai.nnet.v2.layer.activation.SiLU;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
@@ -15,37 +16,46 @@ import java.util.List;
 /**
  * DeepSeek-V3混合专家层(Mixture of Experts Layer)
  * 
- * 核心创新：通过门控网络动态选择Top-K个路由专家处理输入，实现参数高效和任务专门化。
+ * 对标 DeepSeek-V3 论文的核心创新：
+ * 1. Sigmoid 路由：用 Sigmoid 替代 Softmax，每个专家独立计算激活概率
+ * 2. 无辅助损失负载均衡：通过可学习的 bias 向量动态调节专家选择
+ *    - 路由分数 = sigmoid(gate(x)) + bias（bias 仅影响 Top-K 选择，不影响最终权重）
+ *    - 训练时根据专家负载动态更新 bias（过载专家降低 bias，欠载专家提高 bias）
+ * 3. Top-K 选择后，权重用 sigmoid 值（不加 bias）进行归一化
  * 
  * 组件：
  * 1. 共享专家(Shared Experts)    - 每次必激活，提供通用知识（DeepSeekMoE创新）
- * 2. 门控网络(Gating Network)    - 计算路由专家的选择概率
- * 3. 路由专家(Routed Experts)    - Top-K选择的独立前馈网络
- * 4. 加权组合                       - 共享专家输出 + Top-K路由专家加权输出
+ * 2. 门控网络(Gating Network)    - 计算路由 logits
+ * 3. 路由专家(Routed Experts)    - Top-K选择的独立前馈网络（SwiGLU FFN）
+ * 4. 专家偏置(Expert Bias)       - 无辅助损失负载均衡的可学习参数
  * 
  * 架构：
  * Input → Shared Experts → 输出直接累加
- *      → Gating Network → Top-K Selection → Routed Experts → 加权组合
+ *      → Gating Network → Sigmoid + Bias → Top-K Selection → Routed Experts → 加权组合
  * 输出 = Shared输出 + Routed输出
  * 
  * ExpertNetwork FFN结构（SwiGLU）：
  * output = down_proj( SiLU(gate_proj(x)) ⊙ up_proj(x) )
  * 
  * @author leavesfly
- * @version 2.0
+ * @version 3.0
  */
 public class DeepSeekV3MoELayer extends Module {
 
-    /** 负载均衡损失为零的判断阈值 */
+    /** 权重 mask 为零的判断阈值 */
     private static final float ZERO_THRESHOLD = 1e-9f;
 
-    /** 任务类型总数（用于任务感知路由偏置分配） */
-    private static final int NUM_TASK_TYPES = 5;
+    /** bias 动态更新步长（无辅助损失负载均衡） */
+    private static final float BIAS_UPDATE_SPEED = 0.001f;
 
-    private final DeepSeekV3Config config;
+    private final DeepSeekBaseConfig config;
 
-    // 门控网络
+    // 门控网络: nEmbd -> numExperts
     private Linear gatingNetwork;
+
+    // 专家偏置向量（无辅助损失负载均衡的核心参数）
+    // bias 仅影响 Top-K 选择，不参与最终权重计算
+    private Parameter expertBias;
 
     // 共享专家列表（每次必激活，DeepSeekMoE核心创新）
     private List<ExpertNetwork> sharedExperts;
@@ -62,7 +72,7 @@ public class DeepSeekV3MoELayer extends Module {
      * @param name 模块名称
      * @param config V3配置对象
      */
-    public DeepSeekV3MoELayer(String name, DeepSeekV3Config config) {
+    public DeepSeekV3MoELayer(String name, DeepSeekBaseConfig config) {
         super(name);
         this.config = config;
         initializeComponents();
@@ -72,16 +82,20 @@ public class DeepSeekV3MoELayer extends Module {
      * 初始化组件
      */
     private void initializeComponents() {
-        // 1. 初始化门控网络: nEmbd -> numExperts
+        // 1. 初始化门控网络: nEmbd -> numExperts（不使用偏置，bias 由 expertBias 单独管理）
         gatingNetwork = new Linear(
             name + "_gating",
             config.getNEmbd(),
             config.getNumExperts(),
-            true  // 使用偏置
+            false  // 不使用偏置，路由 bias 由 expertBias 参数独立管理
         );
         registerModule("gating", gatingNetwork);
         
-        // 2. 初始化共享专家（每次必激活）
+        // 2. 初始化专家偏置向量（初始化为 0，训练时动态更新以实现负载均衡）
+        expertBias = new Parameter(NdArray.zeros(Shape.of(config.getNumExperts())), false);
+        registerParameter("expert_bias", expertBias);
+        
+        // 3. 初始化共享专家（每次必激活）
         sharedExperts = new ArrayList<>();
         for (int i = 0; i < config.getNumSharedExperts(); i++) {
             ExpertNetwork shared = new ExpertNetwork(
@@ -93,7 +107,7 @@ public class DeepSeekV3MoELayer extends Module {
             registerModule("shared_expert_" + i, shared);
         }
         
-        // 3. 初始化路由专家（Top-K选择）
+        // 4. 初始化路由专家（Top-K选择）
         routedExperts = new ArrayList<>();
         for (int i = 0; i < config.getNumExperts(); i++) {
             ExpertNetwork expert = new ExpertNetwork(
@@ -105,7 +119,7 @@ public class DeepSeekV3MoELayer extends Module {
             registerModule("expert_" + i, expert);
         }
         
-        // 4. 初始化Dropout层
+        // 5. 初始化Dropout层
         expertDropout = new Dropout(
             name + "_expert_dropout",
             (float) config.getExpertDropout()
@@ -125,8 +139,8 @@ public class DeepSeekV3MoELayer extends Module {
         if (inputs == null || inputs.length == 0) {
             throw new IllegalArgumentException("输入不能为空");
         }
-        // 执行MoE计算，不携带任务类型（标准路由模式）
-        MoEOutput moeOutput = computeMoE(inputs[0], null);
+        // 执行MoE计算（标准路由模式）
+        MoEOutput moeOutput = computeMoE(inputs[0]);
         // 应用dropout
         return expertDropout.forward(moeOutput.output);
     }
@@ -134,25 +148,31 @@ public class DeepSeekV3MoELayer extends Module {
     /**
      * 执行MoE计算（核心方法）
      * 
+     * 对标 DeepSeek-V3 论文的 Sigmoid 路由 + 无辅助损失负载均衡：
+     * 1. 计算门控 logits → sigmoid 得到每个专家的独立激活概率
+     * 2. 路由分数 = sigmoid(logits) + bias（bias 仅影响 Top-K 选择）
+     * 3. Top-K 选择后，权重用 sigmoid 值（不加 bias）进行归一化
+     * 4. 根据专家负载动态更新 bias（无辅助损失负载均衡）
+     * 
      * @param input 输入张量 [batch_size, seq_len, nEmbd]
-     * @param taskType 任务类型（可选，用于任务感知路由）
      * @return MoE输出结果
      */
-    public MoEOutput computeMoE(Variable input, TaskType taskType) {
+    public MoEOutput computeMoE(Variable input) {
 
-        // 1. 计算门控logits: [batch_size, seq_len, numExperts]
+        // 1. 计算门控 logits: [batch_size, seq_len, numExperts]
         Variable gatingLogits = gatingNetwork.forward(input);
         
-        // 2. 应用任务感知偏置（如果提供了任务类型）
-        if (taskType != null && config.isEnableTaskAwareRouting()) {
-            gatingLogits = applyTaskAwareBias(gatingLogits, taskType);
-        }
+        // 2. Sigmoid 激活（替代 Softmax，每个专家独立计算概率）
+        Variable sigmoidProbs = gatingLogits.sigmoid();
         
-        // 3. 计算门控概率（softmax归一化）
-        Variable gatingProbs = gatingLogits.softMax();
+        // 3. 路由分数 = sigmoid(logits) + bias（bias 仅影响 Top-K 选择）
+        //    bias 广播为 [1, 1, numExperts] 以匹配 [batch, seq, numExperts]
+        Variable biasExpanded = expertBias.reshape(Shape.of(1, 1, config.getNumExperts()));
+        Variable routingScores = sigmoidProbs.add(biasExpanded);
         
-        // 4. Top-K选择
-        TopKResult topKResult = selectTopK(gatingProbs, config.getTopK());
+        // 4. Top-K 选择（基于 routingScores），但权重用 sigmoidProbs（不含 bias）
+        TopKResult topKResult = selectTopKWithSeparateWeights(
+            routingScores, sigmoidProbs, config.getTopK());
         
         // 5. 共享专家计算（每次必激活）
         Variable sharedOutput = computeSharedExpertsOutput(input);
@@ -163,37 +183,10 @@ public class DeepSeekV3MoELayer extends Module {
         // 7. 共享专家输出 + 路由专家输出
         Variable expertOutputs = sharedOutput.add(routedOutput);
         
-        // 8. 计算负载均衡损失
-        double loadBalanceLoss = computeLoadBalanceLoss(gatingProbs);
+        // 8. 无辅助损失负载均衡：根据专家负载动态更新 bias
+        updateExpertBias(topKResult);
         
-        return new MoEOutput(expertOutputs, gatingProbs, topKResult, loadBalanceLoss);
-    }
-    
-    /**
-     * 应用任务感知偏置：将任务特定偏置广播加到门控logits上
-     */
-    private Variable applyTaskAwareBias(Variable gatingLogits, TaskType taskType) {
-        float[] taskBias = getTaskBias(taskType);
-        // 扩展为 [1, 1, numExperts] 以支持广播加法
-        Variable bias3D = new Variable(NdArray.of(taskBias))
-            .reshape(Shape.of(1, 1, config.getNumExperts()));
-        return gatingLogits.add(bias3D);
-    }
-    
-    /**
-     * 根据任务类型生成专家偏置向量
-     * 使用取模运算确保索引不越界，每种任务类型均匀分配偏向的专家范围
-     */
-    private float[] getTaskBias(TaskType taskType) {
-        int numExperts = config.getNumExperts();
-        float[] bias = new float[numExperts];
-        int taskId = taskType.getId();
-        int expertsPerTask = Math.max(1, numExperts / NUM_TASK_TYPES);
-        int startIdx = (taskId * expertsPerTask) % numExperts;
-        for (int i = 0; i < expertsPerTask; i++) {
-            bias[(startIdx + i) % numExperts] = 1.0f;
-        }
-        return bias;
+        return new MoEOutput(expertOutputs, sigmoidProbs, topKResult, 0.0);
     }
     
     /**
@@ -217,39 +210,47 @@ public class DeepSeekV3MoELayer extends Module {
     }
     
     /**
-     * 选择Top-K专家
+     * 选择 Top-K 专家（Sigmoid 路由版本）
+     * 
+     * 对标 DeepSeek-V3 论文：
+     * - 基于 routingScores（sigmoid + bias）选择 Top-K 专家
+     * - 但最终权重使用 sigmoidProbs（不含 bias），确保 bias 不影响梯度
+     * - Top-K 权重归一化使概率和为 1
+     * 
+     * @param routingScores sigmoid(logits) + bias，用于 Top-K 选择 [batch, seq, numExperts]
+     * @param sigmoidProbs  sigmoid(logits)，用于计算最终权重 [batch, seq, numExperts]
+     * @param k             选择的专家数量
+     * @return Top-K 选择结果（索引和归一化权重）
      */
-    private TopKResult selectTopK(Variable probs, int k) {
-        NdArray probsArray = probs.getValue();
-        int batchSize = probsArray.getShape().getDimension(0);
-        int seqLen = probsArray.getShape().getDimension(1);
-        int numExperts = probsArray.getShape().getDimension(2);
+    private TopKResult selectTopKWithSeparateWeights(Variable routingScores, Variable sigmoidProbs, int k) {
+        NdArray scoresArray = routingScores.getValue();
+        NdArray probsArray = sigmoidProbs.getValue();
+        int batchSize = scoresArray.getShape().getDimension(0);
+        int seqLen = scoresArray.getShape().getDimension(1);
+        int numExperts = scoresArray.getShape().getDimension(2);
         
         int[][][] topKIndices = new int[batchSize][seqLen][k];
         float[][][] topKWeights = new float[batchSize][seqLen][k];
         
         for (int b = 0; b < batchSize; b++) {
             for (int t = 0; t < seqLen; t++) {
-                // 获取当前位置的所有专家概率
-                float[] expertProbs = new float[numExperts];
+                // 基于 routingScores（含 bias）选择 Top-K 专家
+                float[] scores = new float[numExperts];
                 for (int e = 0; e < numExperts; e++) {
-                    expertProbs[e] = probsArray.get(b, t, e);
+                    scores[e] = scoresArray.get(b, t, e);
                 }
+                int[] topK = getTopKIndices(scores, k);
                 
-                // 选择Top-K
-                int[] topK = getTopKIndices(expertProbs, k);
-                float[] topKProbs = new float[k];
-                float sumTopKProbs = 0.0f;
-                
+                // 使用 sigmoidProbs（不含 bias）计算最终权重并归一化
+                float sumProbs = 0.0f;
                 for (int i = 0; i < k; i++) {
-                    topKProbs[i] = expertProbs[topK[i]];
-                    sumTopKProbs += topKProbs[i];
+                    sumProbs += probsArray.get(b, t, topK[i]);
                 }
                 
-                // 归一化权重（使Top-K概率和为1）
                 for (int i = 0; i < k; i++) {
                     topKIndices[b][t][i] = topK[i];
-                    topKWeights[b][t][i] = topKProbs[i] / sumTopKProbs;
+                    float prob = probsArray.get(b, t, topK[i]);
+                    topKWeights[b][t][i] = sumProbs > ZERO_THRESHOLD ? prob / sumProbs : 1.0f / k;
                 }
             }
         }
@@ -363,35 +364,47 @@ public class DeepSeekV3MoELayer extends Module {
     }
     
     /**
-     * 计算负载均衡损失：以各专家平均激活频率与理想均匀分布的方差衡量不均衡程度
-     * 方差越小说明专家利用越均匀，理想值为 0（所有专家频率均为 1/numExperts）
+     * 无辅助损失负载均衡：根据专家负载动态更新 bias
+     * 
+     * 对标 DeepSeek-V3 论文的核心创新：
+     * - 统计每个专家被 Top-K 选中的频率
+     * - 过载专家（频率高于均匀分布）：降低 bias，使其更难被选中
+     * - 欠载专家（频率低于均匀分布）：提高 bias，使其更容易被选中
+     * - 更新步长由 BIAS_UPDATE_SPEED 控制
+     * 
+     * 优势：不引入额外的辅助损失项，避免干扰主训练目标
+     * 
+     * @param topKResult Top-K 选择结果
      */
-    private double computeLoadBalanceLoss(Variable gatingProbs) {
-        NdArray probsArray = gatingProbs.getValue();
-        int batchSize  = probsArray.getShape().getDimension(0);
-        int seqLen     = probsArray.getShape().getDimension(1);
-        int numExperts = probsArray.getShape().getDimension(2);
+    private void updateExpertBias(TopKResult topKResult) {
+        int numExperts = config.getNumExperts();
+        int batchSize = topKResult.indices.length;
+        int seqLen = topKResult.indices[0].length;
         int totalTokens = batchSize * seqLen;
-
-        // 统计每个专家跨所有 token 的平均激活频率
-        float[] expertFreq = new float[numExperts];
+        int topK = config.getTopK();
+        
+        // 统计每个专家被选中的次数
+        int[] selectionCount = new int[numExperts];
         for (int b = 0; b < batchSize; b++) {
             for (int t = 0; t < seqLen; t++) {
-                for (int e = 0; e < numExperts; e++) {
-                    expertFreq[e] += probsArray.get(b, t, e);
+                for (int ki = 0; ki < topK; ki++) {
+                    selectionCount[topKResult.indices[b][t][ki]]++;
                 }
             }
         }
-
-        // 计算与均匀分布（1/numExperts）之间的方差
-        float idealFreq = 1.0f / numExperts;
-        float variance  = 0.0f;
+        
+        // 理想频率：每个专家被选中的期望次数 = totalTokens * topK / numExperts
+        float idealCount = (float) totalTokens * topK / numExperts;
+        
+        // 根据负载偏差更新 bias
+        NdArray biasData = expertBias.data();
+        float[] biasValues = biasData.getArray();
         for (int e = 0; e < numExperts; e++) {
-            float diff = (expertFreq[e] / totalTokens) - idealFreq;
-            variance += diff * diff;
+            float deviation = selectionCount[e] - idealCount;
+            // 过载专家降低 bias，欠载专家提高 bias
+            biasValues[e] -= BIAS_UPDATE_SPEED * deviation;
         }
-
-        return variance * config.getLoadBalanceLossWeight();
+        expertBias.setData(NdArray.of(biasValues));
     }
     
     /**

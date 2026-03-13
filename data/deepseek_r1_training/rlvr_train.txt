@@ -1,34 +1,34 @@
-[TYPE:math] What is 15 + 27? | 42
-[TYPE:math] Calculate 8 * 6 | 48
-[TYPE:math] What is 100 / 4? | 25
-[TYPE:math] 50 - 23 equals? | 27
-[TYPE:math] What is 7 * 9? | 63
-[TYPE:math] Calculate 144 / 12 | 12
-[TYPE:math] 25 + 75 equals? | 100
-[TYPE:math] What is 60 - 18? | 42
-[TYPE:math] 11 * 11 equals? | 121
-[TYPE:math] What is 81 / 9? | 9
-[TYPE:math] Solve: 2x + 5 = 13 | 4
-[TYPE:math] Solve: 3x - 7 = 14 | 7
-[TYPE:math] Solve: x / 2 = 8 | 16
-[TYPE:math] Solve: 4x + 3 = 19 | 4
-[TYPE:math] Solve: 5x = 35 | 7
-[TYPE:math] Which is larger: 15 or 23? | 23
-[TYPE:math] Is 42 greater than 38? | true
-[TYPE:math] What is the maximum of 7, 12, 5? | 12
-[TYPE:math] What is 2^5? | 32
-[TYPE:math] Calculate 3^3 | 27
-[TYPE:math] What is 10^2? | 100
-[TYPE:logic] Is the statement 'true AND false' true or false? | false
-[TYPE:logic] Is 'true OR false' true or false? | true
-[TYPE:logic] What is NOT true? | false
-[TYPE:logic] Is '(true AND true) OR false' true? | true
-[TYPE:logic] Is 'false AND false' true or false? | false
-[TYPE:logic] Is 'true AND true' true or false? | true
-[TYPE:logic] Is 'false OR false' true or false? | false
-[TYPE:logic] Is NOT false true? | true
-[TYPE:logic] Can 'X is both true and false' be valid? | false
-[TYPE:logic] Is 'All A are B and some A are not B' consistent? | false
-[TYPE:logic] Is a contradiction always false? | true
-[TYPE:logic] Can a statement be both true and false? | false
-[TYPE:logic] Is 'P AND NOT P' ever true? | false
+[TYPE:math] <|im_start|>user What is 15 + 27?<|im_end|> | 42
+[TYPE:math] <|im_start|>user Calculate 8 * 6<|im_end|> | 48
+[TYPE:math] <|im_start|>user What is 100 / 4?<|im_end|> | 25
+[TYPE:math] <|im_start|>user 50 - 23 equals?<|im_end|> | 27
+[TYPE:math] <|im_start|>user What is 7 * 9?<|im_end|> | 63
+[TYPE:math] <|im_start|>user Calculate 144 / 12<|im_end|> | 12
+[TYPE:math] <|im_start|>user 25 + 75 equals?<|im_end|> | 100
+[TYPE:math] <|im_start|>user What is 60 - 18?<|im_end|> | 42
+[TYPE:math] <|im_start|>user 11 * 11 equals?<|im_end|> | 121
+[TYPE:math] <|im_start|>user What is 81 / 9?<|im_end|> | 9
+[TYPE:math] <|im_start|>user Solve: 2x + 5 = 13<|im_end|> | 4
+[TYPE:math] <|im_start|>user Solve: 3x - 7 = 14<|im_end|> | 7
+[TYPE:math] <|im_start|>user Solve: x / 2 = 8<|im_end|> | 16
+[TYPE:math] <|im_start|>user Solve: 4x + 3 = 19<|im_end|> | 4
+[TYPE:math] <|im_start|>user Solve: 5x = 35<|im_end|> | 7
+[TYPE:math] <|im_start|>user Which is larger: 15 or 23?<|im_end|> | 23
+[TYPE:math] <|im_start|>user Is 42 greater than 38?<|im_end|> | true
+[TYPE:math] <|im_start|>user What is the maximum of 7, 12, 5?<|im_end|> | 12
+[TYPE:math] <|im_start|>user What is 2^5?<|im_end|> | 32
+[TYPE:math] <|im_start|>user Calculate 3^3<|im_end|> | 27
+[TYPE:math] <|im_start|>user What is 10^2?<|im_end|> | 100
+[TYPE:logic] <|im_start|>user Is the statement true AND false true or false?<|im_end|> | false
+[TYPE:logic] <|im_start|>user Is true OR false true or false?<|im_end|> | true
+[TYPE:logic] <|im_start|>user What is NOT true?<|im_end|> | false
+[TYPE:logic] <|im_start|>user Is true AND true OR false true?<|im_end|> | true
+[TYPE:logic] <|im_start|>user Is false AND false true or false?<|im_end|> | false
+[TYPE:logic] <|im_start|>user Is true AND true true or false?<|im_end|> | true
+[TYPE:logic] <|im_start|>user Is false OR false true or false?<|im_end|> | false
+[TYPE:logic] <|im_start|>user Is NOT false true?<|im_end|> | true
+[TYPE:logic] <|im_start|>user Can X is both true and false be valid?<|im_end|> | false
+[TYPE:logic] <|im_start|>user Is All A are B and some A are not B consistent?<|im_end|> | false
+[TYPE:logic] <|im_start|>user Is a contradiction always false?<|im_end|> | true
+[TYPE:logic] <|im_start|>user Can a statement be both true and false?<|im_end|> | false
+[TYPE:logic] <|im_start|>user Is P AND NOT P ever true?<|im_end|> | false

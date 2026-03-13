@@ -38,6 +38,14 @@ public class DeepSeekV3Config extends DeepSeekBaseConfig {
     /** 是否启用自我纠错机制，默认启用 */
     private boolean enableSelfCorrection = true;
     
+    // ==================== Multi-Token Prediction 配置（V3特有）====================
+    
+    /** MTP 预测深度（额外预测的 token 数量），默认 1。设为 0 则禁用 MTP */
+    private int mtpDepth = 1;
+    
+    /** MTP 损失权重（相对于主 LM 损失的权重），默认 0.3 */
+    private double mtpLossWeight = 0.3;
+    
     // ==================== 代码生成配置（V3特有）====================
     
     /** 代码质量评估维度数量，默认4个维度（语法、结构、可读性、性能） */
@@ -160,6 +168,22 @@ public class DeepSeekV3Config extends DeepSeekBaseConfig {
     }
     
     // ==================== Getter和Setter方法（V3特有配置）====================
+    
+    public int getMtpDepth() {
+        return mtpDepth;
+    }
+    
+    public void setMtpDepth(int mtpDepth) {
+        this.mtpDepth = mtpDepth;
+    }
+    
+    public double getMtpLossWeight() {
+        return mtpLossWeight;
+    }
+    
+    public void setMtpLossWeight(double mtpLossWeight) {
+        this.mtpLossWeight = mtpLossWeight;
+    }
     
     public int getReasoningHiddenDim() {
         return reasoningHiddenDim;

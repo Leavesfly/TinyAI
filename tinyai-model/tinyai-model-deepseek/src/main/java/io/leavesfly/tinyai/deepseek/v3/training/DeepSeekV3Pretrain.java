@@ -1,8 +1,8 @@
 package io.leavesfly.tinyai.deepseek.v3.training;
 
-import io.leavesfly.tinyai.deepseek.base.TaskType;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Block;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Config;
+import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3MTPHead;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Model;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
@@ -157,7 +157,6 @@ public class DeepSeekV3Pretrain {
         
         System.out.println("\n训练完成!");
         System.out.println("最终语言模型损失: " + getAverage(lossHistory, 100));
-        System.out.println("最终MoE负载损失: " + getAverage(moeLossHistory, 100));
         System.out.println("平均推理置信度: " + getAverage(confidenceHistory, 100));
     }
     
@@ -172,8 +171,8 @@ public class DeepSeekV3Pretrain {
             processBatch(dataset.nextBatch(), stats);
         }
 
-        System.out.printf("Epoch %d 完成 | 平均LM损失: %.4f | 平均MoE损失: %.6f | 平均置信度: %.4f | 耗时: %d ms%n",
-            currentEpoch + 1, stats.avgLoss(), stats.avgMoeLoss(), stats.avgConfidence(), stats.elapsedMs());
+        System.out.printf("Epoch %d 完成 | 平均LM损失: %.4f | 平均置信度: %.4f | 耗时: %d ms%n",
+            currentEpoch + 1, stats.avgLoss(), stats.avgConfidence(), stats.elapsedMs());
         dataset.reset();
     }
 
@@ -202,14 +201,13 @@ public class DeepSeekV3Pretrain {
      */
     private void logStepProgress() {
         float avgLoss    = getAverage(lossHistory, logInterval);
-        float avgMoeLoss = getAverage(moeLossHistory, logInterval);
         float avgConf    = getAverage(confidenceHistory, logInterval);
-        System.out.printf("Epoch %d/%d | Step %d | LM Loss: %.4f | MoE Loss: %.6f | Confidence: %.4f | LR: %.6f%n",
-            currentEpoch + 1, maxEpochs, globalStep, avgLoss, avgMoeLoss, avgConf, currentLearningRate);
+        System.out.printf("Epoch %d/%d | Step %d | LM Loss: %.4f | Confidence: %.4f | LR: %.6f%n",
+            currentEpoch + 1, maxEpochs, globalStep, avgLoss, avgConf, currentLearningRate);
     }
     
     /**
-     * 训练单步（含MoE负载均衡）
+     * 训练单步（含MoE负载均衡 + Multi-Token Prediction）
      */
     private StepResult trainStep(DeepSeekV3Dataset.Batch batch) {
         updateLearningRate();
@@ -217,9 +215,9 @@ public class DeepSeekV3Pretrain {
         NdArray inputIds = batch.getInputIds();
         NdArray targetIds = batch.getTargetIds();
 
-        // 前向传播，result 中同时携带各层 MoE 负载均衡损失
+        // 前向传播，result 中同时携带各层 MoE 负载均衡损失和隐藏状态
         DeepSeekV3Block.DetailedForwardResult result =
-            model.predictWithDetails(new Variable(inputIds), batch.getMajorityTaskType());
+            model.predictWithDetails(new Variable(inputIds));
 
         // 计算语言模型损失
         Variable[] shaped = reshapeForLoss(inputIds, targetIds, result.logits);
@@ -230,8 +228,18 @@ public class DeepSeekV3Pretrain {
         // 计算置信度：对 logits 做 softmax，取每个位置最大概率的平均值
         float confidenceValue = computeConfidence(result.logits);
 
-        // 反向传播：总损失 = LM损失 + MoE负载均衡损失
+        // 构建总损失：LM损失 + MoE负载均衡损失
         Variable totalLoss = buildTotalLoss(lmLoss, moeLossValue);
+        
+        // Multi-Token Prediction 损失（DeepSeek-V3 论文核心创新）
+        DeepSeekV3MTPHead mtpHead = model.getV3Block().getMtpHead();
+        if (mtpHead != null && result.hiddenStates != null) {
+            Variable mtpLoss = mtpHead.computeMTPLoss(
+                result.hiddenStates, new Variable(inputIds), targetIds, lossFunction);
+            totalLoss = totalLoss.add(mtpLoss);
+        }
+        
+        // 反向传播
         model.clearGrads();
         totalLoss.backward();
         clipGradients();
@@ -251,28 +259,6 @@ public class DeepSeekV3Pretrain {
         
         // 1. 批次基本信息
         System.out.println("[批次信息]");
-        System.out.println("  - 主要任务类型: " + batch.getMajorityTaskType());
-        
-        // 统计任务类型分布
-        TaskType[] taskTypes = batch.getTaskTypes();
-        if (taskTypes != null && taskTypes.length > 0) {
-            int[] counts = new int[5];  // 5种任务类型
-            for (TaskType type : taskTypes) {
-                if (type != null) {
-                    counts[type.getId()]++;
-                }
-            }
-            System.out.print("  - 各任务类型数量: {");
-            boolean first = true;
-            for (int i = 0; i < counts.length; i++) {
-                if (counts[i] > 0) {
-                    if (!first) System.out.print(", ");
-                    System.out.print(TaskType.fromId(i) + "=" + counts[i]);
-                    first = false;
-                }
-            }
-            System.out.println("}");
-        }
         
         // 2. 输入数据（使用NdArray的toString按形状打印）
         System.out.println("\n[输入数据 - 按形状打印]");

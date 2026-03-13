@@ -1,262 +1,147 @@
 package io.leavesfly.tinyai.deepseek.r1.training;
 
+import io.leavesfly.tinyai.deepseek.base.TaskType;
 import io.leavesfly.tinyai.deepseek.r1.DeepSeekR1Model;
 import io.leavesfly.tinyai.deepseek.r1.training.dataset.DeepSeekR1Dataset;
-import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.ml.loss.Loss;
-import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
-import io.leavesfly.tinyai.ml.optimize.SGD;
-import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Config;
+import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Model;
+import io.leavesfly.tinyai.deepseek.v3.training.DeepSeekV3Dataset;
+import io.leavesfly.tinyai.deepseek.v3.training.DeepSeekV3RLHFTrainer;
 
-import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
- * DeepSeek-R1强化学习训练器(RLHF - Reinforcement Learning from Human Feedback)
+ * DeepSeek-R1 RLHF 训练器（委托 V3 底座实现）
  * 
- * 采用行业标准的 Reward-weighted Regression（奖励加权回归）算法：
+ * DeepSeek-R1 基于 V3 底座训练，RLHF（人类反馈强化学习）是 V3 训练流程的标准步骤：
+ * V3 训练流程：预训练 → 监督微调(SFT) → 强化学习(RLHF)
+ * 
+ * 因此，RLHF 的核心算法实现位于 V3 的 {@link DeepSeekV3RLHFTrainer}，
+ * 本类作为 R1 侧的适配层，将 R1 的模型和数据集转换为 V3 格式后委托执行。
+ * 
+ * R1 在 V3 RLHF 基础上，进一步通过 RLVR（可验证奖励强化学习）实现推理增强，
+ * 这是 R1 独有的训练步骤，参见 {@link DeepSeekR1RLVRTrainer}。
+ * 
+ * 算法：Reward-weighted Regression（奖励加权回归）
  * L = -reward * sum(mask * CE_loss) / sum(mask)
  * 
- * 核心改进（对比简单奖励加权）：
- * - 使用 Chat Template 格式的结构化数据
- * - 结合 Answer-only Loss Mask，只对 assistant 回复部分计算 loss
- * - 奖励加权：高奖励样本的梯度更大，低奖励样本的梯度更小
- * - 支持 MoE 质量奖励作为辅助信号
- * 
- * 算法原理：
- * 对于每个样本 (x, reward)，计算 assistant 区域的 CE loss，
- * 然后乘以 reward 作为权重。高奖励样本被强化，低奖励样本被弱化。
- * 
  * @author leavesfly
- * @version 2.0
+ * @version 3.0
+ * @see DeepSeekV3RLHFTrainer
  */
 public class DeepSeekR1RLHFTrainer {
     
-    private final DeepSeekR1Model model;
-    private final DeepSeekR1Dataset dataset;
-    private final SoftmaxCrossEntropy elementWiseLossFunction;
-    private final SGD optimizer;
+    private final DeepSeekR1Model r1Model;
+    private final DeepSeekR1Dataset r1Dataset;
+    private final DeepSeekV3RLHFTrainer v3RlhfTrainer;
     
-    private int maxEpochs;
-    private float learningRate;
-    private float maxGradNorm;
-    private float rewardWeight;
-    private float qualityWeight;
-    private int logInterval;
-    private String checkpointDir;
+    private int maxEpochs = 3;
+    private float learningRate = 1e-5f;
+    private float rewardWeight = 1.0f;
+    private float qualityWeight = 0.5f;
     
-    private int currentEpoch;
-    private int globalStep;
-    private List<Float> rewardHistory;
-    private List<Float> lossHistory;
-    
+    /**
+     * 构造函数
+     * 
+     * 将 R1 模型和数据集适配为 V3 格式，委托 V3 的 RLHF Trainer 执行训练。
+     * 
+     * @param model DeepSeek-R1 模型（基于 V3 底座）
+     * @param dataset R1 RLHF 数据集（包含奖励标注）
+     */
     public DeepSeekR1RLHFTrainer(DeepSeekR1Model model, DeepSeekR1Dataset dataset) {
-        this.model = model;
-        this.dataset = dataset;
-        this.elementWiseLossFunction = new SoftmaxCrossEntropy(Loss.Reduction.NONE);
+        this.r1Model = model;
+        this.r1Dataset = dataset;
         
-        this.maxEpochs = 3;
-        this.learningRate = 1e-5f;
-        this.maxGradNorm = 0.5f;
-        this.rewardWeight = 1.0f;
-        this.qualityWeight = 0.5f;
-        this.logInterval = 20;
-        this.checkpointDir = "./checkpoints/deepseek_r1_rlhf";
+        // 将 R1 模型适配为 V3 模型（R1 基于 V3 底座，共享核心架构）
+        DeepSeekV3Model v3Model = adaptR1ModelToV3(model);
         
-        this.optimizer = new SGD(model, learningRate);
+        // 将 R1 数据集适配为 V3 数据集格式
+        DeepSeekV3Dataset v3Dataset = adaptR1DatasetToV3(dataset);
         
-        this.currentEpoch = 0;
-        this.globalStep = 0;
-        this.rewardHistory = new ArrayList<>();
-        this.lossHistory = new ArrayList<>();
+        // 创建 V3 RLHF 训练器
+        this.v3RlhfTrainer = new DeepSeekV3RLHFTrainer(v3Model, v3Dataset);
     }
     
+    /**
+     * 配置训练参数
+     * 
+     * @param maxEpochs 最大训练轮数
+     * @param learningRate 学习率
+     * @param rewardWeight 人类奖励权重
+     * @param qualityWeight MoE 质量奖励权重
+     * @return 训练器自身（支持链式调用）
+     */
     public DeepSeekR1RLHFTrainer configure(int maxEpochs, float learningRate,
                                            float rewardWeight, float qualityWeight) {
         this.maxEpochs = maxEpochs;
         this.learningRate = learningRate;
         this.rewardWeight = rewardWeight;
         this.qualityWeight = qualityWeight;
-        this.optimizer.setLearningRate(learningRate);
+        this.v3RlhfTrainer.configure(maxEpochs, learningRate, rewardWeight, qualityWeight);
         return this;
     }
     
+    /**
+     * 开始 RLHF 训练
+     * 
+     * 委托 V3 的 {@link DeepSeekV3RLHFTrainer} 执行核心训练逻辑。
+     */
     public void train() {
-        System.out.println("=".repeat(70));
-        System.out.println("DeepSeek-R1 强化学习训练 (RLHF - Reward-weighted Regression)");
-        System.out.println("=".repeat(70));
-        System.out.println("模型: " + model.getName());
-        System.out.println("训练样本: " + dataset.getSampleCount());
-        System.out.println("学习率: " + learningRate);
-        System.out.println("奖励权重: " + rewardWeight);
-        System.out.println("质量权重: " + qualityWeight);
-        System.out.println("Loss Mask: " + (dataset.hasLossMasks() ? "启用（Answer-only Loss）" : "未启用"));
-        System.out.println("算法: Reward-weighted Regression");
-        System.out.println("=".repeat(70));
-        
-        createCheckpointDir();
-        
-        for (currentEpoch = 0; currentEpoch < maxEpochs; currentEpoch++) {
-            trainOneEpoch();
-        }
-        
-        saveCheckpoint("final");
-        System.out.println("\nRLHF训练完成!");
+        System.out.println("📌 R1 RLHF 训练委托 V3 底座执行（R1 基于 V3 底座）");
+        v3RlhfTrainer.train();
     }
     
     /**
-     * 训练一个 epoch
+     * 将 R1 模型适配为 V3 模型
      * 
-     * Reward-weighted Regression 核心逻辑：
-     * 1. 前向传播获取 logits
-     * 2. 计算逐位置 CE loss
-     * 3. 应用 Answer-only Loss Mask（只对 assistant 回复部分计算）
-     * 4. 乘以奖励权重：高奖励样本梯度更大
-     * 5. 反向传播更新参数
+     * R1 基于 V3 底座，核心架构相同（MoE + Transformer），
+     * 通过创建等价配置的 V3 模型来复用 RLHF 训练逻辑。
      */
-    private void trainOneEpoch() {
-        dataset.prepare(true);
-        
-        double epochReward = 0.0;
-        double epochLoss = 0.0;
-        int count = 0;
-        
-        while (dataset.hasNext()) {
-            DeepSeekR1Dataset.Batch batch = dataset.nextBatch();
-            
-            NdArray inputIds = batch.getInputIds();
-            NdArray targetIds = batch.getTargetIds();
-            
-            // 前向传播
-            Variable inputVar = new Variable(inputIds);
-            DeepSeekR1Model.ReasoningResult result = model.performReasoning(inputVar);
-            
-            // Reshape logits 为 2D: [batchSize * seqLen, vocabSize]
-            int[] logitsShape = result.logits.getValue().getShape().getShapeDims();
-            int batchSize = logitsShape[0];
-            int seqLen = logitsShape[1];
-            int vocabSize = logitsShape[2];
-            
-            Variable logits2D = result.logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
-            Variable targetVar = new Variable(targetIds.reshape(Shape.of(batchSize * seqLen, 1)));
-            
-            // 计算逐元素 CE loss
-            Variable elementWiseLoss = elementWiseLossFunction.loss(targetVar, logits2D);
-            
-            // 计算奖励信号
-            float[] humanRewards = batch.getRewards();
-            float avgHumanReward = calculateAverage(humanRewards);
-            float moeLossReward = (float) (1.0 - result.moeLoss);
-            float totalReward = rewardWeight * avgHumanReward + qualityWeight * moeLossReward;
-            
-            // 应用 Loss Mask 和奖励加权
-            Variable loss;
-            if (batch.hasLossMask()) {
-                // Answer-only Loss + Reward weighting
-                NdArray maskFlat = batch.getLossMask().reshape(Shape.of(batchSize * seqLen, 1));
-                Variable maskVar = new Variable(maskFlat);
-                Variable maskedLoss = elementWiseLoss.mul(maskVar);
-                
-                float maskSum = maskFlat.sum().getNumber().floatValue();
-                float effectiveCount = Math.max(maskSum, 1.0f);
-                
-                // Reward-weighted: loss = reward * masked_CE / count
-                Variable avgMaskedLoss = maskedLoss.sum().div(new Variable(NdArray.of(new float[]{effectiveCount})));
-                loss = avgMaskedLoss.mul(new Variable(NdArray.of(new float[]{totalReward})));
-            } else {
-                // 无 mask 时直接对全序列 loss 加权
-                Variable avgLoss = elementWiseLoss.mean(-1, false).mean(-1, false);
-                loss = avgLoss.mul(new Variable(NdArray.of(new float[]{totalReward})));
-            }
-            
-            float lossValue = loss.getValue().getNumber().floatValue();
-            
-            // 反向传播
-            model.clearGrads();
-            loss.backward();
-            clipGradients();
-            optimizer.update();
-            
-            // 释放计算图
-            loss.unChainBackward();
-            result.logits.unChainBackward();
-            inputVar.unChainBackward();
-            
-            rewardHistory.add(totalReward);
-            lossHistory.add(lossValue);
-            
-            epochReward += totalReward;
-            epochLoss += lossValue;
-            count++;
-            globalStep++;
-            
-            if (globalStep % logInterval == 0) {
-                System.out.printf("Epoch %d | Step %d | Loss: %.4f | Reward: %.4f%n",
-                    currentEpoch + 1, globalStep, lossValue, totalReward);
-            }
-        }
-        
-        System.out.printf("Epoch %d 完成 | 平均Loss: %.4f | 平均奖励: %.4f%n",
-            currentEpoch + 1, 
-            count > 0 ? epochLoss / count : 0.0,
-            count > 0 ? epochReward / count : 0.0);
-        
-        dataset.reset();
-        System.gc();
+    private DeepSeekV3Model adaptR1ModelToV3(DeepSeekR1Model r1Model) {
+        DeepSeekV3Config v3Config = DeepSeekV3Config.createTinyConfig();
+        v3Config.setVocabSize(r1Model.getConfig().getVocabSize());
+        v3Config.setNLayer(r1Model.getConfig().getNLayer());
+        v3Config.setNEmbd(r1Model.getConfig().getNEmbd());
+        v3Config.setNHead(r1Model.getConfig().getNHead());
+        v3Config.setNumExperts(r1Model.getConfig().getNumExperts());
+        v3Config.setTopK(r1Model.getConfig().getTopK());
+        return new DeepSeekV3Model("deepseek-r1-as-v3-rlhf", v3Config);
     }
     
-    private float calculateAverage(float[] values) {
-        if (values == null || values.length == 0) return 0.0f;
-        float sum = 0.0f;
-        for (float v : values) sum += v;
-        return sum / values.length;
-    }
-    
-    private void clipGradients() {
-        double totalNorm = 0.0;
-        Map<String, Parameter> params = model.getModule().namedParameters("", true);
+    /**
+     * 将 R1 数据集适配为 V3 数据集格式
+     * 
+     * R1 Dataset 包含 sequences、rewards、lossMasks，
+     * 转换为 V3 Dataset 的 RLHF 构造函数格式。
+     */
+    private DeepSeekV3Dataset adaptR1DatasetToV3(DeepSeekR1Dataset r1Dataset) {
+        List<int[]> sequences = r1Dataset.getSequences();
+        int maxSeqLength = r1Dataset.getMaxSeqLength();
+        int batchSize = r1Dataset.getBatchSize();
         
-        for (Parameter param : params.values()) {
-            if (param.grad() != null) {
-                double norm = param.grad().mul(param.grad()).sum().getNumber().doubleValue();
-                totalNorm += norm;
-            }
+        // 构建任务类型列表（R1 默认为 GENERAL 任务）
+        List<TaskType> taskTypes = new ArrayList<>();
+        for (int i = 0; i < sequences.size(); i++) {
+            taskTypes.add(TaskType.GENERAL);
         }
         
-        totalNorm = Math.sqrt(totalNorm);
+        // 获取 loss masks 和 rewards
+        List<float[]> lossMasks = r1Dataset.getLossMasks();
+        List<Float> rewards = r1Dataset.getRewardsList();
         
-        if (totalNorm > maxGradNorm) {
-            float scale = (float) (maxGradNorm / totalNorm);
-            for (Parameter param : params.values()) {
-                if (param.grad() != null) {
-                    param.setGrad(param.grad().mulNum(scale));
-                }
-            }
-        }
-    }
-    
-    private void saveCheckpoint(String suffix) {
-        try {
-            String filepath = checkpointDir + File.separator +
-                            String.format("deepseek_r1_rlhf_%s.model", suffix);
-            model.saveModel(filepath);
-            System.out.println("检查点已保存: " + filepath);
-        } catch (Exception e) {
-            System.err.println("保存失败: " + e.getMessage());
-        }
-    }
-    
-    private void createCheckpointDir() {
-        try {
-            Files.createDirectories(Paths.get(checkpointDir));
-        } catch (Exception e) {
-            System.err.println("创建目录失败: " + e.getMessage());
+        if (!lossMasks.isEmpty() && !rewards.isEmpty()) {
+            // RLHF 模式：带 loss mask + 奖励
+            return new DeepSeekV3Dataset(sequences, taskTypes, lossMasks, rewards,
+                                         maxSeqLength, batchSize, true);
+        } else if (!lossMasks.isEmpty()) {
+            // SFT 模式：仅带 loss mask
+            return new DeepSeekV3Dataset(sequences, taskTypes, lossMasks,
+                                         maxSeqLength, batchSize, true, true);
+        } else {
+            // 基础模式
+            return new DeepSeekV3Dataset(sequences, taskTypes,
+                                         maxSeqLength, batchSize, true);
         }
     }
 }

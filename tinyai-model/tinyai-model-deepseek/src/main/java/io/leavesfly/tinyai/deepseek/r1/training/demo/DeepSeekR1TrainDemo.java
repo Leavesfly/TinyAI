@@ -16,7 +16,7 @@ import java.util.*;
  * 1. 数据准备阶段 - 生成训练数据集
  * 2. 预训练阶段 - 基础语言建模训练
  * 3. 后训练阶段 - 任务特定微调
- * 4. RLHF训练阶段 - 人类反馈强化学习
+ * 4. RLHF训练阶段 - 人类反馈强化学习（委托V3底座执行）
  * 5. RLVR训练阶段 - 可验证奖励强化学习
  * 6. 推理测试阶段 - 多种生成策略演示
  * 
@@ -28,7 +28,7 @@ import java.util.*;
  * @author leavesfly
  * @version 2.0
  */
-public class DeepSeekR1TrainDemoV2 {
+public class DeepSeekR1TrainDemo {
     
     private static DeepSeekR1TokenizerUtil sharedTokenizer = new DeepSeekR1TokenizerUtil();
     
@@ -268,11 +268,13 @@ public class DeepSeekR1TrainDemoV2 {
     
     /**
      * 执行RLHF强化学习训练
+     * 注意：RLHF 训练委托 V3 底座执行
      */
     private static DeepSeekR1Model runRLHFTraining(DeepSeekR1Model finetunedModel) throws IOException {
         System.out.println("\n" + "=".repeat(80));
         System.out.println("🏆 步骤3: DeepSeek-R1 RLHF训练 - 人类反馈强化学习");
         System.out.println("=".repeat(80));
+        System.out.println("📌 RLHF 训练委托 V3 底座执行（R1 基于 V3 底座）");
         
         // 1. 加载RLHF数据
         System.out.println("\n📝 加载RLHF训练数据...");
@@ -322,10 +324,11 @@ public class DeepSeekR1TrainDemoV2 {
         
         System.out.println("\n✅ RLHF训练完成!");
         System.out.println("\n💡 RLHF阶段总结:");
-        System.out.println("  - 目标: 通过人类反馈对齐模型行为");
-        System.out.println("  - 算法: Reward-weighted Regression（奖励加权回归）");
-        System.out.println("  - 数据: Chat Template 格式 + 奖励标注（高/中/低三档）");
-        System.out.println("  - 技巧: Answer-only Loss Mask + 奖励加权梯度");
+        System.out.println("  - 目标: 通过人类反馈优化模型输出");
+        System.out.println("  - 任务: 基于奖励模型的策略优化");
+        System.out.println("  - 数据: 人类标注的偏好数据（Prompt + Chosen + Rejected）");
+        System.out.println("  - 技巧: PPO算法 + KL散度约束 + 价值函数");
+        System.out.println("  - 架构: RLHF 核心算法由 V3 底座提供，R1 通过适配层调用");
         System.out.println("  - R1特色: 高奖励样本被强化，低奖励样本被弱化");
         
         return finetunedModel;
@@ -368,7 +371,7 @@ public class DeepSeekR1TrainDemoV2 {
         );
         
         rlvrTrainer.configure(
-            50,         // maxEpochs (增加训练轮次以充分学习)
+            20,         // maxEpochs (增加训练轮次以充分学习)
             0.05f,      // learningRate (降低学习率提高稳定性)
             4,          // groupSize G (GRPO每个问题采样数)
             0.2f,       // clipEps   (PPO clip范围)

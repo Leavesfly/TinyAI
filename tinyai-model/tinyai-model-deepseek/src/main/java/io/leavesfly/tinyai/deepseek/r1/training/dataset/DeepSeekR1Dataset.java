@@ -165,6 +165,20 @@ public class DeepSeekR1Dataset extends DeepSeekBaseDataset<DeepSeekR1Dataset.Bat
     }
     
     /**
+     * 获取 Loss Mask 列表（供适配器使用）
+     */
+    public List<float[]> getLossMasks() {
+        return lossMasks;
+    }
+    
+    /**
+     * 获取奖励分数列表（供适配器使用）
+     */
+    public List<Float> getRewardsList() {
+        return rewards;
+    }
+    
+    /**
      * 批次数据类
      */
     public static class Batch {

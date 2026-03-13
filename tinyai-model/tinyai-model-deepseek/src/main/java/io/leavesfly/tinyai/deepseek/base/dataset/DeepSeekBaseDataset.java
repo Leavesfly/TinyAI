@@ -179,6 +179,27 @@ public abstract class DeepSeekBaseDataset<T> {
     }
     
     /**
+     * 获取所有序列数据
+     */
+    public List<int[]> getSequences() {
+        return sequences;
+    }
+    
+    /**
+     * 获取最大序列长度
+     */
+    public int getMaxSeqLength() {
+        return maxSeqLength;
+    }
+    
+    /**
+     * 获取批次大小
+     */
+    public int getBatchSize() {
+        return batchSize;
+    }
+    
+    /**
      * 批次数据基类
      */
     public static class BaseBatch {

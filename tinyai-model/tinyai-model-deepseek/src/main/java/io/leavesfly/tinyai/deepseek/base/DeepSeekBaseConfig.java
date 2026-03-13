@@ -318,10 +318,10 @@ public class DeepSeekBaseConfig implements Serializable {
     /**
      * 计算参数激活率（激活参数/总参数）
      * 
-     * @return 激活率（0-1之间）
+     * @return 激活率百分比（0-100之间）
      */
     public double getActivationRatio() {
-        return (double) estimateActiveParameterCount() / estimateParameterCount();
+        return (double) estimateActiveParameterCount() / estimateParameterCount() * 100;
     }
     
     // ==================== Getter和Setter方法 ====================
@@ -532,7 +532,7 @@ public class DeepSeekBaseConfig implements Serializable {
             "    注意力dropout: %.2f\n" +
             "}",
             vocabSize, nEmbd, nLayer, nHead, nInner, nPositions,
-            numExperts, numSharedExperts, topK, expertHiddenDim, getActivationRatio() * 100,
+            numExperts, numSharedExperts, topK, expertHiddenDim, getActivationRatio(),
             enableTaskAwareRouting, numTaskTypes,
             estimateParameterCount(), estimateParameterCount() / 1_000_000.0,
             estimateActiveParameterCount(), estimateActiveParameterCount() / 1_000_000.0,

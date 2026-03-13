@@ -1,81 +1,81 @@
 package io.leavesfly.tinyai.deepseek.v3;
 
-import io.leavesfly.tinyai.deepseek.base.TaskType;
+import io.leavesfly.tinyai.deepseek.base.DeepSeekBaseConfig;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
 import io.leavesfly.tinyai.nnet.v2.layer.norm.RMSNorm;
-import io.leavesfly.tinyai.nnet.v2.layer.transformer.MultiHeadAttention;
 
 /**
- * DeepSeek-V3 Transformer块（Pre-RMSNorm + MoE架构）
- * 
- * 采用Pre-RMSNorm架构并集成混合专家层，实现参数高效和任务专门化：
- * 1. 多头自注意力层（带因果掩码）
- * 2. 混合专家层(MoE)替代传统FFN
- * 
+ * DeepSeek-V3 Transformer块（Pre-RMSNorm + RoPE + MoE 架构）
+ *
+ * 对标 DeepSeek-V3 论文架构：
+ * 1. 自注意力层（内置 RoPE 旋转位置编码）
+ * 2. 混合专家层 (MoE) 替代传统 FFN
+ *
  * 架构特点：
- * - Pre-RMSNorm提升训练稳定性（对标DeepSeek-V3论文，替代LayerNorm）
- * - MoE层实现参数高效（仅激活Top-K专家）
- * - 支持任务感知的专家路由
- * 
+ * - Pre-RMSNorm 提升训练稳定性
+ * - RoPE 旋转位置编码（在注意力层内部对 Q/K 应用）
+ * - MoE 层实现参数高效（仅激活 Top-K 专家）
+ *
  * @author leavesfly
- * @version 1.0
+ * @version 2.0
  */
 public class DeepSeekV3TransformerBlock extends Module {
-    
-    private final DeepSeekV3Config config;
-    
-    // 注意力子层
-    private final MultiHeadAttention attention;
+
+    private final DeepSeekBaseConfig config;
+
+    // 注意力子层（内置 RoPE）
+    private final DeepSeekV3Attention attention;
     private final RMSNorm layerNorm1;
-    private final Dropout attnDropout;
-    
-    // MoE子层（替代传统FFN）
+    private final Dropout residDropout;
+
+    // MoE 子层（替代传统 FFN）
     private final DeepSeekV3MoELayer moeLayer;
     private final RMSNorm layerNorm2;
-    
+
     /**
      * 构造函数
-     * 
-     * @param name 模块名称
-     * @param config V3配置对象
+     *
+     * @param name   模块名称
+     * @param config V3 配置对象
      */
-    public DeepSeekV3TransformerBlock(String name, DeepSeekV3Config config) {
+    public DeepSeekV3TransformerBlock(String name, DeepSeekBaseConfig config) {
         super(name);
         this.config = config;
-        
+
         int dModel = config.getNEmbd();
         int numHeads = config.getNHead();
-        float dropout = (float) config.getResidPdrop();
+        int maxSeqLen = config.getNPositions();
+        float dropoutRate = (float) config.getResidPdrop();
         float attnDropoutRate = (float) config.getAttnPdrop();
-        
-        // 初始化注意力子层组件
-        this.attention = new MultiHeadAttention("attn", dModel, numHeads, attnDropoutRate);
+
+        // 初始化注意力子层（内置 RoPE，theta=10000）
+        this.attention = new DeepSeekV3Attention(
+                "attn", dModel, numHeads, maxSeqLen, attnDropoutRate, 10000.0f);
         this.layerNorm1 = new RMSNorm("ln1", dModel, (float) config.getLayerNormEpsilon());
-        this.attnDropout = new Dropout("attn_dropout", dropout);
-        
-        // 初始化MoE子层
+        this.residDropout = new Dropout("resid_dropout", dropoutRate);
+
+        // 初始化 MoE 子层
         this.moeLayer = new DeepSeekV3MoELayer(name + "_moe", config);
         this.layerNorm2 = new RMSNorm("ln2", dModel, (float) config.getLayerNormEpsilon());
-        
+
         // 注册所有子模块
         registerModule("attn", attention);
         registerModule("ln1", layerNorm1);
-        registerModule("attn_dropout", attnDropout);
+        registerModule("resid_dropout", residDropout);
         registerModule("moe", moeLayer);
         registerModule("ln2", layerNorm2);
     }
-    
+
     /**
      * 前向传播
-     * 
-     * Pre-RMSNorm + MoE架构流程：
-     * 1. 注意力分支: x -> RMSNorm -> Attn -> Dropout -> Add(x)
-     * 2. MoE分支: x -> RMSNorm -> MoE -> Add(x)
-     * 
-     * @param inputs inputs[0]为输入张量 [batch_size, seq_len, d_model]
-     *               inputs[1](可选)为任务类型 TaskType
+     *
+     * Pre-RMSNorm + RoPE + MoE 架构流程：
+     * 1. 注意力分支: x -> RMSNorm -> Attention(含RoPE) -> Dropout -> Add(x)
+     * 2. MoE 分支:   x -> RMSNorm -> MoE -> Add(x)
+     *
+     * @param inputs inputs[0] 为输入张量 [batch_size, seq_len, d_model]
      * @return 输出张量 [batch_size, seq_len, d_model]
      */
     @Override
@@ -83,112 +83,105 @@ public class DeepSeekV3TransformerBlock extends Module {
         if (inputs == null || inputs.length == 0) {
             throw new IllegalArgumentException("输入不能为空");
         }
-        
+
         Variable x = inputs[0];
         int seqLen = x.getValue().getShape().getDimension(1);
-        
-        // 提取任务类型（如果提供）
-        TaskType taskType = null;
-        if (inputs.length > 1 && inputs[1] != null) {
-            // 实际使用中需要从Variable中提取TaskType
-        }
-        
-        // 生成因果掩码（下三角矩阵）
-        Variable causalMask = MultiHeadAttention.generateCausalMaskBatched(seqLen);
-        
-        // ===== 注意力子层 (Pre-LN) =====
-        // LN -> MultiHeadAttention -> Dropout -> Add
+
+        // 生成因果掩码
+        Variable causalMask = DeepSeekV3Attention.generateCausalMask(seqLen);
+
+        // ===== 注意力子层 (Pre-RMSNorm + RoPE) =====
         Variable normalized1 = layerNorm1.forward(x);
-        Variable attnOutput = attention.forward(normalized1, normalized1, normalized1, causalMask, null);
-        attnOutput = attnDropout.forward(attnOutput);
+        Variable attnOutput = attention.forward(normalized1, causalMask);
+        attnOutput = residDropout.forward(attnOutput);
         Variable residual1 = x.add(attnOutput);
-        
-        // ===== MoE子层 (Pre-LN) =====
-        // LN -> MoE -> Add
+
+        // ===== MoE 子层 (Pre-RMSNorm) =====
         Variable normalized2 = layerNorm2.forward(residual1);
-        Variable moeOutput;
-        if (taskType != null) {
-            // 使用任务感知路由
-            DeepSeekV3MoELayer.MoEOutput moeResult = moeLayer.computeMoE(normalized2, taskType);
-            moeOutput = moeResult.output;
-        } else {
-            // 普通MoE前向传播
-            moeOutput = moeLayer.forward(normalized2);
-        }
+        Variable moeOutput = moeLayer.forward(normalized2);
         Variable output = residual1.add(moeOutput);
-        
+
         return output;
     }
-    
+
     /**
-     * 带详细输出的前向传播（包含MoE损失）
-     * 
+     * 带详细输出的前向传播（包含 MoE 损失）
+     *
      * @param input 输入张量 [batch_size, seq_len, d_model]
-     * @param taskType 任务类型（可选）
      * @return 详细输出结果
      */
-    public DetailedForwardResult forwardWithDetails(Variable input, TaskType taskType) {
+    public DetailedForwardResult forwardWithDetails(Variable input) {
         int seqLen = input.getValue().getShape().getDimension(1);
-        
+
         // 生成因果掩码
-        Variable causalMask = MultiHeadAttention.generateCausalMaskBatched(seqLen);
-        
+        Variable causalMask = DeepSeekV3Attention.generateCausalMask(seqLen);
+
         // ===== 注意力子层 =====
         Variable normalized1 = layerNorm1.forward(input);
-        Variable attnOutput = attention.forward(normalized1, normalized1, normalized1, causalMask, null);
-        attnOutput = attnDropout.forward(attnOutput);
+        Variable attnOutput = attention.forward(normalized1, causalMask);
+        attnOutput = residDropout.forward(attnOutput);
         Variable residual1 = input.add(attnOutput);
-        
-        // ===== MoE子层（获取详细结果） =====
+
+        // ===== MoE 子层（获取详细结果） =====
         Variable normalized2 = layerNorm2.forward(residual1);
-        DeepSeekV3MoELayer.MoEOutput moeResult = moeLayer.computeMoE(normalized2, taskType);
+        DeepSeekV3MoELayer.MoEOutput moeResult = moeLayer.computeMoE(normalized2);
         Variable output = residual1.add(moeResult.output);
-        
+
         return new DetailedForwardResult(output, moeResult);
     }
-    
+
+    /**
+     * 带任务类型的详细前向传播（包含 MoE 损失）
+     *
+     * @param input    输入张量 [batch_size, seq_len, d_model]
+     * @param taskType 任务类型（当前保留接口，未来可用于任务感知路由）
+     * @return 详细输出结果
+     */
+    public DetailedForwardResult forwardWithDetails(Variable input, io.leavesfly.tinyai.deepseek.base.TaskType taskType) {
+        return forwardWithDetails(input);
+    }
+
     /**
      * 获取配置对象
      */
-    public DeepSeekV3Config getConfig() {
+    public DeepSeekBaseConfig getConfig() {
         return config;
     }
-    
+
     /**
-     * 获取MoE层
+     * 获取 MoE 层
      */
     public DeepSeekV3MoELayer getMoeLayer() {
         return moeLayer;
     }
-    
+
     /**
      * 详细前向传播结果类
      */
     public static class DetailedForwardResult {
-        /** Transformer块的输出 */
+        /** Transformer 块的输出 */
         public final Variable output;
-        /** MoE层的详细结果 */
+        /** MoE 层的详细结果 */
         public final DeepSeekV3MoELayer.MoEOutput moeOutput;
-        
+
         public DetailedForwardResult(Variable output, DeepSeekV3MoELayer.MoEOutput moeOutput) {
             this.output = output;
             this.moeOutput = moeOutput;
         }
-        
+
         /**
          * 获取负载均衡损失
          */
         public double getLoadBalanceLoss() {
             return moeOutput.loadBalanceLoss;
         }
-        
+
         @Override
         public String toString() {
             return String.format(
-                "DetailedForwardResult{outputShape=%s, %s}",
-                output.getValue().getShape(),
-                moeOutput
-            );
+                    "DetailedForwardResult{outputShape=%s, %s}",
+                    output.getValue().getShape(),
+                    moeOutput);
         }
     }
 }

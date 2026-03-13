@@ -1,6 +1,5 @@
 package io.leavesfly.tinyai.deepseek.v3.training;
 
-import io.leavesfly.tinyai.deepseek.base.TaskType;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Block;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Config;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Model;
@@ -227,11 +226,10 @@ public class DeepSeekV3Posttrain {
 
         NdArray inputIds = batch.getInputIds();
         NdArray targetIds = batch.getTargetIds();
-        TaskType taskType = batch.getMajorityTaskType();
 
         // 前向传播
         DeepSeekV3Block.DetailedForwardResult result =
-            model.predictWithDetails(new Variable(inputIds), taskType);
+            model.predictWithDetails(new Variable(inputIds));
 
         // 计算损失（支持 answer-only loss masking）
         Variable lmLoss = computeMaskedLoss(batch, result.logits);

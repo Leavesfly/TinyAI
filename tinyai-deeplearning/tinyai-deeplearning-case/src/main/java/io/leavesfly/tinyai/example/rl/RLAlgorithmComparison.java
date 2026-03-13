@@ -4,6 +4,8 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.rl.Environment;
 import io.leavesfly.tinyai.rl.Experience;
 import io.leavesfly.tinyai.rl.agent.DQNAgent;
+import io.leavesfly.tinyai.rl.agent.DoubleDQNAgent;
+import io.leavesfly.tinyai.rl.agent.PPOAgent;
 import io.leavesfly.tinyai.rl.agent.REINFORCEAgent;
 import io.leavesfly.tinyai.rl.environment.CartPoleEnvironment;
 import io.leavesfly.tinyai.rl.environment.GridWorldEnvironment;
@@ -21,7 +23,7 @@ import java.util.List;
  * 目的是帮助理解不同算法的特点和适用场景。
  * <p>
  * 比较内容：
- * 1. DQN vs REINFORCE 在CartPole环境下的表现
+ * 1. DQN vs DoubleDQN vs PPO vs REINFORCE 在CartPole环境下的表现
  * 2. 不同超参数对算法性能的影响
  * 3. 训练速度和最终性能的权衡
  * 4. 算法在不同环境下的适应性
@@ -32,7 +34,7 @@ public class RLAlgorithmComparison {
         System.out.println("=== 强化学习算法比较实验 ===");
 
         // 实验1：CartPole环境下的算法比较
-        System.out.println("\n【实验1】CartPole环境 - DQN vs REINFORCE");
+        System.out.println("\n【实验1】CartPole环境 - DQN vs DoubleDQN vs PPO vs REINFORCE");
         compareAlgorithmsOnCartPole();
 
         // 实验2：GridWorld环境下的算法比较
@@ -75,6 +77,41 @@ public class RLAlgorithmComparison {
             System.out.printf("  最终平均奖励: %.2f\n", avgReward);
         }
 
+        // DoubleDQN结果
+        System.out.println("\n--- Double DQN 算法 ---");
+        System.out.println("改进: 在线网络选动作，目标网络评估Q值，减少Q值过估计");
+        List<Float> doubleDqnResults = new ArrayList<>();
+        for (int trial = 0; trial < numTrials; trial++) {
+            System.out.println("试验 " + (trial + 1) + ":");
+            DoubleDQNAgent doubleDqnAgent = new DoubleDQNAgent(
+                    "DoubleDQN_Trial" + trial,
+                    env.getStateDim(), env.getActionDim(),
+                    new int[]{128, 128},
+                    0.001f, 1.0f, 0.99f,
+                    32, 10000, 100
+            );
+            float avgReward = trainAndEvaluateDoubleDQN(doubleDqnAgent, env, numEpisodes);
+            doubleDqnResults.add(avgReward);
+            System.out.printf("  最终平均奖励: %.2f\n", avgReward);
+        }
+
+        // PPO结果
+        System.out.println("\n--- PPO 算法 ---");
+        System.out.println("改进: 裁剪目标函数限制策略更新幅度，结合价值网络估计优势函数");
+        List<Float> ppoResults = new ArrayList<>();
+        for (int trial = 0; trial < numTrials; trial++) {
+            System.out.println("试验 " + (trial + 1) + ":");
+            PPOAgent ppoAgent = new PPOAgent(
+                    "PPO_Trial" + trial,
+                    env.getStateDim(), env.getActionDim(),
+                    new int[]{128, 128},
+                    0.001f, 0.99f, 0.2f, 4, 32
+            );
+            float avgReward = trainAndEvaluatePPO(ppoAgent, env, numEpisodes);
+            ppoResults.add(avgReward);
+            System.out.printf("  最终平均奖励: %.2f\n", avgReward);
+        }
+
         // REINFORCE结果
         System.out.println("\n--- REINFORCE 算法 ---");
         List<Float> reinforceResults = new ArrayList<>();
@@ -93,6 +130,8 @@ public class RLAlgorithmComparison {
 
         // 统计分析
         printStatistics("DQN", dqnResults);
+        printStatistics("Double DQN", doubleDqnResults);
+        printStatistics("PPO", ppoResults);
         printStatistics("REINFORCE", reinforceResults);
     }
 
@@ -168,6 +207,123 @@ public class RLAlgorithmComparison {
         }
 
         System.out.println("\n分析完成！建议学习率在0.001左右。");
+    }
+
+    /**
+     * 训练并评估PPO智能体
+     *
+     * @param agent       PPO智能体
+     * @param env         环境
+     * @param numEpisodes 训练回合数
+     * @return 平均评估奖励
+     */
+    private static float trainAndEvaluatePPO(PPOAgent agent, Environment env, int numEpisodes) {
+        // 训练阶段
+        for (int episode = 0; episode < numEpisodes; episode++) {
+            Variable state = env.reset();
+            float episodeReward = 0.0f;
+
+            while (!env.isDone()) {
+                Variable action = agent.selectAction(state);
+                Environment.StepResult result = env.step(action);
+                Variable nextState = result.getNextState();
+                float reward = result.getReward();
+                boolean done = result.isDone();
+
+                Experience experience = new Experience(state, action, reward, nextState, done);
+                agent.learn(experience);
+
+                state = nextState;
+                episodeReward += reward;
+            }
+
+            // 回合结束后执行PPO更新
+            agent.learnFromEpisode();
+
+            // 打印进度
+            if (episode % (numEpisodes / 5) == 0) {
+                System.out.printf("  Episode %d: 奖励=%.2f\n", episode, episodeReward);
+            }
+        }
+
+        // 评估阶段
+        agent.setTraining(false);
+        float totalReward = 0.0f;
+        int evalEpisodes = 10;
+
+        for (int episode = 0; episode < evalEpisodes; episode++) {
+            Variable state = env.reset();
+            float episodeReward = 0.0f;
+
+            while (!env.isDone()) {
+                Variable action = agent.selectAction(state);
+                Environment.StepResult result = env.step(action);
+                state = result.getNextState();
+                episodeReward += result.getReward();
+            }
+
+            totalReward += episodeReward;
+        }
+
+        agent.setTraining(true);
+        return totalReward / evalEpisodes;
+    }
+
+    /**
+     * 训练并评估Double DQN智能体
+     *
+     * @param agent       DoubleDQN智能体
+     * @param env         环境
+     * @param numEpisodes 训练回合数
+     * @return 平均评估奖励
+     */
+    private static float trainAndEvaluateDoubleDQN(DoubleDQNAgent agent, Environment env, int numEpisodes) {
+        // 训练阶段
+        for (int episode = 0; episode < numEpisodes; episode++) {
+            Variable state = env.reset();
+            float episodeReward = 0.0f;
+
+            while (!env.isDone()) {
+                Variable action = agent.selectAction(state);
+                Environment.StepResult result = env.step(action);
+                Variable nextState = result.getNextState();
+                float reward = result.getReward();
+                boolean done = result.isDone();
+
+                Experience experience = new Experience(state, action, reward, nextState, done);
+                agent.learn(experience);
+
+                state = nextState;
+                episodeReward += reward;
+            }
+
+            // 打印进度
+            if (episode % (numEpisodes / 5) == 0) {
+                System.out.printf("  Episode %d: 奖励=%.2f\n", episode, episodeReward);
+            }
+        }
+
+        // 评估阶段
+        agent.setTraining(false);
+        float totalReward = 0.0f;
+        int evalEpisodes = 10;
+
+        for (int episode = 0; episode < evalEpisodes; episode++) {
+            Variable state = env.reset();
+            float episodeReward = 0.0f;
+
+            while (!env.isDone()) {
+                Variable action = agent.selectAction(state);
+                Environment.StepResult result = env.step(action);
+                state = result.getNextState();
+                episodeReward += result.getReward();
+            }
+
+            totalReward += episodeReward;
+        }
+
+        agent.setTraining(true);
+        return totalReward / evalEpisodes;
     }
 
     /**

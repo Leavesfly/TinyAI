@@ -13,6 +13,8 @@ import io.leavesfly.tinyai.rl.util.ModelUtil;
 import io.leavesfly.tinyai.rl.util.QValueComputer;
 import io.leavesfly.tinyai.rl.util.TrainingStatistics;
 
+import java.util.Map;
+
 /**
  * 基于值函数的强化学习智能体抽象基类
  * 
@@ -357,7 +359,7 @@ public abstract class ValueBasedAgent extends AbstractAgent {
     /**
      * 获取训练统计信息
      */
-    public java.util.Map<String, Object> getTrainingStats() {
+    public Map<String, Object> getTrainingStats() {
         java.util.Map<String, Object> statsMap = stats.toMap();
         statsMap.put("training_step", trainingStep);
         statsMap.put("epsilon", getCurrentEpsilon());

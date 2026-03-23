@@ -242,4 +242,48 @@ public class GRPOTrainer extends BaseRLTrainer {
     public List<Float> getRewardHistory() {
         return new ArrayList<>(rewardHistory);
     }
+    
+    // ==================== BaseTrainer 抽象方法实现 ====================
+    
+    @Override
+    protected float trainStep(Object batch) {
+        RLAIFDataset.Batch rlBatch = (RLAIFDataset.Batch) batch;
+        float[] oldLogProbs = collectOldLogProbs(rlBatch);
+        return grpoUpdate(rlBatch, oldLogProbs);
+    }
+    
+    @Override
+    protected String getTrainerName() {
+        return "GRPO";
+    }
+    
+    @Override
+    protected void printTrainingInfo() {
+        System.out.println("GRPO训练器 | 配置: " + config);
+    }
+    
+    @Override
+    protected void prepareDataset() {
+        dataset.prepare(true);
+    }
+    
+    @Override
+    protected boolean hasNextBatch() {
+        return dataset.hasNext();
+    }
+    
+    @Override
+    protected Object getNextBatch() {
+        return dataset.nextBatch();
+    }
+    
+    @Override
+    protected void resetDataset() {
+        dataset.reset();
+    }
+    
+    @Override
+    protected String getCheckpointPrefix() {
+        return "grpo";
+    }
 }

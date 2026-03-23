@@ -203,4 +203,46 @@ public class SPOTrainer extends BaseRLTrainer {
     public List<Float> getRewardHistory() {
         return new ArrayList<>(rewardHistory);
     }
+    
+    // ==================== BaseTrainer 抽象方法实现 ====================
+    
+    @Override
+    protected float trainStep(Object batch) {
+        return trainStep((RLAIFDataset.Batch) batch);
+    }
+    
+    @Override
+    protected String getTrainerName() {
+        return "SPO";
+    }
+    
+    @Override
+    protected void printTrainingInfo() {
+        System.out.println("SPO训练器 | 配置: " + config);
+    }
+    
+    @Override
+    protected void prepareDataset() {
+        dataset.prepare(true);
+    }
+    
+    @Override
+    protected boolean hasNextBatch() {
+        return dataset.hasNext();
+    }
+    
+    @Override
+    protected Object getNextBatch() {
+        return dataset.nextBatch();
+    }
+    
+    @Override
+    protected void resetDataset() {
+        dataset.reset();
+    }
+    
+    @Override
+    protected String getCheckpointPrefix() {
+        return "spo";
+    }
 }

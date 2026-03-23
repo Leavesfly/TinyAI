@@ -34,7 +34,9 @@ public class MiniMindTransformerLayerTest {
             ffnHiddenSize,
             maxSeqLen,
             dropoutRate,
-            epsilon
+            epsilon,
+            "silu",
+            true
         );
     }
     
@@ -180,7 +182,9 @@ public class MiniMindTransformerLayerTest {
             ffnHiddenSize,
             maxSeqLen,
             dropoutRate,
-            epsilon
+            epsilon,
+            "silu",
+            true
         );
         
         // 创建输入 (batch=1, seq_len=5, dim=64)

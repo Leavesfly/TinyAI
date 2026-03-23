@@ -289,6 +289,50 @@ public class PPOTrainer extends BaseRLTrainer {
         return new ArrayList<>(totalLossHistory);
     }
     
+    // ==================== BaseTrainer 抽象方法实现 ====================
+    
+    @Override
+    protected float trainStep(Object batch) {
+        RLAIFDataset.Batch rlBatch = (RLAIFDataset.Batch) batch;
+        ExperienceBuffer experience = collectExperience(rlBatch);
+        return ppoUpdate(experience);
+    }
+    
+    @Override
+    protected String getTrainerName() {
+        return "PPO";
+    }
+    
+    @Override
+    protected void printTrainingInfo() {
+        System.out.println("PPO训练器 | 配置: " + config);
+    }
+    
+    @Override
+    protected void prepareDataset() {
+        dataset.prepare(true);
+    }
+    
+    @Override
+    protected boolean hasNextBatch() {
+        return dataset.hasNext();
+    }
+    
+    @Override
+    protected Object getNextBatch() {
+        return dataset.nextBatch();
+    }
+    
+    @Override
+    protected void resetDataset() {
+        dataset.reset();
+    }
+    
+    @Override
+    protected String getCheckpointPrefix() {
+        return "ppo";
+    }
+    
     /**
      * 经验缓冲区
      */

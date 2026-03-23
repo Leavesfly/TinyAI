@@ -18,7 +18,7 @@ import java.util.Map;
  * @author leavesfly
  * @since 2024
  */
-public class BaseRLTrainer extends BaseTrainer {
+public abstract class BaseRLTrainer extends BaseTrainer {
     
     /**
      * 构造函数

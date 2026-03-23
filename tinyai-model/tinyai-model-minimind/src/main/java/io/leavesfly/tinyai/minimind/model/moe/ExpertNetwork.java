@@ -1,14 +1,12 @@
-package io.leavesfly.tinyai.minimind.moe;
+package io.leavesfly.tinyai.minimind.model.moe;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
 import io.leavesfly.tinyai.nnet.v2.layer.activation.ReLU;
 import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 
-import java.util.HashMap;
 import java.util.Map;
 
 /**

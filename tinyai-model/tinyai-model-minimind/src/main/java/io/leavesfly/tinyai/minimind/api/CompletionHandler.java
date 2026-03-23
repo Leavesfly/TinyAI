@@ -2,9 +2,6 @@ package io.leavesfly.tinyai.minimind.api;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
-import io.leavesfly.tinyai.minimind.model.MiniMindConfig;
-import io.leavesfly.tinyai.minimind.model.MiniMindModel;
-import io.leavesfly.tinyai.minimind.tokenizer.MiniMindTokenizer;
 
 import java.io.IOException;
 import java.util.*;
@@ -32,25 +29,6 @@ import java.util.*;
  * @since 2024
  */
 public class CompletionHandler implements HttpHandler {
-    
-    // 共享的模型实例（避免重复加载）
-    private static MiniMindModel sharedModel;
-    private static MiniMindTokenizer sharedTokenizer;
-    
-    static {
-        // 初始化共享模型
-        try {
-            MiniMindConfig config = MiniMindConfig.createSmallConfig();
-            sharedModel = new MiniMindModel("minimind-api", config);
-            sharedTokenizer = MiniMindTokenizer.createCharLevelTokenizer(
-                config.getVocabSize(), config.getMaxSeqLen()
-            );
-            sharedModel.setTraining(false);
-            System.out.println("API模型初始化完成");
-        } catch (Exception e) {
-            System.err.println("模型初始化失败: " + e.getMessage());
-        }
-    }
     
     @Override
     public void handle(HttpExchange exchange) throws IOException {
@@ -123,16 +101,16 @@ public class CompletionHandler implements HttpHandler {
      */
     private String generateText(String prompt, int maxTokens, double temperature, double topP) {
         try {
-            if (sharedModel == null || sharedTokenizer == null) {
+            if (SharedModelHolder.getModel() == null || SharedModelHolder.getTokenizer() == null) {
                 return "[Error: Model not initialized]";
             }
                 
             // 1. 编码输入
-            List<Integer> promptIds = sharedTokenizer.encode(prompt, false, false);
+            List<Integer> promptIds = SharedModelHolder.getTokenizer().encode(prompt, false, false);
             int[] promptArray = promptIds.stream().mapToInt(i -> i).toArray();
                 
             // 2. 调用模型生成
-            int[] generated = sharedModel.generate(
+            int[] generated = SharedModelHolder.getModel().generate(
                 promptArray,
                 maxTokens,
                 (float) temperature,
@@ -145,7 +123,7 @@ public class CompletionHandler implements HttpHandler {
             for (int id : generated) {
                 genIds.add(id);
             }
-            String fullText = sharedTokenizer.decode(genIds, true);
+            String fullText = SharedModelHolder.getTokenizer().decode(genIds, true);
                 
             // 4. 提取生成部分（移除prompt）
             String generatedPart = fullText;

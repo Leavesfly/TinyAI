@@ -1,14 +1,12 @@
-package io.leavesfly.tinyai.minimind.moe;
+package io.leavesfly.tinyai.minimind.model.moe;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * MoE Layer - 混合专家层

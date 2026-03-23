@@ -47,7 +47,7 @@ public class DeepSeekV3TrainDemo {
     private static SimpleTokenizer sharedTokenizer = new SimpleTokenizer();
     
     private static final String DATA_DIR = "./data/deepseek_v3_training";
-    private static final String CHECKPOINT_DIR = "./checkpoints/deepseek_v3_v2";
+    private static final String CHECKPOINT_DIR = "./checkpoints/deepseek_v3";
     
     public static void main(String[] args) {
         System.out.println("=".repeat(80));

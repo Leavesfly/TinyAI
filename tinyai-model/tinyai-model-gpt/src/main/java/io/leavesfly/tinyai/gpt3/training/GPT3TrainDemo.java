@@ -34,7 +34,7 @@ public class GPT3TrainDemo {
     private static GPT3Dataset.SimpleTokenizer sharedTokenizer = new GPT3Dataset.SimpleTokenizer();
 
     private static final String DATA_DIR       = "./data/gpt3_training";
-    private static final String CHECKPOINT_DIR = "./checkpoints/gpt3_v2";
+    private static final String CHECKPOINT_DIR = "./checkpoints/gpt3";
 
     public static void main(String[] args) {
         System.out.println("=".repeat(80));

@@ -85,6 +85,14 @@ public class GRPOTrainer extends BaseRLTrainer {
     }
     
     /**
+     * 设置检查点目录
+     */
+    public GRPOTrainer setCheckpointDir(String checkpointDir) {
+        this.checkpointDir = checkpointDir;
+        return this;
+    }
+    
+    /**
      * 训练
      */
     public void train() {

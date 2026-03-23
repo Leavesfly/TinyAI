@@ -75,7 +75,7 @@ public class PretrainTrainer {
         this.warmupSteps = 1000;
         this.logInterval = 100;
         this.saveInterval = 1000;
-        this.checkpointDir = "./checkpoints/banana_pretrain";
+        this.checkpointDir = "./checkpoints/banana/pretrain";
         
         // 创建优化器(AdamW)
         this.optimizer = new Adam(model, initialLearningRate, 0.9f, 0.999f, 1e-8f);

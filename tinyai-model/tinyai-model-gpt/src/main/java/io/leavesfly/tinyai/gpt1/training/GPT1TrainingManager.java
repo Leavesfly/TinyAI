@@ -19,8 +19,7 @@ import java.util.List;
 public class GPT1TrainingManager {
 
     private static final String DATA_DIR = "./data/gpt1_training";
-    private static final String CHECKPOINT_DIR = "./checkpoints/gpt1_v2";
-
+    private static final String CHECKPOINT_DIR = "./checkpoints/gpt1";
     private final GPT1Dataset.SimpleTokenizer tokenizer;
 
     public GPT1TrainingManager() {

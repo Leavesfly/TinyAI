@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.minimind.moe;
+package io.leavesfly.tinyai.minimind.model.moe;
 
 /**
  * Load Balance Loss - 负载均衡损失

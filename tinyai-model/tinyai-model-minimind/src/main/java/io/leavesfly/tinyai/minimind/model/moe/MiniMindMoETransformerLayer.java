@@ -4,8 +4,6 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.minimind.model.MiniMindConfig;
 import io.leavesfly.tinyai.minimind.model.attention.KVCache;
 import io.leavesfly.tinyai.minimind.model.attention.MultiHeadAttention;
-import io.leavesfly.tinyai.minimind.moe.*;
-import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
 

@@ -25,7 +25,7 @@ import static io.leavesfly.tinyai.minimind.training.demo.DemoConfig.*;
 
 /**
  * MiniMind 训练演示 - 训练阶段执行器
- * 
+ * <p>
  * 包含各训练阶段的执行逻辑：
  * - 步骤1: 无监督预训练
  * - 步骤2: 监督微调 (SFT)
@@ -33,7 +33,7 @@ import static io.leavesfly.tinyai.minimind.training.demo.DemoConfig.*;
  * - 步骤4: 强化学习训练
  * - 步骤5: LoRA微调（特定任务适配）
  * - 步骤6: 推理测试
- * 
+ *
  * @author TinyAI Team
  */
 public class DemoTrainingStages {
@@ -64,12 +64,12 @@ public class DemoTrainingStages {
         for (String jsonLine : pretrainJsonLines) {
             pretrainTexts.add(new JSONObject(jsonLine).getString("text"));
         }
-        
+
         int batchSize = 2;
         PretrainDataset dataset = new PretrainDataset(tokenizer, maxSeqLen, batchSize);
         dataset.loadFromTexts(pretrainTexts);
         dataset.prepare(true);
-        
+
         // 冻结词汇表（类似GPT1 SimpleTokenizer）
         tokenizer.freeze();
         System.out.println("  ✓ 词汇表大小: " + tokenizer.getVocabSize() + " (已冻结)");
@@ -96,6 +96,7 @@ public class DemoTrainingStages {
 
         PretrainTrainer trainer = new PretrainTrainer(model, dataset);
         trainer.configure(30, 1e-2f, 0, 1.0f);
+        trainer.setCheckpoint(CHECKPOINT_DIR + "/pretrain", 100);
         trainer.setLogInterval(10);
         trainer.train();
 
@@ -124,7 +125,7 @@ public class DemoTrainingStages {
         System.out.println("\n📝 准备监督微调数据集...");
         MiniMindConfig config = pretrainedModel.getConfig();
         int batchSize = 2;
-        
+
         SFTDataset dataset = new SFTDataset(getSharedTokenizer(), config.getMaxSeqLen(), batchSize);
         dataset.loadFromJsonl(trainPath);
         dataset.prepare(true);
@@ -140,6 +141,7 @@ public class DemoTrainingStages {
 
         SFTTrainer trainer = new SFTTrainer(pretrainedModel, dataset);
         trainer.configure(10, 1e-3f, 1.0f);
+        trainer.setCheckpointDir(CHECKPOINT_DIR + "/sft");
         trainer.train();
 
         System.out.println("-".repeat(80));
@@ -149,66 +151,6 @@ public class DemoTrainingStages {
         return pretrainedModel;
     }
 
-    // ========== 步骤5: LoRA微调 ==========
-
-    /**
-     * 执行LoRA微调 - 参数高效微调（特定任务适配）
-     */
-    public static MiniMindModel runLoRAFinetuning(MiniMindModel sftModel) throws IOException {
-        System.out.println("\n" + "=".repeat(80));
-        System.out.println("🔧 步骤5: MiniMind LoRA微调 (Low-Rank Adaptation)");
-        System.out.println("=".repeat(80));
-        System.out.println("💡 LoRA核心思想: 冻结原始参数，只训练低秩分解矩阵");
-
-        // 1. 配置LoRA
-        System.out.println("\n📝 配置LoRA参数...");
-        LoRAConfig loraConfig = new LoRAConfig();
-        loraConfig.setRank(8);
-        loraConfig.setAlpha(16.0f);
-        loraConfig.setDropout(0.1f);
-        loraConfig.setTargetModules(new String[]{"queryProj", "valueProj"});
-        loraConfig.setFreezeOriginal(true);
-        
-        System.out.println("  ✓ LoRA秩 (r): " + loraConfig.getRank());
-        System.out.println("  ✓ 缩放因子 (α): " + loraConfig.getAlpha());
-        System.out.println("  ✓ 缩放系数 (α/r): " + loraConfig.getScaling());
-        System.out.println("  ✓ 目标模块: " + String.join(", ", loraConfig.getTargetModules()));
-
-        // 2. 注入 LoRA 层
-        System.out.println("\n📝 注入 LoRA 层到模型...");
-        int injectedCount = sftModel.applyLoRA(loraConfig);
-        if (injectedCount > 0) {
-            sftModel.printLoRAStats();
-        }
-
-        // 3. 准备数据（标准 Alpaca JSONL 格式）
-        System.out.println("\n📝 准备LoRA微调数据...");
-        String trainPath = DATA_DIR + "/sft_train.jsonl";
-        
-        MiniMindConfig config = sftModel.getConfig();
-        int batchSize = 2;
-        SFTDataset dataset = new SFTDataset(getSharedTokenizer(), config.getMaxSeqLen(), batchSize);
-        dataset.loadFromJsonl(trainPath);
-        dataset.prepare(true);
-        System.out.println("  ✓ 训练样本数: " + dataset.getSampleCount());
-
-        // 3. 训练
-        System.out.println("\n📝 开始LoRA微调...");
-        System.out.println("  - 学习率: 5e-4");
-        System.out.println("  - 训练轮次: 20 epochs");
-        System.out.println("-".repeat(80));
-
-        LoRATrainer loraTrainer = new LoRATrainer(sftModel, dataset, loraConfig);
-        loraTrainer.configure(20, 5e-4f, 1.0f);
-        loraTrainer.printTrainableParams();
-        loraTrainer.train();
-
-        System.out.println("-".repeat(80));
-        System.out.println("\n✅ LoRA微调完成!");
-        printLoRASummary();
-
-        return sftModel;
-    }
 
     // ========== 步骤3: DPO训练 ==========
 
@@ -228,7 +170,7 @@ public class DemoTrainingStages {
         dpoConfig.setLabelSmoothing(0.0f);
         dpoConfig.setUseLengthNormalization(false);
         dpoConfig.setResponseOnlyLoss(true);
-        
+
         System.out.println("  ✓ Beta (β): " + dpoConfig.getBeta());
         System.out.println("  ✓ Response损失: " + dpoConfig.isResponseOnlyLoss());
 
@@ -236,18 +178,14 @@ public class DemoTrainingStages {
         System.out.println("\n📝 准备DPO偏好数据集...");
         String dpoPath = DATA_DIR + "/dpo_train.jsonl";
         List<String> dpoJsonLines = readJsonlFile(dpoPath);
-        
+
         MiniMindConfig config = loraModel.getConfig();
         int batchSize = 1;
         DPODataset dpoDataset = new DPODataset(getSharedTokenizer(), config.getMaxSeqLen(), batchSize);
-        
+
         for (String jsonLine : dpoJsonLines) {
             JSONObject json = new JSONObject(jsonLine);
-            dpoDataset.addSample(
-                json.getString("prompt"),
-                json.getString("chosen"),
-                json.getString("rejected")
-            );
+            dpoDataset.addSample(json.getString("prompt"), json.getString("chosen"), json.getString("rejected"));
         }
         dpoDataset.prepare(true);
         System.out.println("  ✓ 偏好对数量: " + dpoDataset.getSampleCount());
@@ -260,6 +198,7 @@ public class DemoTrainingStages {
 
         DPOTrainer dpoTrainer = new DPOTrainer(loraModel, dpoDataset, dpoConfig);
         dpoTrainer.configure(20, 5e-4f, 1.0f);
+        dpoTrainer.setCheckpoint(CHECKPOINT_DIR + "/dpo", 50);
         dpoTrainer.train();
 
         System.out.println("-".repeat(80));
@@ -291,15 +230,15 @@ public class DemoTrainingStages {
         MiniMindConfig config = model.getConfig();
         int batchSize = 2;
         int numCandidates = 4;  // 每个prompt生成4个候选回答
-        
+
         RLAIFDataset dataset = new RLAIFDataset(getSharedTokenizer(), config.getMaxSeqLen(), batchSize);
-        
+
         for (String jsonLine : rlJsonLines) {
             JSONObject json = new JSONObject(jsonLine);
             String prompt = json.getString("prompt");
             String response = json.getString("response");
             float reward = (float) json.getDouble("reward");
-            
+
             // 基于原始response生成多个候选，模拟不同质量的回答
             List<String> candidates = new ArrayList<>();
             float[] rewards = new float[numCandidates];
@@ -307,10 +246,10 @@ public class DemoTrainingStages {
                 candidates.add(response);
                 rewards[i] = reward * (0.8f + i * 0.1f);
             }
-            
+
             dataset.addSample(prompt, candidates, rewards);
         }
-        
+
         dataset.prepare(true);
         System.out.println("  ✓ RLAIF样本数: " + dataset.getSampleCount());
         System.out.println("  ✓ 每组候选数: " + numCandidates);
@@ -326,7 +265,7 @@ public class DemoTrainingStages {
         grpoConfig.setGrpoEpochs(3);
         grpoConfig.setNormalizeAdvantage(true);
         grpoConfig.setUseGroupContrast(true);
-        
+
         System.out.println("  ✓ 候选数量: " + grpoConfig.getNumCandidates());
         System.out.println("  ✓ 组大小: " + grpoConfig.getGroupSize());
         System.out.println("  ✓ Actor学习率: " + grpoConfig.getActorLearningRate());
@@ -336,17 +275,18 @@ public class DemoTrainingStages {
         // 4. 创建Critic网络(可选,这里简化为null)
         System.out.println("\n📝 创建训练器...");
         ValueNetwork critic = null;  // 简化版本不使用critic
-        
+
         // 5. 创建GRPO训练器
         GRPOTrainer trainer = new GRPOTrainer(model, critic, dataset, grpoConfig);
         trainer.configure(3, 10);  // 3 epochs, 每10步打印一次
+        trainer.setCheckpointDir(CHECKPOINT_DIR + "/grpo");
 
         // 6. 训练
         System.out.println("\n📝 开始GRPO训练...");
         System.out.println("  - 算法: Group Relative Policy Optimization");
         System.out.println("  - 训练轮次: 3 epochs");
         System.out.println("-".repeat(80));
-        
+
         trainer.train();
 
         System.out.println("-".repeat(80));
@@ -354,6 +294,68 @@ public class DemoTrainingStages {
         printRLSummary();
 
         return model;
+    }
+
+    // ========== 步骤5: LoRA微调 ==========
+
+    /**
+     * 执行LoRA微调 - 参数高效微调（特定任务适配）
+     */
+    public static MiniMindModel runLoRAFinetuning(MiniMindModel sftModel) throws IOException {
+        System.out.println("\n" + "=".repeat(80));
+        System.out.println("🔧 步骤5: MiniMind LoRA微调 (Low-Rank Adaptation)");
+        System.out.println("=".repeat(80));
+        System.out.println("💡 LoRA核心思想: 冻结原始参数，只训练低秩分解矩阵");
+
+        // 1. 配置LoRA
+        System.out.println("\n📝 配置LoRA参数...");
+        LoRAConfig loraConfig = new LoRAConfig();
+        loraConfig.setRank(8);
+        loraConfig.setAlpha(16.0f);
+        loraConfig.setDropout(0.1f);
+        loraConfig.setTargetModules(new String[]{"queryProj", "valueProj"});
+        loraConfig.setFreezeOriginal(true);
+
+        System.out.println("  ✓ LoRA秩 (r): " + loraConfig.getRank());
+        System.out.println("  ✓ 缩放因子 (α): " + loraConfig.getAlpha());
+        System.out.println("  ✓ 缩放系数 (α/r): " + loraConfig.getScaling());
+        System.out.println("  ✓ 目标模块: " + String.join(", ", loraConfig.getTargetModules()));
+
+        // 2. 注入 LoRA 层
+        System.out.println("\n📝 注入 LoRA 层到模型...");
+        int injectedCount = sftModel.applyLoRA(loraConfig);
+        if (injectedCount > 0) {
+            sftModel.printLoRAStats();
+        }
+
+        // 3. 准备数据（标准 Alpaca JSONL 格式）
+        System.out.println("\n📝 准备LoRA微调数据...");
+        String trainPath = DATA_DIR + "/sft_train.jsonl";
+
+        MiniMindConfig config = sftModel.getConfig();
+        int batchSize = 2;
+        SFTDataset dataset = new SFTDataset(getSharedTokenizer(), config.getMaxSeqLen(), batchSize);
+        dataset.loadFromJsonl(trainPath);
+        dataset.prepare(true);
+        System.out.println("  ✓ 训练样本数: " + dataset.getSampleCount());
+
+        // 3. 训练
+        System.out.println("\n📝 开始LoRA微调...");
+        System.out.println("  - 学习率: 5e-4");
+        System.out.println("  - 训练轮次: 20 epochs");
+        System.out.println("-".repeat(80));
+
+        LoRATrainer loraTrainer = new LoRATrainer(sftModel, dataset, loraConfig);
+        loraTrainer.configure(20, 5e-4f, 1.0f);
+        loraTrainer.setCheckpointDir(CHECKPOINT_DIR + "/lora");
+        loraTrainer.printTrainableParams();
+        loraTrainer.train();
+
+        System.out.println("-".repeat(80));
+        System.out.println("\n✅ LoRA微调完成!");
+        printLoRASummary();
+
+        return sftModel;
     }
 
     // ========== 步骤6: 推理测试 ==========
@@ -370,12 +372,7 @@ public class DemoTrainingStages {
         MiniMindTokenizer tokenizer = getSharedTokenizer();
 
         // 使用训练数据中出现过的短语作为 prompt，这样模型更容易续写
-        List<String> testPrompts = Arrays.asList(
-            "Machine learning is",
-            "Neural networks are",
-            "Deep learning",
-            "AI technology"
-        );
+        List<String> testPrompts = Arrays.asList("Machine learning is", "Neural networks are", "Deep learning", "AI technology");
 
         System.out.println("\n📝 测试不同生成策略...");
         System.out.println("-".repeat(80));

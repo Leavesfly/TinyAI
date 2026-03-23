@@ -1,0 +1,60 @@
+{"instruction": "What is deep learning?", "input": "", "output": "Deep learning is a subset of machine learning using neural networks with multiple layers"}
+{"instruction": "Explain backpropagation", "input": "", "output": "Backpropagation is an algorithm that computes gradients to update neural network weights"}
+{"instruction": "What is overfitting?", "input": "", "output": "Overfitting occurs when a model memorizes training data instead of learning general patterns"}
+{"instruction": "Define gradient descent", "input": "", "output": "Gradient descent is an optimization algorithm that minimizes loss by updating parameters"}
+{"instruction": "What are transformers?", "input": "", "output": "Transformers are neural network architectures using self-attention mechanisms"}
+{"instruction": "Explain attention mechanism", "input": "", "output": "Attention allows models to focus on relevant parts of input when processing information"}
+{"instruction": "What is fine-tuning?", "input": "", "output": "Fine-tuning adapts pre-trained models to specific tasks with additional training"}
+{"instruction": "Define reinforcement learning", "input": "", "output": "Reinforcement learning trains agents through rewards and penalties for actions"}
+{"instruction": "What is tokenization?", "input": "", "output": "Tokenization splits text into smaller units like words or subwords for processing"}
+{"instruction": "Explain embedding layers", "input": "", "output": "Embedding layers convert discrete tokens into continuous vector representations"}
+{"instruction": "Write a Python function to add two numbers", "input": "", "output": "def add(a, b): return a + b"}
+{"instruction": "Create a loop to print numbers 1 to 5", "input": "", "output": "for i in range(1, 6): print(i)"}
+{"instruction": "Define a class for a person", "input": "", "output": "class Person: def __init__(self, name): self.name = name"}
+{"instruction": "Implement binary search", "input": "", "output": "Binary search finds elements in sorted arrays by dividing search space"}
+{"instruction": "Explain list comprehension", "input": "", "output": "List comprehension creates lists using concise syntax: [x*2 for x in range(10)]"}
+{"instruction": "Summarize this concept: Neural networks", "input": "", "output": "Networks of artificial neurons that learn patterns from data"}
+{"instruction": "Classify this as positive or negative: I love this product", "input": "", "output": "Positive sentiment"}
+{"instruction": "Translate to simple terms: Convolutional neural network", "input": "", "output": "Network specialized for processing grid-like data such as images"}
+{"instruction": "Generate a creative name for an AI assistant", "input": "", "output": "MindBot - your intelligent companion"}
+{"instruction": "Suggest improvements for code readability", "input": "", "output": "Use meaningful variable names and add comments"}
+{"instruction": "How does BERT work?", "input": "", "output": "BERT uses bidirectional transformers to understand context from both directions"}
+{"instruction": "What is GPT?", "input": "", "output": "GPT is a generative pre-trained transformer for autoregressive language modeling"}
+{"instruction": "Explain cross-entropy loss", "input": "", "output": "Cross-entropy measures difference between predicted and true probability distributions"}
+{"instruction": "What is batch normalization?", "input": "", "output": "Batch normalization normalizes layer inputs to stabilize and speed up training"}
+{"instruction": "Define learning rate", "input": "", "output": "Learning rate controls step size in gradient descent optimization"}
+{"instruction": "Sort a list in Python", "input": "", "output": "sorted_list = sorted(my_list) or my_list.sort()"}
+{"instruction": "Handle exceptions in Python", "input": "", "output": "try: risky_code() except Exception as e: handle_error(e)"}
+{"instruction": "Read a file in Python", "input": "", "output": "with open('file.txt', 'r') as f: content = f.read()"}
+{"instruction": "Create a dictionary", "input": "", "output": "my_dict = {'key1': 'value1', 'key2': 'value2'}"}
+{"instruction": "Use list slicing", "input": "", "output": "first_three = my_list[:3], last_two = my_list[-2:]"}
+{"instruction": "Explain AI ethics", "input": "", "output": "AI ethics ensures responsible development considering fairness bias and transparency"}
+{"instruction": "Compare supervised and unsupervised learning", "input": "", "output": "Supervised uses labels unsupervised finds patterns without labels"}
+{"instruction": "Recommend a machine learning algorithm", "input": "", "output": "For classification try random forest or neural networks"}
+{"instruction": "Debug this error: IndexError", "input": "", "output": "Check array bounds and ensure index is within valid range"}
+{"instruction": "Optimize slow code", "input": "", "output": "Profile to find bottlenecks use efficient algorithms and data structures"}
+{"instruction": "What is transfer learning?", "input": "", "output": "Transfer learning reuses pre-trained models for new related tasks"}
+{"instruction": "Explain dropout regularization", "input": "", "output": "Dropout randomly disables neurons during training to prevent overfitting"}
+{"instruction": "What is a loss function?", "input": "", "output": "Loss function quantifies difference between model predictions and true values"}
+{"instruction": "Define activation functions", "input": "", "output": "Activation functions introduce non-linearity enabling networks to learn complex patterns"}
+{"instruction": "What is early stopping?", "input": "", "output": "Early stopping halts training when validation performance stops improving"}
+{"instruction": "Import libraries in Python", "input": "", "output": "import numpy as np, import pandas as pd"}
+{"instruction": "Create a virtual environment", "input": "", "output": "python -m venv myenv, source myenv/bin/activate"}
+{"instruction": "Install packages", "input": "", "output": "pip install package_name"}
+{"instruction": "Format strings in Python", "input": "", "output": "f'Hello {name}' or 'Hello {}'.format(name)"}
+{"instruction": "Use lambda functions", "input": "", "output": "square = lambda x: x**2"}
+{"instruction": "Improve model accuracy", "input": "", "output": "Try feature engineering data augmentation or ensemble methods"}
+{"instruction": "Reduce training time", "input": "", "output": "Use smaller batches GPU acceleration or model pruning"}
+{"instruction": "Prevent data leakage", "input": "", "output": "Split data before preprocessing keep test set completely separate"}
+{"instruction": "Handle imbalanced data", "input": "", "output": "Use oversampling undersampling or class weights"}
+{"instruction": "Validate model performance", "input": "", "output": "Use cross-validation and multiple metrics"}
+{"instruction": "What is ensemble learning?", "input": "", "output": "Ensemble learning combines multiple models to improve predictions"}
+{"instruction": "Explain feature engineering", "input": "", "output": "Feature engineering creates informative variables from raw data"}
+{"instruction": "What is regularization?", "input": "", "output": "Regularization adds penalties to prevent overfitting and improve generalization"}
+{"instruction": "Define precision and recall", "input": "", "output": "Precision is accuracy of positive predictions recall is coverage of actual positives"}
+{"instruction": "What is the bias-variance tradeoff?", "input": "", "output": "Balancing model complexity to minimize both underfitting and overfitting"}
+{"instruction": "Use NumPy arrays", "input": "", "output": "import numpy as np, arr = np.array([1, 2, 3])"}
+{"instruction": "Plot data with Matplotlib", "input": "", "output": "import matplotlib.pyplot as plt, plt.plot(x, y), plt.show()"}
+{"instruction": "Create pandas DataFrame", "input": "", "output": "import pandas as pd, df = pd.DataFrame(data)"}
+{"instruction": "Apply function to DataFrame", "input": "", "output": "df['new_col'] = df['col'].apply(lambda x: x*2)"}
+{"instruction": "Split train-test data", "input": "", "output": "from sklearn.model_selection import train_test_split"}

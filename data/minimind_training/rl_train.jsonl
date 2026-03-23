@@ -1,0 +1,40 @@
+{"prompt": "What is machine learning?", "response": "Machine learning enables computers to learn from data without explicit programming", "reward": 1.0}
+{"prompt": "Explain neural networks", "response": "Neural networks are computing systems inspired by biological brains", "reward": 0.9}
+{"prompt": "What is deep learning?", "response": "Deep learning uses multi-layer neural networks for complex pattern recognition", "reward": 0.8}
+{"prompt": "Write clean code", "response": "Use meaningful names add comments and follow style guidelines", "reward": 1.0}
+{"prompt": "Debug efficiently", "response": "Use print statements debuggers and unit tests", "reward": 0.9}
+{"prompt": "Improve performance", "response": "Optimize algorithms and use better data structures", "reward": 0.7}
+{"prompt": "Ensure code quality", "response": "Write tests review code and refactor regularly", "reward": 0.8}
+{"prompt": "What is AI safety?", "response": "AI safety ensures systems behave reliably and aligned with human values", "reward": 1.0}
+{"prompt": "Define model interpretability", "response": "Interpretability makes model decisions understandable to humans", "reward": 0.9}
+{"prompt": "What is fairness in AI?", "response": "Fairness prevents discrimination and ensures equitable treatment", "reward": 0.8}
+{"prompt": "Handle errors gracefully", "response": "Use try-except blocks and provide informative error messages", "reward": 1.0}
+{"prompt": "Write efficient code", "response": "Avoid unnecessary loops and use vectorized operations", "reward": 0.9}
+{"prompt": "Document your code", "response": "Write clear docstrings and maintain README files", "reward": 0.8}
+{"prompt": "Test thoroughly", "response": "Cover edge cases and use both unit and integration tests", "reward": 0.7}
+{"prompt": "What is gradient descent?", "response": "Gradient descent iteratively updates parameters to minimize loss", "reward": 1.0}
+{"prompt": "Explain overfitting prevention", "response": "Use regularization dropout and cross-validation", "reward": 0.9}
+{"prompt": "What is transfer learning?", "response": "Transfer learning applies knowledge from one task to another", "reward": 0.8}
+{"prompt": "Optimize hyperparameters", "response": "Use grid search random search or Bayesian optimization", "reward": 1.0}
+{"prompt": "Prevent data leakage", "response": "Split data properly and avoid using test information", "reward": 0.9}
+{"prompt": "Improve model robustness", "response": "Use data augmentation and adversarial training", "reward": 0.8}
+{"prompt": "Monitor model performance", "response": "Track metrics and set up alerts for degradation", "reward": 0.7}
+{"prompt": "What is attention mechanism?", "response": "Attention helps models focus on relevant input parts", "reward": 1.0}
+{"prompt": "Explain transformer architecture", "response": "Transformers use self-attention for parallel processing", "reward": 0.9}
+{"prompt": "What is BERT?", "response": "BERT uses bidirectional transformers for language understanding", "reward": 0.8}
+{"prompt": "Design scalable systems", "response": "Use modular architecture and efficient algorithms", "reward": 1.0}
+{"prompt": "Ensure reproducibility", "response": "Set random seeds and document all parameters", "reward": 0.9}
+{"prompt": "Validate assumptions", "response": "Check data distributions and verify preprocessing steps", "reward": 0.8}
+{"prompt": "Communicate results", "response": "Use visualizations and explain in simple terms", "reward": 0.7}
+{"prompt": "What is fine-tuning?", "response": "Fine-tuning adapts pre-trained models to specific tasks", "reward": 1.0}
+{"prompt": "Explain data augmentation", "response": "Data augmentation increases diversity by transforming existing data", "reward": 0.9}
+{"prompt": "What is batch normalization?", "response": "Batch normalization normalizes inputs to stabilize training", "reward": 0.8}
+{"prompt": "Write modular code", "response": "Break complex functions into smaller reusable components", "reward": 1.0}
+{"prompt": "Follow best practices", "response": "Use version control write tests and review code", "reward": 0.9}
+{"prompt": "Optimize memory usage", "response": "Use generators avoid copying and release resources", "reward": 0.8}
+{"prompt": "Profile code performance", "response": "Identify bottlenecks and optimize critical paths", "reward": 0.7}
+{"prompt": "What is ensemble learning?", "response": "Ensemble learning combines multiple models for better predictions", "reward": 1.0}
+{"prompt": "Explain cross-validation", "response": "Cross-validation assesses model performance on multiple data splits", "reward": 0.9}
+{"prompt": "What is feature engineering?", "response": "Feature engineering creates informative variables from raw data", "reward": 0.8}
+{"prompt": "Handle edge cases", "response": "Test boundary conditions and null inputs", "reward": 1.0}
+{"prompt": "Maintain code quality", "response": "Refactor regularly and eliminate technical debt", "reward": 0.9}

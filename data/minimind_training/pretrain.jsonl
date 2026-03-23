@@ -1,0 +1,150 @@
+{"text": "Deep learning is a subset of machine learning that uses neural networks"}
+{"text": "Neural networks consist of interconnected layers of neurons"}
+{"text": "Backpropagation is the algorithm used to train neural networks"}
+{"text": "Gradient descent optimizes neural network parameters"}
+{"text": "Activation functions introduce non-linearity into neural networks"}
+{"text": "Convolutional neural networks excel at image processing tasks"}
+{"text": "Recurrent neural networks process sequential data effectively"}
+{"text": "Transformer architecture revolutionized natural language processing"}
+{"text": "Attention mechanism allows models to focus on relevant information"}
+{"text": "Pre-training followed by fine-tuning is a common training strategy"}
+{"text": "Overfitting occurs when a model memorizes training data"}
+{"text": "Regularization techniques prevent overfitting in neural networks"}
+{"text": "Dropout randomly disables neurons during training"}
+{"text": "Batch normalization stabilizes training of deep networks"}
+{"text": "Learning rate controls the speed of gradient descent"}
+{"text": "Adam optimizer adapts learning rates for each parameter"}
+{"text": "Loss function measures the difference between prediction and truth"}
+{"text": "Cross-entropy loss is commonly used for classification"}
+{"text": "Mean squared error is used for regression problems"}
+{"text": "Early stopping prevents overfitting by monitoring validation loss"}
+{"text": "Data augmentation increases training data diversity"}
+{"text": "Transfer learning reuses pre-trained models for new tasks"}
+{"text": "Embedding layers convert discrete tokens into continuous vectors"}
+{"text": "Positional encoding adds position information to embeddings"}
+{"text": "Multi-head attention processes information in parallel"}
+{"text": "Feedforward networks transform attention outputs"}
+{"text": "Layer normalization normalizes activations across features"}
+{"text": "Residual connections help gradients flow through deep networks"}
+{"text": "Softmax function converts logits to probabilities"}
+{"text": "Tokenization splits text into meaningful units"}
+{"text": "Language models predict the next word in a sequence"}
+{"text": "Autoregressive models generate text one token at a time"}
+{"text": "BERT uses bidirectional context for understanding"}
+{"text": "GPT models use unidirectional context for generation"}
+{"text": "Fine-tuning adapts pre-trained models to specific tasks"}
+{"text": "Text classification assigns categories to documents"}
+{"text": "Named entity recognition identifies entities in text"}
+{"text": "Sentiment analysis determines emotional tone of text"}
+{"text": "Machine translation converts text between languages"}
+{"text": "Question answering systems extract answers from context"}
+{"text": "Summarization condenses long text into key points"}
+{"text": "Text generation creates coherent natural language"}
+{"text": "Perplexity measures language model quality"}
+{"text": "BLEU score evaluates machine translation quality"}
+{"text": "Word embeddings capture semantic relationships"}
+{"text": "Byte-pair encoding handles rare words effectively"}
+{"text": "Subword tokenization balances vocabulary size and coverage"}
+{"text": "Masked language modeling is used in BERT pre-training"}
+{"text": "Causal language modeling is used in GPT pre-training"}
+{"text": "Few-shot learning enables models to learn from examples"}
+{"text": "Zero-shot learning performs tasks without specific training"}
+{"text": "Prompt engineering guides model behavior through input design"}
+{"text": "In-context learning uses examples within the prompt"}
+{"text": "Instruction tuning teaches models to follow commands"}
+{"text": "Reinforcement learning from human feedback aligns models"}
+{"text": "Temperature controls randomness in text generation"}
+{"text": "Top-k sampling limits choices to k most probable tokens"}
+{"text": "Top-p sampling uses cumulative probability threshold"}
+{"text": "Beam search explores multiple generation paths"}
+{"text": "Greedy decoding always selects the most probable token"}
+{"text": "Supervised learning uses labeled data for training"}
+{"text": "Unsupervised learning finds patterns without labels"}
+{"text": "Reinforcement learning learns through rewards and penalties"}
+{"text": "Classification predicts discrete categories"}
+{"text": "Regression predicts continuous values"}
+{"text": "Clustering groups similar data points together"}
+{"text": "Dimensionality reduction simplifies high-dimensional data"}
+{"text": "Feature engineering creates informative input variables"}
+{"text": "Cross-validation assesses model generalization"}
+{"text": "Train-test split separates data for training and evaluation"}
+{"text": "Validation set helps tune hyperparameters"}
+{"text": "Precision measures positive prediction accuracy"}
+{"text": "Recall measures coverage of actual positives"}
+{"text": "F1 score balances precision and recall"}
+{"text": "Accuracy measures overall prediction correctness"}
+{"text": "Confusion matrix visualizes classification performance"}
+{"text": "ROC curve plots true positive versus false positive rates"}
+{"text": "AUC measures area under ROC curve"}
+{"text": "Bias-variance tradeoff affects model performance"}
+{"text": "Ensemble methods combine multiple models"}
+{"text": "Bagging reduces variance through averaging"}
+{"text": "Boosting sequentially improves weak learners"}
+{"text": "Random forest uses ensemble of decision trees"}
+{"text": "Gradient boosting builds trees to correct errors"}
+{"text": "Neural architecture search automates model design"}
+{"text": "Hyperparameter tuning optimizes model configuration"}
+{"text": "Grid search exhaustively tries parameter combinations"}
+{"text": "Random search samples parameter space randomly"}
+{"text": "Bayesian optimization uses probabilistic models"}
+{"text": "Meta-learning enables learning to learn"}
+{"text": "Artificial intelligence transforms many industries"}
+{"text": "AI ethics ensures responsible development"}
+{"text": "Fairness in AI prevents discrimination"}
+{"text": "Bias in training data leads to biased models"}
+{"text": "Transparency makes AI decisions interpretable"}
+{"text": "Explainable AI helps humans understand model reasoning"}
+{"text": "Privacy protection is crucial in AI systems"}
+{"text": "Data security prevents unauthorized access"}
+{"text": "AI safety ensures systems behave as intended"}
+{"text": "Robustness makes models resilient to attacks"}
+{"text": "Adversarial examples fool neural networks"}
+{"text": "Model interpretability reveals decision factors"}
+{"text": "Feature importance shows influential variables"}
+{"text": "Attention visualization reveals focus areas"}
+{"text": "Counterfactual explanations show decision boundaries"}
+{"text": "AI applications include healthcare diagnostics"}
+{"text": "Computer vision enables autonomous vehicles"}
+{"text": "Natural language processing powers virtual assistants"}
+{"text": "Recommendation systems personalize user experiences"}
+{"text": "Fraud detection identifies suspicious transactions"}
+{"text": "Predictive maintenance prevents equipment failures"}
+{"text": "Drug discovery accelerates pharmaceutical research"}
+{"text": "Climate modeling predicts environmental changes"}
+{"text": "Robotics combines AI with physical systems"}
+{"text": "Speech recognition converts audio to text"}
+{"text": "Image generation creates realistic visuals"}
+{"text": "Style transfer applies artistic styles to images"}
+{"text": "Anomaly detection identifies unusual patterns"}
+{"text": "Time series forecasting predicts future values"}
+{"text": "Knowledge graphs organize structured information"}
+{"text": "Programming languages enable human-computer communication"}
+{"text": "Python is popular for machine learning development"}
+{"text": "Java offers robust object-oriented programming"}
+{"text": "JavaScript powers interactive web applications"}
+{"text": "Data structures organize and store information"}
+{"text": "Algorithms solve computational problems efficiently"}
+{"text": "Version control tracks code changes over time"}
+{"text": "Git is widely used for version control"}
+{"text": "Code review improves software quality"}
+{"text": "Unit testing verifies individual components"}
+{"text": "Integration testing checks component interactions"}
+{"text": "Continuous integration automates testing"}
+{"text": "Software design patterns solve common problems"}
+{"text": "Object-oriented programming uses classes and objects"}
+{"text": "Functional programming emphasizes pure functions"}
+{"text": "Debugging identifies and fixes code errors"}
+{"text": "Profiling measures code performance"}
+{"text": "Optimization improves execution speed"}
+{"text": "Memory management prevents resource leaks"}
+{"text": "Exception handling manages runtime errors"}
+{"text": "API design defines software interfaces"}
+{"text": "Documentation explains code functionality"}
+{"text": "Code refactoring improves code structure"}
+{"text": "Modularity breaks code into manageable pieces"}
+{"text": "Abstraction hides implementation details"}
+{"text": "Encapsulation bundles data with methods"}
+{"text": "Inheritance enables code reuse"}
+{"text": "Polymorphism allows flexible implementations"}
+{"text": "Dependency injection improves testability"}
+{"text": "Clean code principles enhance readability"}

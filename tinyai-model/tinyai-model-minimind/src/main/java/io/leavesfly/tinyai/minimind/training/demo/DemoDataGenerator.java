@@ -1,5 +1,7 @@
 package io.leavesfly.tinyai.minimind.training.demo;
 
+import org.json.JSONObject;
+
 import java.io.*;
 import java.util.*;
 
@@ -218,8 +220,12 @@ public class DemoDataGenerator {
             "Clean code principles enhance readability"
         ));
 
-        String filePath = DATA_DIR + "/pretrain.txt";
-        writeToFile(texts, filePath);
+        String filePath = DATA_DIR + "/pretrain.jsonl";
+        List<String> jsonLines = new ArrayList<>();
+        for (String text : texts) {
+            jsonLines.add(new JSONObject().put("text", text).toString());
+        }
+        writeJsonlFile(jsonLines, filePath);
         System.out.println("  ✓ 预训练数据: " + texts.size() + " 条");
         System.out.println("  ✓ 保存路径: " + filePath);
     }
@@ -301,12 +307,32 @@ public class DemoDataGenerator {
             valTexts.add(trainTexts.get(i));
         }
 
-        String trainPath = DATA_DIR + "/sft_train.txt";
-        writeToFile(trainTexts, trainPath);
+        String trainPath = DATA_DIR + "/sft_train.jsonl";
+        List<String> trainJsonLines = new ArrayList<>();
+        for (String text : trainTexts) {
+            String[] parts = text.split(" Answer: ", 2);
+            if (parts.length == 2) {
+                trainJsonLines.add(new JSONObject()
+                        .put("instruction", parts[0])
+                        .put("input", "")
+                        .put("output", parts[1]).toString());
+            }
+        }
+        writeJsonlFile(trainJsonLines, trainPath);
         System.out.println("  ✓ SFT训练集: " + trainTexts.size() + " 条");
 
-        String valPath = DATA_DIR + "/sft_val.txt";
-        writeToFile(valTexts, valPath);
+        String valPath = DATA_DIR + "/sft_val.jsonl";
+        List<String> valJsonLines = new ArrayList<>();
+        for (String text : valTexts) {
+            String[] parts = text.split(" Answer: ", 2);
+            if (parts.length == 2) {
+                valJsonLines.add(new JSONObject()
+                        .put("instruction", parts[0])
+                        .put("input", "")
+                        .put("output", parts[1]).toString());
+            }
+        }
+        writeJsonlFile(valJsonLines, valPath);
         System.out.println("  ✓ SFT验证集: " + valTexts.size() + " 条");
     }
 
@@ -352,8 +378,18 @@ public class DemoDataGenerator {
             "Instruction: Refactor code|||Extract methods for reuse, eliminate duplication, simplify complex logic, improve naming, and maintain test coverage.|||Clean up code."
         ));
 
-        String filePath = DATA_DIR + "/dpo_train.txt";
-        writeToFile(dpoTexts, filePath);
+        String filePath = DATA_DIR + "/dpo_train.jsonl";
+        List<String> jsonLines = new ArrayList<>();
+        for (String text : dpoTexts) {
+            String[] parts = text.split("\\|\\|\\|");
+            if (parts.length == 3) {
+                jsonLines.add(new JSONObject()
+                        .put("prompt", parts[0].trim())
+                        .put("chosen", parts[1].trim())
+                        .put("rejected", parts[2].trim()).toString());
+            }
+        }
+        writeJsonlFile(jsonLines, filePath);
         System.out.println("  ✓ DPO偏好对: " + dpoTexts.size() + " 条");
     }
 
@@ -408,20 +444,38 @@ public class DemoDataGenerator {
             "[REWARD:0.9] Task: Maintain code quality Answer: Refactor regularly and eliminate technical debt"
         ));
 
-        String filePath = DATA_DIR + "/rl_train.txt";
-        writeToFile(rlTexts, filePath);
+        String filePath = DATA_DIR + "/rl_train.jsonl";
+        List<String> jsonLines = new ArrayList<>();
+        for (String text : rlTexts) {
+            // 解析格式: [REWARD:0.9] Question: xxx Answer: yyy
+            float reward = 0.5f;
+            String content = text;
+            if (text.startsWith("[REWARD:")) {
+                int endBracket = text.indexOf("]");
+                reward = Float.parseFloat(text.substring(8, endBracket));
+                content = text.substring(endBracket + 2);
+            }
+            String[] parts = content.split(" Answer: ", 2);
+            if (parts.length == 2) {
+                jsonLines.add(new JSONObject()
+                        .put("prompt", parts[0].trim())
+                        .put("response", parts[1].trim())
+                        .put("reward", reward).toString());
+            }
+        }
+        writeJsonlFile(jsonLines, filePath);
         System.out.println("  ✓ RL训练数据: " + rlTexts.size() + " 条");
     }
 
     /**
-     * 将文本列表写入文件，每行一条
+     * 将 JSONL 行列表写入文件，每行一条 JSON
      *
-     * @param lines    文本行列表
-     * @param filePath 文件路径
+     * @param jsonLines JSONL 行列表
+     * @param filePath  文件路径
      */
-    private static void writeToFile(List<String> lines, String filePath) throws IOException {
+    private static void writeJsonlFile(List<String> jsonLines, String filePath) throws IOException {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
-            for (String line : lines) {
+            for (String line : jsonLines) {
                 writer.write(line);
                 writer.newLine();
             }

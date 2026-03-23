@@ -367,6 +367,75 @@ public class MiniMindModel extends Model {
     }
     
     /**
+     * 合并 LoRA 权重到原始权重，并将 LoRALinear 替换回普通 Linear 层
+     * <p>
+     * 保存模型前调用此方法，确保加载后的模型不再依赖 LoRA 结构，
+     * 推理结果与合并前完全一致。
+     *
+     * @return 合并的 LoRA 层数量
+     */
+    public int mergeLoRA() {
+        if (config.isUseMoE()) {
+            System.out.println("⚠️ MoE 模式暂不支持 LoRA 合并");
+            return 0;
+        }
+
+        int mergedCount = 0;
+
+        for (MiniMindTransformerLayer layer : miniMindBlock.getLayers()) {
+            MultiHeadAttention attention = layer.getAttention();
+
+            if (attention.getQueryProj() instanceof LoRALinear) {
+                LoRALinear loraLinear = (LoRALinear) attention.getQueryProj();
+                Linear mergedLinear = mergeLoRAToLinear("query_proj", loraLinear);
+                attention.setQueryProj(mergedLinear);
+                mergedCount++;
+            }
+
+            if (attention.getValueProj() instanceof LoRALinear) {
+                LoRALinear loraLinear = (LoRALinear) attention.getValueProj();
+                Linear mergedLinear = mergeLoRAToLinear("value_proj", loraLinear);
+                attention.setValueProj(mergedLinear);
+                mergedCount++;
+            }
+        }
+
+        if (mergedCount > 0) {
+            System.out.println("✅ LoRA 权重合并完成: " + mergedCount + " 个层已合并回 Linear");
+        } else {
+            System.out.println("⚠️ 未检测到需要合并的 LoRA 层");
+        }
+
+        return mergedCount;
+    }
+
+    /**
+     * 将单个 LoRALinear 合并为普通 Linear 层
+     */
+    private Linear mergeLoRAToLinear(String name, LoRALinear loraLinear) {
+        NdArray mergedWeight = loraLinear.mergeWeights();
+        int inFeatures = loraLinear.inFeatures;
+        int outFeatures = loraLinear.outFeatures;
+        boolean hasBias = loraLinear.getOriginalBias() != null;
+
+        Linear linear = new Linear(name, inFeatures, outFeatures, hasBias);
+
+        // 将合并后的权重复制到新 Linear 层
+        float[] src = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) mergedWeight).buffer;
+        float[] dst = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) linear.getWeight().data()).buffer;
+        System.arraycopy(src, 0, dst, 0, src.length);
+
+        // 复制偏置
+        if (hasBias) {
+            float[] biasSrc = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) loraLinear.getOriginalBias().data()).buffer;
+            float[] biasDst = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) linear.getBias().data()).buffer;
+            System.arraycopy(biasSrc, 0, biasDst, 0, biasSrc.length);
+        }
+
+        return linear;
+    }
+
+    /**
      * 获取 LoRA 参数统计
      */
     public void printLoRAStats() {

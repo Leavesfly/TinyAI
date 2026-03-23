@@ -6,6 +6,7 @@ import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
 
 /**
@@ -80,6 +81,11 @@ public class MultiHeadAttention extends Module {
     private final float dropoutRate;
 
     /**
+     * 注意力权重的 Dropout 层
+     */
+    private final Dropout attnDropout;
+
+    /**
      * 是否处于训练模式
      */
     private boolean training = true;
@@ -126,6 +132,10 @@ public class MultiHeadAttention extends Module {
         registerModule("key_proj", keyProj);
         registerModule("value_proj", valueProj);
         registerModule("output_proj", outputProj);
+
+        // 创建注意力 Dropout
+        this.attnDropout = new Dropout("attn_dropout", dropoutRate);
+        registerModule("attn_dropout", attnDropout);
 
         // 创建 RoPE 位置编码
         this.rope = new RotaryPositionEmbedding(headDim, maxSeqLen);
@@ -226,8 +236,10 @@ public class MultiHeadAttention extends Module {
         // 7. Softmax 归一化 (在最后一个维度上)
         Variable attnWeights = softmaxLastDim(scores, batchSize, numHeads, seqLen, kvSeqLen);
         
-        // 8. Dropout（训练时）- 简化实现，略过
-        // TODO: 实现 Variable 层面的 dropout
+        // 8. Dropout（训练时）
+        if (training) {
+            attnWeights = attnDropout.forward(attnWeights);
+        }
         
         // 9. 应用注意力权重：output = attnWeights @ V
         // [batch*numHeads, seqLen, kvSeqLen] @ [batch*numHeads, kvSeqLen, headDim]
@@ -241,9 +253,26 @@ public class MultiHeadAttention extends Module {
 
     /**
      * 设置训练模式
+     * <p>
+     * 同时传播到所有投影层子模块（包括 LoRALinear 等需要感知训练模式的层）
      */
     public void setTraining(boolean training) {
         this.training = training;
+        // 传播到投影层子模块（LoRALinear 的 Dropout 依赖 _training 状态）
+        if (queryProj != null) {
+            queryProj.train(training);
+        }
+        if (keyProj != null) {
+            keyProj.train(training);
+        }
+        if (valueProj != null) {
+            valueProj.train(training);
+        }
+        if (outputProj != null) {
+            outputProj.train(training);
+        }
+        // 同步注意力 Dropout 的训练状态
+        attnDropout.train(training);
     }
 
     /**

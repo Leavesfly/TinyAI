@@ -50,12 +50,20 @@ public class MiniMindTrainDemo {
             // 步骤4: 强化学习训练
             MiniMindModel rlModel = runReinforcementLearningTraining(dpoModel);
 
+            // LoRA微调前推理 - 记录基线效果
+            runInferenceForComparison(rlModel, "LoRA微调前推理（基线效果）");
+
             // 步骤5: LoRA微调（特定任务适配）
             MiniMindModel loraModel = runLoRAFinetuning(rlModel);
+
+            // LoRA微调后推理 - 与基线对比
+            runInferenceForComparison(loraModel, "LoRA微调后推理（微调效果）");
 
             // 保存最终模型到 CHECKPOINT_DIR/model/ 目录
             String modelName = loraModel.getName();
             System.out.println("\n💾 保存最终模型...");
+            // 合并 LoRA 权重到原始权重，确保保存/加载后推理结果一致
+            loraModel.mergeLoRA();
             ModelLoader.saveModel(loraModel, getSharedTokenizer(), modelName);
 
             // 步骤6: 从模型文件加载并推理测试

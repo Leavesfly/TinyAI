@@ -51,7 +51,7 @@ public class DemoTrainingStages {
 
         // 1. 创建分词器
         System.out.println("\n📝 创建分词器...");
-        int maxSeqLen = 64;
+        int maxSeqLen = 32;
         MiniMindTokenizer tokenizer = MiniMindTokenizer.createSimpleTokenizer(maxSeqLen);
         setSharedTokenizer(tokenizer);
         System.out.println("  ✓ 分词器类型: 动态词汇表 (Simple-GPT1风格)");
@@ -295,6 +295,67 @@ public class DemoTrainingStages {
         printRLSummary();
 
         return model;
+    }
+
+    // ========== LoRA微调前推理对比 ==========
+
+    /**
+     * 在 LoRA 微调前执行推理测试，用于与微调后效果对比
+     * 直接使用内存中的模型进行推理，无需从文件加载
+     *
+     * @param model     当前模型（LoRA微调前）
+     * @param stageLabel 阶段标签，用于输出区分
+     */
+    public static void runInferenceForComparison(MiniMindModel model, String stageLabel) {
+        System.out.println("\n" + "=".repeat(80));
+        System.out.println("🔍 " + stageLabel);
+        System.out.println("=".repeat(80));
+
+        MiniMindTokenizer tokenizer = getSharedTokenizer();
+        model.setTraining(false);
+
+        List<String> testPrompts = Arrays.asList(
+                "Machine learning is",
+                "Neural networks are",
+                "Deep learning",
+                "AI technology"
+        );
+
+        System.out.println("\n📝 推理输出 (" + stageLabel + "):");
+        System.out.println("-".repeat(80));
+
+        for (String prompt : testPrompts) {
+            System.out.println("\n📌 Prompt: \"" + prompt + "\"");
+            try {
+                List<Integer> promptTokens = tokenizer.encode(prompt);
+                int[] promptIds = promptTokens.stream().mapToInt(Integer::intValue).toArray();
+                int promptLen = promptIds.length;
+
+                // 贪婪解码
+                int[] greedyResult = model.generate(promptIds, 30, 0.0f, 0, 0.0f, 1.5f);
+                String greedyGenerated = extractGenerated(tokenizer, greedyResult, promptLen);
+                if (greedyGenerated.equals(" [无新生成]") || greedyGenerated.equals(" [空]")) {
+                    int[] fallbackResult = model.generate(promptIds, 30, 0.5f, 0, 0.0f, 1.5f);
+                    greedyGenerated = extractGenerated(tokenizer, fallbackResult, promptLen);
+                    System.out.println("  [Greedy→T=0.5] → " + prompt + greedyGenerated);
+                } else {
+                    System.out.println("  [Greedy]      → " + prompt + greedyGenerated);
+                }
+
+                // Temperature 采样
+                int[] tempResult = model.generate(promptIds, 30, 0.8f, 0, 0.0f);
+                String tempGenerated = extractGenerated(tokenizer, tempResult, promptLen);
+                System.out.println("  [Temp=0.8]    → " + prompt + tempGenerated);
+
+            } catch (Exception e) {
+                System.out.println("  ⚠ 生成失败: " + e.getMessage());
+            }
+        }
+
+        System.out.println("\n" + "-".repeat(80));
+
+        // 恢复为训练模式，以便后续训练阶段使用
+        model.setTraining(true);
     }
 
     // ========== 步骤5: LoRA微调 ==========

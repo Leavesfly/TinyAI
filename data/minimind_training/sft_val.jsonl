@@ -1,10 +1,10 @@
-{"instruction": "What is deep learning?", "input": "", "output": "Deep learning is a subset of machine learning using neural networks with multiple layers"}
-{"instruction": "Explain backpropagation", "input": "", "output": "Backpropagation is an algorithm that computes gradients to update neural network weights"}
-{"instruction": "What is overfitting?", "input": "", "output": "Overfitting occurs when a model memorizes training data instead of learning general patterns"}
-{"instruction": "Define gradient descent", "input": "", "output": "Gradient descent is an optimization algorithm that minimizes loss by updating parameters"}
-{"instruction": "What are transformers?", "input": "", "output": "Transformers are neural network architectures using self-attention mechanisms"}
-{"instruction": "Explain attention mechanism", "input": "", "output": "Attention allows models to focus on relevant parts of input when processing information"}
-{"instruction": "What is fine-tuning?", "input": "", "output": "Fine-tuning adapts pre-trained models to specific tasks with additional training"}
-{"instruction": "Define reinforcement learning", "input": "", "output": "Reinforcement learning trains agents through rewards and penalties for actions"}
-{"instruction": "What is tokenization?", "input": "", "output": "Tokenization splits text into smaller units like words or subwords for processing"}
-{"instruction": "Explain embedding layers", "input": "", "output": "Embedding layers convert discrete tokens into continuous vector representations"}
+{"output":"Deep learning is a subset of machine learning using neural networks with multiple layers","input":"","instruction":"Question: What is deep learning?"}
+{"output":"Backpropagation is an algorithm that computes gradients to update neural network weights","input":"","instruction":"Question: Explain backpropagation"}
+{"output":"Overfitting occurs when a model memorizes training data instead of learning general patterns","input":"","instruction":"Question: What is overfitting?"}
+{"output":"Gradient descent is an optimization algorithm that minimizes loss by updating parameters","input":"","instruction":"Question: Define gradient descent"}
+{"output":"Transformers are neural network architectures using self-attention mechanisms","input":"","instruction":"Question: What are transformers?"}
+{"output":"Attention allows models to focus on relevant parts of input when processing information","input":"","instruction":"Question: Explain attention mechanism"}
+{"output":"Fine-tuning adapts pre-trained models to specific tasks with additional training","input":"","instruction":"Question: What is fine-tuning?"}
+{"output":"Reinforcement learning trains agents through rewards and penalties for actions","input":"","instruction":"Question: Define reinforcement learning"}
+{"output":"Tokenization splits text into smaller units like words or subwords for processing","input":"","instruction":"Question: What is tokenization?"}
+{"output":"Embedding layers convert discrete tokens into continuous vector representations","input":"","instruction":"Question: Explain embedding layers"}

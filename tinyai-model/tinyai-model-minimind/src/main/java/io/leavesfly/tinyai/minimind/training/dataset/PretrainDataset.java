@@ -71,57 +71,64 @@ public class PretrainDataset implements Serializable {
     /**
      * 从文本列表加载数据
      * 
+     * 主流做法：将所有文本编码后拼接成一个超长token序列，然后按固定长度连续切分。
+     * 这样每个样本都是满长度的，无需padding，数据利用率最高。
+     * 文档之间用EOS token自然分隔，模型可以学到文档边界。
+     * 
      * @param texts 文本列表
      */
     public void loadFromTexts(List<String> texts) {
         samples.clear();
         
+        // 第一步：将所有文本编码后拼接成一个超长token序列
+        List<Integer> allTokenIds = new ArrayList<>();
         for (String text : texts) {
             if (text == null || text.trim().isEmpty()) {
                 continue;
             }
-            
-            // 对文本进行分词编码
             List<Integer> tokenIds = tokenizer.encode(text, true, true);
-            
-            // 将长文本切分为多个固定长度的序列
-            splitIntoSequences(tokenIds);
+            allTokenIds.addAll(tokenIds);
         }
         
-        System.out.println("数据加载完成,共 " + samples.size() + " 个训练样本");
+        // 第二步：按固定长度连续切分为训练样本
+        splitIntoSequences(allTokenIds);
+        
+        System.out.println("数据加载完成,共 " + allTokenIds.size() + " 个token, "
+                + samples.size() + " 个训练样本");
     }
     
     /**
-     * 将Token序列切分为固定长度的训练样本
+     * 将拼接后的超长token序列按固定长度连续切分为训练样本
      * 
-     * @param tokenIds Token ID列表
+     * 每个样本长度为 maxSeqLen+1，其中前 maxSeqLen 个token作为输入，
+     * 后 maxSeqLen 个token作为目标（右移一位）。
+     * 末尾不足 maxSeqLen+1 的部分直接丢弃，避免引入padding。
+     * 
+     * @param allTokenIds 拼接后的完整Token ID列表
      */
-    private void splitIntoSequences(List<Integer> tokenIds) {
-        int totalLen = tokenIds.size();
+    private void splitIntoSequences(List<Integer> allTokenIds) {
+        int totalLen = allTokenIds.size();
+        int sampleLen = maxSeqLen + 1;
         
-        // 如果序列太短,跳过
-        if (totalLen < 2) {
+        if (totalLen < sampleLen) {
+            // 数据量太少，无法构建完整样本，降级为单个短样本
+            if (totalLen >= 2) {
+                int[] sequence = new int[totalLen];
+                for (int i = 0; i < totalLen; i++) {
+                    sequence[i] = allTokenIds.get(i);
+                }
+                samples.add(sequence);
+            }
             return;
         }
         
-        // 滑动窗口切分
-        for (int i = 0; i + maxSeqLen + 1 <= totalLen; i += maxSeqLen) {
-            int[] sample = new int[maxSeqLen + 1];
-            for (int j = 0; j <= maxSeqLen; j++) {
-                sample[j] = tokenIds.get(i + j);
+        // 连续切分，不重叠，丢弃末尾不足一个完整样本的部分
+        for (int i = 0; i + sampleLen <= totalLen; i += sampleLen) {
+            int[] sequence = new int[sampleLen];
+            for (int j = 0; j < sampleLen; j++) {
+                sequence[j] = allTokenIds.get(i + j);
             }
-            samples.add(sample);
-        }
-        
-        // 处理剩余部分(如果足够长)
-        int remaining = totalLen % maxSeqLen;
-        if (remaining > 10) { // 至少保留10个token
-            int startIdx = totalLen - remaining;
-            int[] sample = new int[remaining];
-            for (int j = 0; j < remaining; j++) {
-                sample[j] = tokenIds.get(startIdx + j);
-            }
-            samples.add(sample);
+            samples.add(sequence);
         }
     }
     
@@ -157,50 +164,41 @@ public class PretrainDataset implements Serializable {
     /**
      * 创建单个批次
      * 
+     * 样本已通过拼接+连续切分生成，长度固定为 maxSeqLen+1，无需padding。
+     * 
      * @param batchSamples 批次样本列表
      * @return 批次对象
      */
     private Batch createBatch(List<int[]> batchSamples) {
         int actualBatchSize = batchSamples.size();
-        
-        // 找出批次中最长的序列
-        int maxLen = batchSamples.stream()
-            .mapToInt(sample -> sample.length)
-            .max()
-            .orElse(maxSeqLen);
+        int seqLen = maxSeqLen;
         
         // 输入数据: [batchSize, seqLen]
-        int[][] inputData = new int[actualBatchSize][maxLen - 1];
+        int[][] inputData = new int[actualBatchSize][seqLen];
         // 目标数据: [batchSize, seqLen]
-        int[][] targetData = new int[actualBatchSize][maxLen - 1];
+        int[][] targetData = new int[actualBatchSize][seqLen];
         
         for (int i = 0; i < actualBatchSize; i++) {
             int[] sample = batchSamples.get(i);
-            int seqLen = sample.length - 1;
+            int validLen = Math.min(sample.length - 1, seqLen);
             
-            // 输入是前n个token
-            for (int j = 0; j < seqLen; j++) {
-                inputData[i][j] = sample[j];
-            }
+            // 输入: sample[0 .. validLen-1]
+            System.arraycopy(sample, 0, inputData[i], 0, validLen);
+            // 目标: sample[1 .. validLen] (右移一位)
+            System.arraycopy(sample, 1, targetData[i], 0, validLen);
             
-            // 目标是后n个token(向右偏移1位)
-            for (int j = 0; j < seqLen; j++) {
-                targetData[i][j] = sample[j + 1];
-            }
-            
-            // 填充到maxLen-1
-            int padTokenId = tokenizer.getVocabulary().getPadTokenId();
-            for (int j = seqLen; j < maxLen - 1; j++) {
-                inputData[i][j] = padTokenId;
-                targetData[i][j] = padTokenId;
+            // padding部分填0（仅在数据量不足时的降级短样本才会触发）
+            for (int j = validLen; j < seqLen; j++) {
+                inputData[i][j] = 0;
+                targetData[i][j] = 0;
             }
         }
         
         // 转换为NdArray
-        NdArray inputArray = createNdArray(inputData, actualBatchSize, maxLen - 1);
-        NdArray targetArray = createNdArray(targetData, actualBatchSize, maxLen - 1);
+        NdArray inputArray = createNdArray(inputData, actualBatchSize, seqLen);
+        NdArray targetArray = createNdArray(targetData, actualBatchSize, seqLen);
         
-        return new Batch(inputArray, targetArray, actualBatchSize, maxLen - 1);
+        return new Batch(inputArray, targetArray, actualBatchSize, seqLen);
     }
     
     /**

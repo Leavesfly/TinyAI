@@ -55,9 +55,9 @@ public class MiniMindMoETransformerLayer extends Module {
     private final LoadBalanceLoss loadBalanceLoss;
 
     /**
-     * MoE 配置
+     * 模型配置
      */
-    private final MoEConfig moeConfig;
+    private final MiniMindConfig config;
 
     /**
      * 是否处于训练模式
@@ -67,13 +67,12 @@ public class MiniMindMoETransformerLayer extends Module {
     /**
      * 构造 MiniMindMoETransformerLayer
      *
-     * @param name      层名称
-     * @param config    模型配置
-     * @param moeConfig MoE 配置
+     * @param name   层名称
+     * @param config 模型配置
      */
-    public MiniMindMoETransformerLayer(String name, MiniMindConfig config, MoEConfig moeConfig) {
+    public MiniMindMoETransformerLayer(String name, MiniMindConfig config) {
         super(name);
-        this.moeConfig = moeConfig;
+        this.config = config;
 
         int hiddenSize = config.getHiddenSize();
         int numHeads = config.getNumHeads();
@@ -100,19 +99,19 @@ public class MiniMindMoETransformerLayer extends Module {
 
         // 4. MoE 层
         this.moeLayer = new MoELayer(
-            moeConfig.getInputDim(),
-            moeConfig.getHiddenDim(),
-            moeConfig.getOutputDim(),
-            moeConfig.getNumExperts(),
-            moeConfig.getTopK(),
-            moeConfig.getNoiseFactor()
+            config.getHiddenSize(),
+            config.getFfnHiddenSize(),
+            config.getHiddenSize(),
+            config.getNumExperts(),
+            config.getNumExpertsPerToken(),
+            config.getMoeNoiseFactor()
         );
         registerModule("moe", moeLayer);
 
         // 5. 负载均衡损失
         this.loadBalanceLoss = new LoadBalanceLoss(
-            moeConfig.getImportanceCoef(),
-            moeConfig.getLoadCoef()
+            config.getMoeImportanceCoef(),
+            config.getMoeLoadCoef()
         );
     }
 
@@ -153,9 +152,9 @@ public class MiniMindMoETransformerLayer extends Module {
 
         // 3. 计算负载均衡损失（复用同一个 routerOutput）
         float balanceLoss = 0.0f;
-        if (training && moeConfig.isEnableLoadBalance()) {
+        if (training && config.isMoeEnableLoadBalance()) {
             MoELayer.LoadBalanceStats stats = moeLayer.getLoadBalanceStats(routerOutput);
-            balanceLoss = loadBalanceLoss.computeLoss(stats, moeConfig.getNumExperts());
+            balanceLoss = loadBalanceLoss.computeLoss(stats, config.getNumExperts());
         }
 
         return new LayerOutput(output, balanceLoss);
@@ -199,7 +198,7 @@ public class MiniMindMoETransformerLayer extends Module {
     @Override
     public String toString() {
         return String.format("MiniMindMoETransformerLayer(hidden=%d, experts=%d, topK=%d)",
-            moeConfig.getInputDim(), moeConfig.getNumExperts(), moeConfig.getTopK());
+            config.getHiddenSize(), config.getNumExperts(), config.getNumExpertsPerToken());
     }
 
     /**

@@ -3,9 +3,8 @@ package io.leavesfly.tinyai.minimind.model;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.minimind.model.attention.KVCache;
 import io.leavesfly.tinyai.minimind.model.embedding.TokenEmbedding;
+import io.leavesfly.tinyai.minimind.model.moe.MiniMindMoETransformerLayer;
 import io.leavesfly.tinyai.minimind.model.transformer.MiniMindTransformerLayer;
-import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
 import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
@@ -14,15 +13,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * MiniMind 模型主体结构
+ * MiniMind 模型主体结构（统一标准模式和 MoE 模式）
  * <p>
  * 架构:
  * 1. Token Embedding 层 - 将 token IDs 转换为向量
- * 2. N 个 Transformer 层 - 堆叠的自注意力层和前馈网络
+ * 2. N 个 Transformer 层 - 标准 FFN 或 MoE FFN（由配置决定）
  * 3. Final LayerNorm - 最终归一化层
  * 4. Language Model Head - 输出层,映射到词汇表
  * <p>
- * 继承自 V2 Module,可作为 Model 的核心组件
+ * 当 config.isUseMoE() 为 true 时,使用 MoE Transformer 层;
+ * 否则使用标准 Transformer 层。
  *
  * @author leavesfly
  * @version 1.0
@@ -40,9 +40,14 @@ public class MiniMindBlock extends Module {
     private final TokenEmbedding tokenEmbedding;
 
     /**
-     * Transformer 层列表
+     * 标准 Transformer 层列表（非 MoE 模式使用）
      */
     private final List<MiniMindTransformerLayer> layers;
+
+    /**
+     * MoE Transformer 层列表（MoE 模式使用）
+     */
+    private final List<MiniMindMoETransformerLayer> moeLayers;
 
     /**
      * 最终归一化层
@@ -60,6 +65,11 @@ public class MiniMindBlock extends Module {
     private boolean training = true;
 
     /**
+     * 累积的负载均衡损失（MoE 模式使用）
+     */
+    private float totalBalanceLoss = 0.0f;
+
+    /**
      * 构造 MiniMindBlock
      *
      * @param config 模型配置
@@ -72,30 +82,41 @@ public class MiniMindBlock extends Module {
         this.tokenEmbedding = new TokenEmbedding(config.getVocabSize(), config.getHiddenSize());
         registerModule("token_embedding", tokenEmbedding);
 
-        // 2. 创建 Transformer 层列表
-        this.layers = new ArrayList<>();
-        for (int i = 0; i < config.getNumLayers(); i++) {
-            MiniMindTransformerLayer layer = new MiniMindTransformerLayer(
-                "layer_" + i,
-                config.getHiddenSize(),
-                config.getNumHeads(),
-                config.getFfnHiddenSize(),
-                config.getMaxSeqLen(),
-                config.getDropout(),
-                config.getEpsilon(),
-                config.getActivationFunction(),
-                config.isPreLayerNorm()
-            );
-            layers.add(layer);
-            registerModule("layer_" + i, layer);
+        // 2. 根据配置创建标准或 MoE Transformer 层
+        if (config.isUseMoE()) {
+            this.layers = null;
+            this.moeLayers = new ArrayList<>();
+            for (int i = 0; i < config.getNumLayers(); i++) {
+                MiniMindMoETransformerLayer layer = new MiniMindMoETransformerLayer(
+                    "moe_layer_" + i, config);
+                moeLayers.add(layer);
+                registerModule("moe_layer_" + i, layer);
+            }
+        } else {
+            this.moeLayers = null;
+            this.layers = new ArrayList<>();
+            for (int i = 0; i < config.getNumLayers(); i++) {
+                MiniMindTransformerLayer layer = new MiniMindTransformerLayer(
+                    "layer_" + i,
+                    config.getHiddenSize(),
+                    config.getNumHeads(),
+                    config.getFfnHiddenSize(),
+                    config.getMaxSeqLen(),
+                    config.getDropout(),
+                    config.getEpsilon(),
+                    config.getActivationFunction(),
+                    config.isPreLayerNorm()
+                );
+                layers.add(layer);
+                registerModule("layer_" + i, layer);
+            }
         }
 
         // 3. 创建最终归一化层
         this.finalNorm = new LayerNorm("final_norm", config.getHiddenSize(), config.getEpsilon());
         registerModule("final_norm", finalNorm);
 
-        // 4. 创建 LM Head (Language Model Head)
-        // 将隐藏状态 [batch, seq_len, hidden_size] 映射到 [batch, seq_len, vocab_size]
+        // 4. 创建 LM Head
         this.lmHead = new Linear("lm_head", config.getHiddenSize(), config.getVocabSize(), false);
         registerModule("lm_head", lmHead);
 
@@ -112,46 +133,59 @@ public class MiniMindBlock extends Module {
     @Override
     public Variable forward(Variable... inputs) {
         Variable tokenIds = inputs[0];
-        return forwardWithCache(tokenIds, null, 0);
+        return forwardWithMoEOutput(tokenIds, null, 0).getOutput();
     }
 
     /**
-     * 带 KV-Cache 的前向传播
+     * 带 KV-Cache 的前向传播（返回 MoEOutput，包含负载均衡损失）
      *
      * @param tokenIds  Token IDs,形状 [batch_size, seq_len]
      * @param kvCaches  KV-Cache 列表（每层一个）,可为 null
      * @param startPos  起始位置（用于 RoPE 和因果掩码）
-     * @return 输出 logits,形状 [batch_size, seq_len, vocab_size]
+     * @return MoE 输出结果（标准模式下 balanceLoss 为 0）
      */
-    public Variable forwardWithCache(Variable tokenIds, List<KVCache> kvCaches, int startPos) {
-        // 1. Token Embedding: [batch, seq_len] -> [batch, seq_len, hidden_size]
+    public MoEOutput forwardWithMoEOutput(Variable tokenIds, List<KVCache> kvCaches, int startPos) {
+        totalBalanceLoss = 0.0f;
+
+        // 1. Token Embedding
         Variable x = tokenEmbedding.forward(tokenIds);
 
         // 2. 通过所有 Transformer 层
-        for (int i = 0; i < layers.size(); i++) {
-            MiniMindTransformerLayer layer = layers.get(i);
-            KVCache kvCache = (kvCaches != null && i < kvCaches.size()) ? kvCaches.get(i) : null;
-            x = layer.forwardWithCache(x, kvCache, startPos);
+        if (config.isUseMoE()) {
+            for (int i = 0; i < moeLayers.size(); i++) {
+                MiniMindMoETransformerLayer layer = moeLayers.get(i);
+                KVCache kvCache = (kvCaches != null && i < kvCaches.size()) ? kvCaches.get(i) : null;
+                MiniMindMoETransformerLayer.LayerOutput layerOutput =
+                    layer.forwardWithCache(x, kvCache, startPos);
+                x = layerOutput.getOutput();
+                totalBalanceLoss += layerOutput.getBalanceLoss();
+            }
+        } else {
+            for (int i = 0; i < layers.size(); i++) {
+                MiniMindTransformerLayer layer = layers.get(i);
+                KVCache kvCache = (kvCaches != null && i < kvCaches.size()) ? kvCaches.get(i) : null;
+                x = layer.forwardWithCache(x, kvCache, startPos);
+            }
         }
 
         // 3. 最终归一化
         x = finalNorm.forward(x);
 
-        // 4. LM Head: [batch, seq_len, hidden_size] -> [batch, seq_len, vocab_size]
+        // 4. LM Head
         Variable logits = lmHead.forward(x);
 
-        return logits;
+        return new MoEOutput(logits, totalBalanceLoss);
+    }
+
+    /**
+     * 带 KV-Cache 的前向传播（仅返回 logits，兼容旧接口）
+     */
+    public Variable forwardWithCache(Variable tokenIds, List<KVCache> kvCaches, int startPos) {
+        return forwardWithMoEOutput(tokenIds, kvCaches, startPos).getOutput();
     }
 
     /**
      * 生成时的前向传播（使用 KV-Cache 优化）
-     * <p>
-     * 用于自回归文本生成,每次只处理一个新 token
-     *
-     * @param tokenId  当前 token ID,形状 [batch_size, 1]
-     * @param kvCaches KV-Cache 列表（每层一个）
-     * @param position 当前位置
-     * @return 输出 logits,形状 [batch_size, 1, vocab_size]
      */
     public Variable forwardGeneration(Variable tokenId, List<KVCache> kvCaches, int position) {
         return forwardWithCache(tokenId, kvCaches, position);
@@ -179,8 +213,6 @@ public class MiniMindBlock extends Module {
 
     /**
      * 清空所有 KV-Cache
-     *
-     * @param kvCaches KV-Cache 列表
      */
     public void clearKVCaches(List<KVCache> kvCaches) {
         if (kvCaches != null) {
@@ -192,13 +224,17 @@ public class MiniMindBlock extends Module {
 
     /**
      * 设置训练模式
-     *
-     * @param training 是否为训练模式
      */
     public void setTraining(boolean training) {
         this.training = training;
-        for (MiniMindTransformerLayer layer : layers) {
-            layer.setTraining(training);
+        if (config.isUseMoE()) {
+            for (MiniMindMoETransformerLayer layer : moeLayers) {
+                layer.setTraining(training);
+            }
+        } else {
+            for (MiniMindTransformerLayer layer : layers) {
+                layer.setTraining(training);
+            }
         }
     }
 
@@ -210,16 +246,55 @@ public class MiniMindBlock extends Module {
     }
 
     /**
-     * 获取 Transformer 层列表
+     * 获取标准 Transformer 层列表（非 MoE 模式）
      */
     public List<MiniMindTransformerLayer> getLayers() {
         return layers;
     }
 
     /**
+     * 获取 MoE Transformer 层列表（MoE 模式）
+     */
+    public List<MiniMindMoETransformerLayer> getMoeLayers() {
+        return moeLayers;
+    }
+
+    /**
+     * 获取总的负载均衡损失（MoE 模式）
+     */
+    public float getTotalBalanceLoss() {
+        return totalBalanceLoss;
+    }
+
+    /**
+     * 获取专家使用统计（MoE 模式）
+     */
+    public String getExpertUsageStats() {
+        if (!config.isUseMoE()) {
+            return "Not a MoE model";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("Expert Usage Statistics:\n");
+        for (int i = 0; i < moeLayers.size(); i++) {
+            sb.append(String.format("Layer %d: %s\n", i, moeLayers.get(i).getUsageStats()));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 重置所有层的统计信息（MoE 模式）
+     */
+    public void resetStats() {
+        if (config.isUseMoE()) {
+            for (MiniMindMoETransformerLayer layer : moeLayers) {
+                layer.resetStats();
+            }
+        }
+        totalBalanceLoss = 0.0f;
+    }
+
+    /**
      * 获取参数数量估算
-     *
-     * @return 参数数量
      */
     public long estimateParameters() {
         return config.estimateParameters();
@@ -230,6 +305,7 @@ public class MiniMindBlock extends Module {
      */
     public void printModelInfo() {
         System.out.println("=== MiniMind Model Structure ===");
+        System.out.println("Mode: " + (config.isUseMoE() ? "MoE" : "Standard"));
         System.out.println("Vocabulary Size: " + config.getVocabSize());
         System.out.println("Max Sequence Length: " + config.getMaxSeqLen());
         System.out.println("Hidden Size: " + config.getHiddenSize());
@@ -237,9 +313,40 @@ public class MiniMindBlock extends Module {
         System.out.println("Number of Heads: " + config.getNumHeads());
         System.out.println("Head Dimension: " + (config.getHiddenSize() / config.getNumHeads()));
         System.out.println("FFN Hidden Size: " + config.getFfnHiddenSize());
+        if (config.isUseMoE()) {
+            System.out.println("Num Experts: " + config.getNumExperts());
+            System.out.println("Experts Per Token: " + config.getNumExpertsPerToken());
+        }
         System.out.println("Dropout: " + config.getDropout());
         System.out.println("Activation: " + config.getActivationFunction());
         System.out.println("Estimated Parameters: " + estimateParameters());
         System.out.println("================================");
+    }
+
+    /**
+     * MoE 输出结果（标准模式下 balanceLoss 为 0）
+     */
+    public static class MoEOutput {
+        private final Variable output;
+        private final float balanceLoss;
+
+        public MoEOutput(Variable output, float balanceLoss) {
+            this.output = output;
+            this.balanceLoss = balanceLoss;
+        }
+
+        public Variable getOutput() {
+            return output;
+        }
+
+        public float getBalanceLoss() {
+            return balanceLoss;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("MoEOutput(shape=%s, balance_loss=%.6f)",
+                output.getShape(), balanceLoss);
+        }
     }
 }

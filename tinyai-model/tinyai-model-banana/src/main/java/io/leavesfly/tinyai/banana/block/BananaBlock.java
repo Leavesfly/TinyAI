@@ -80,7 +80,7 @@ public class BananaBlock extends Module {
         finalLayerNorm = new LayerNorm(
             name + "_final_ln",
             config.getHiddenSize(),
-            (float) config.getLayerNormEpsilon()
+            config.getLayerNormEpsilon()
         );
         registerModule("final_ln", finalLayerNorm);
         

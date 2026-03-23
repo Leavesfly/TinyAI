@@ -4,14 +4,13 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
 
 import io.leavesfly.tinyai.minimind.training.dataset.RLAIFDataset;
+import io.leavesfly.tinyai.minimind.training.rlaif.BaseRLTrainer;
 import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * PPO (Proximal Policy Optimization) 训练器
@@ -29,7 +28,7 @@ import java.util.Map;
  * @author leavesfly
  * @since 2024
  */
-public class PPOTrainer {
+public class PPOTrainer extends BaseRLTrainer {
     
     private final MiniMindModel actor;           // Actor策略网络
     private final ValueNetwork critic;           // Critic价值网络
@@ -54,6 +53,7 @@ public class PPOTrainer {
      */
     public PPOTrainer(MiniMindModel actor, ValueNetwork critic, 
                      RLAIFDataset dataset, PPOConfig config) {
+        super(actor);
         this.actor = actor;
         this.critic = critic;
         this.dataset = dataset;
@@ -108,7 +108,7 @@ public class PPOTrainer {
     /**
      * 训练一个epoch
      */
-    private void trainOneEpoch() {
+    protected void trainOneEpoch() {
         dataset.prepare(true);
         float epochLoss = 0.0f;
         int batchCount = 0;
@@ -247,8 +247,8 @@ public class PPOTrainer {
         totalLoss.backward();
         
         // 4. 梯度裁剪
-        clipGradients(actor);
-        clipGradients(critic);
+        clipGradients(actor, config.getMaxGradNorm());
+        clipGradients(critic, config.getMaxGradNorm());
         
         // 5. 更新参数
         actorOptimizer.update();
@@ -258,19 +258,6 @@ public class PPOTrainer {
         totalLoss.unChainBackward();
         
         return lossValue;
-    }
-    
-    /**
-     * 计算对数概率(简化实现)
-     */
-    private Variable computeLogProb(Variable logits, Variable labels) {
-        // Log softmax
-        Variable logProbs = logSoftmax(logits);
-        
-        // 简化:返回平均对数概率
-        Variable meanLogProb = logProbs.mean(0, true);
-        
-        return meanLogProb;
     }
     
     /**
@@ -288,58 +275,6 @@ public class PPOTrainer {
         float[] buffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) hiddenArray).buffer;
         System.arraycopy(hiddenData, 0, buffer, 0, hiddenDim);
         return new Variable(hiddenArray);
-    }
-    
-    /**
-     * Log Softmax
-     */
-    private Variable logSoftmax(Variable x) {
-        Variable expX = x.exp();
-        Variable sumExp = expX.sum();
-        Variable logSumExp = sumExp.log();
-        return x.sub(logSumExp);
-    }
-    
-    /**
-     * 梯度裁剪
-     */
-    private void clipGradients(Object model) {
-        float maxNorm = config.getMaxGradNorm();
-        if (maxNorm <= 0) return;
-        
-        Map<String, Parameter> params;
-        if (model instanceof MiniMindModel) {
-            params = ((MiniMindModel) model).getAllParams();
-        } else if (model instanceof ValueNetwork) {
-            // ValueNetwork返回v2.core.ParameterV1,需要跳过
-            return; // 暂不支持ValueNetwork的梯度裁剪
-        } else {
-            return;
-        }
-        
-        float totalNorm = 0.0f;
-        for (Parameter param : params.values()) {
-            if (param.getGrad() != null) {
-                float[] gradData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) param.getGrad()).buffer;
-                for (float g : gradData) {
-                    totalNorm += g * g;
-                }
-            }
-        }
-        
-        totalNorm = (float) Math.sqrt(totalNorm);
-        
-        if (totalNorm > maxNorm) {
-            float scale = maxNorm / (totalNorm + 1e-6f);
-            for (Parameter param : params.values()) {
-                if (param.getGrad() != null) {
-                    float[] gradData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) param.getGrad()).buffer;
-                    for (int i = 0; i < gradData.length; i++) {
-                        gradData[i] *= scale;
-                    }
-                }
-            }
-        }
     }
     
     public List<Float> getPolicyLossHistory() {

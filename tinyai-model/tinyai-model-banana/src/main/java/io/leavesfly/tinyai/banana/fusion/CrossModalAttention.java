@@ -38,6 +38,7 @@ public class CrossModalAttention extends Module {
     private final int numHeads;      // 注意力头数
     private final int headDim;       // 每个头的维度
     private final float dropout;     // Dropout比率
+    private final float scaleFactor; // 缩放因子 1/sqrt(headDim)，预计算避免重复开方
     
     // 投影层
     private final Linear queryProj;   // Query投影(来自模态1)
@@ -69,6 +70,7 @@ public class CrossModalAttention extends Module {
         this.numHeads = numHeads;
         this.headDim = hiddenSize / numHeads;
         this.dropout = dropout;
+        this.scaleFactor = (float) Math.sqrt(headDim);
         
         // 初始化投影层
         this.queryProj = new Linear(name + "_q_proj", hiddenSize, hiddenSize, true);
@@ -168,9 +170,9 @@ public class CrossModalAttention extends Module {
     }
     
     /**
-     * 缩放点积注意力
+     * 缩放点积注意力（支持可选的注意力掩码）
      * 
-     * Attention(Q, K, V) = softmax(QK^T / sqrt(head_dim)) V
+     * Attention(Q, K, V) = softmax(QK^T / sqrt(head_dim) + mask) V
      * 
      * @param Q Query张量 [batch, num_heads, query_len, head_dim]
      * @param K Key张量 [batch, num_heads, kv_len, head_dim]
@@ -178,34 +180,73 @@ public class CrossModalAttention extends Module {
      * @return 注意力输出 [batch, num_heads, query_len, head_dim]
      */
     private Variable scaledDotProductAttention(Variable Q, Variable K, Variable V) {
-        // 1. 计算Q * K^T
-        // K: [batch, num_heads, kv_len, head_dim]
-        // K^T: [batch, num_heads, head_dim, kv_len]
+        return scaledDotProductAttention(Q, K, V, null);
+    }
+    
+    /**
+     * 缩放点积注意力（带掩码）
+     * 
+     * Attention(Q, K, V, mask) = softmax(QK^T / sqrt(head_dim) + mask) V
+     * 
+     * 掩码约定：需要屏蔽的位置设为极大负值（如 -1e9），参与计算的位置设为 0。
+     * 
+     * @param Q Query张量 [batch, num_heads, query_len, head_dim]
+     * @param K Key张量 [batch, num_heads, kv_len, head_dim]
+     * @param V Value张量 [batch, num_heads, kv_len, head_dim]
+     * @param mask 注意力掩码 [batch, 1, query_len, kv_len] 或 null（不使用掩码）
+     * @return 注意力输出 [batch, num_heads, query_len, head_dim]
+     */
+    private Variable scaledDotProductAttention(Variable Q, Variable K, Variable V, Variable mask) {
+        // 1. K转置: [batch, num_heads, kv_len, head_dim] -> [batch, num_heads, head_dim, kv_len]
         Variable KT = new Permute(0, 1, 3, 2).call(K);
         
-        // 2. Q @ K^T
-        // [batch, num_heads, query_len, head_dim] @ [batch, num_heads, head_dim, kv_len]
-        // -> [batch, num_heads, query_len, kv_len]
+        // 2. Q @ K^T -> [batch, num_heads, query_len, kv_len]
         Variable scores = Q.matMul(KT);
         
-        // 3. 缩放
-        double scale = Math.sqrt(headDim);
-        Variable scaledScores = scores.div(new Variable((float) scale));
+        // 3. 缩放（使用预计算的缩放因子）
+        Variable scaledScores = scores.div(new Variable(scaleFactor));
         
-        // 4. Softmax(在最后一维kv_len上实施，softMax()默认在最后一维上计算)
+        // 4. 应用注意力掩码（如果提供）
+        if (mask != null) {
+            scaledScores = scaledScores.add(mask);
+        }
+        
+        // 5. Softmax（在最后一维 kv_len 上计算）
         Variable attnWeights = scaledScores.softMax();
         
-        // 5. 应用Dropout(训练时)
+        // 6. 应用Dropout（训练时）
         if (isTraining() && dropout > 0) {
             attnWeights = attnDropout.forward(attnWeights);
         }
         
-        // 6. 计算注意力输出: attn_weights @ V
-        // [batch, num_heads, query_len, kv_len] @ [batch, num_heads, kv_len, head_dim]
-        // -> [batch, num_heads, query_len, head_dim]
-        Variable output = attnWeights.matMul(V);
+        // 7. 注意力输出: attn_weights @ V -> [batch, num_heads, query_len, head_dim]
+        return attnWeights.matMul(V);
+    }
+    
+    /**
+     * 带掩码的前向传播
+     * 
+     * @param queryFeatures query特征 [batch, query_len, hidden_size]
+     * @param kvFeatures key/value特征 [batch, kv_len, hidden_size]
+     * @param mask 注意力掩码 [batch, 1, query_len, kv_len] 或 null
+     * @return 跨模态融合后的特征 [batch, query_len, hidden_size]
+     */
+    public Variable forward(Variable queryFeatures, Variable kvFeatures, Variable mask) {
+        int[] queryShape = queryFeatures.getValue().getShape().getShapeDims();
+        int[] kvShape = kvFeatures.getValue().getShape().getShapeDims();
         
-        return output;
+        int batchSize = queryShape[0];
+        int queryLen = queryShape[1];
+        int kvLen = kvShape[1];
+        
+        Variable Q = splitHeads(queryProj.forward(queryFeatures), batchSize, queryLen);
+        Variable K = splitHeads(keyProj.forward(kvFeatures), batchSize, kvLen);
+        Variable V = splitHeads(valueProj.forward(kvFeatures), batchSize, kvLen);
+        
+        Variable attnOutput = scaledDotProductAttention(Q, K, V, mask);
+        Variable merged = mergeHeads(attnOutput, batchSize, queryLen);
+        
+        return outputProj.forward(merged);
     }
     
     // ==================== Getter方法 ====================

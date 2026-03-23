@@ -4,9 +4,9 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
 
 import io.leavesfly.tinyai.minimind.training.dataset.RLAIFDataset;
+import io.leavesfly.tinyai.minimind.training.rlaif.BaseRLTrainer;
 import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,7 +24,7 @@ import java.util.List;
  * @author leavesfly
  * @since 2024
  */
-public class SPOTrainer {
+public class SPOTrainer extends BaseRLTrainer {
     
     private final MiniMindModel model;
     private final RLAIFDataset dataset;
@@ -44,6 +44,7 @@ public class SPOTrainer {
      * 构造函数
      */
     public SPOTrainer(MiniMindModel model, RLAIFDataset dataset, SPOConfig config) {
+        super(model);
         this.model = model;
         this.dataset = dataset;
         this.config = config;
@@ -87,7 +88,7 @@ public class SPOTrainer {
     /**
      * 训练一个epoch
      */
-    private void trainOneEpoch() {
+    protected void trainOneEpoch() {
         dataset.prepare(true);
         float epochLoss = 0.0f;
         int batchCount = 0;
@@ -145,7 +146,7 @@ public class SPOTrainer {
         loss.backward();
         
         // 5. 梯度裁剪
-        clipGradients();
+        clipGradients(model, config.getMaxGradNorm());
         
         // 6. 更新参数
         optimizer.update();
@@ -193,38 +194,6 @@ public class SPOTrainer {
         }
         
         return rewards;
-    }
-    
-    /**
-     * 梯度裁剪
-     */
-    private void clipGradients() {
-        float maxNorm = config.getMaxGradNorm();
-        if (maxNorm <= 0) return;
-        
-        float totalNorm = 0.0f;
-        for (Parameter param : model.getAllParams().values()) {
-            if (param.getGrad() != null) {
-                float[] gradData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) param.getGrad()).buffer;
-                for (float g : gradData) {
-                    totalNorm += g * g;
-                }
-            }
-        }
-        
-        totalNorm = (float) Math.sqrt(totalNorm);
-        
-        if (totalNorm > maxNorm) {
-            float scale = maxNorm / (totalNorm + 1e-6f);
-            for (Parameter param : model.getAllParams().values()) {
-                if (param.getGrad() != null) {
-                    float[] gradData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) param.getGrad()).buffer;
-                    for (int i = 0; i < gradData.length; i++) {
-                        gradData[i] *= scale;
-                    }
-                }
-            }
-        }
     }
     
     public List<Float> getLossHistory() {

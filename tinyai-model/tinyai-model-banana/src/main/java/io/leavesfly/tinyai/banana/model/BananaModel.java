@@ -56,7 +56,7 @@ public class BananaModel extends Model {
      * 使用预设配置创建模型
      * 
      * @param name 模型名称
-     * @param preset 预设配置 ("tiny", "small", "base")
+     * @param preset 预设配置 ("nano", "tiny", "small", "base")
      * @return Banana模型实例
      */
     public static BananaModel create(String name, String preset) {
@@ -76,7 +76,7 @@ public class BananaModel extends Model {
                 break;
             default:
                 throw new IllegalArgumentException(
-                    "未知的预设配置: " + preset + ". 可选: tiny, small, base"
+                    "未知的预设配置: " + preset + ". 可选: nano, tiny, small, base"
                 );
         }
         return new BananaModel(name, config);

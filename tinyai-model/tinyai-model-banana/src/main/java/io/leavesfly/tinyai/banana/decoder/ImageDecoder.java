@@ -75,7 +75,7 @@ public class ImageDecoder extends Module {
                 config.getHiddenSize(),
                 config.getNumHeads(),
                 config.getFfnHiddenSize(),
-                (float) config.getDropoutRate(),
+                config.getDropoutRate(),
                 true  // 使用Pre-LayerNorm
             );
             decoderLayers.add(layer);
@@ -85,7 +85,7 @@ public class ImageDecoder extends Module {
         // 2. 特征Dropout
         this.featureDropout = new Dropout(
             name + "_feat_dropout",
-            (float) config.getDropoutRate()
+            config.getDropoutRate()
         );
         registerModule("feat_dropout", featureDropout);
         
@@ -103,7 +103,7 @@ public class ImageDecoder extends Module {
         this.featureNorm = new LayerNorm(
             name + "_feat_norm",
             upsamplingBaseDim,
-            (float) config.getLayerNormEpsilon()
+            config.getLayerNormEpsilon()
         );
         registerModule("feat_norm", featureNorm);
         

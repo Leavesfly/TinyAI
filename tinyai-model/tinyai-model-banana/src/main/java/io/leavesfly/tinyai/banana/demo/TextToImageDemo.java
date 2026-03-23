@@ -5,6 +5,7 @@ import io.leavesfly.tinyai.banana.model.BananaModel;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
+import java.util.Random;
 
 /**
  * 文本到图像生成演示
@@ -44,9 +45,10 @@ public class TextToImageDemo {
             int textLength = 32;
             
             float[] tokenData = new float[batchSize * textLength];
+            Random random = new Random(42);
             for (int i = 0; i < tokenData.length; i++) {
-                // 使用随机token ID (范围: 0-1000)
-                tokenData[i] = (float) (Math.random() * 1000);
+                // 使用随机token ID (范围: 0-999的整数)
+                tokenData[i] = random.nextInt(1000);
             }
             
             NdArray textTokens = NdArray.of(tokenData, Shape.of(batchSize, textLength));

@@ -58,7 +58,7 @@ public class MultiModalFusion extends Module {
         
         int hiddenSize = config.getHiddenSize();
         int numHeads = config.getNumHeads();
-        float dropout = (float) config.getDropoutRate();
+        float dropout = config.getDropoutRate();
         
         // 初始化Text → Image跨模态注意力
         this.text2ImageAttn = new CrossModalAttention(

@@ -53,6 +53,9 @@ public class ImageEncoder extends Module {
      */
     public ImageEncoder(String name, BananaConfig config) {
         super(name);
+        if (config == null) {
+            throw new IllegalArgumentException("config不能为null");
+        }
         this.config = config;
         
         // 1. 初始化Patch嵌入层
@@ -76,7 +79,7 @@ public class ImageEncoder extends Module {
         // 3. 初始化嵌入Dropout
         this.embeddingDropout = new Dropout(
             name + "_emb_dropout",
-            (float) config.getEmbeddingDropout()
+            config.getEmbeddingDropout()
         );
         registerModule("emb_dropout", embeddingDropout);
         
@@ -88,7 +91,7 @@ public class ImageEncoder extends Module {
                 config.getHiddenSize(),
                 config.getNumHeads(),
                 config.getFfnHiddenSize(),
-                (float) config.getDropoutRate(),
+                config.getDropoutRate(),
                 true  // 使用Pre-LayerNorm
             );
             encoderLayers.add(layer);

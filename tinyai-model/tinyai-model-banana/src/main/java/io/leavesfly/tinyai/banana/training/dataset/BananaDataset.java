@@ -93,6 +93,10 @@ public class BananaDataset implements Serializable {
             samples.add(new Sample(textTokens, imageData, text, imagePath));
         }
         
+        if (samples.isEmpty()) {
+            System.err.println("警告: 未从文件中加载到有效样本: " + filePath);
+        }
+        
         System.out.println("数据加载完成,共 " + samples.size() + " 个训练样本");
     }
     
@@ -102,6 +106,10 @@ public class BananaDataset implements Serializable {
      * @param sampleCount 样本数量
      */
     public void loadSyntheticData(int sampleCount) {
+        if (sampleCount <= 0) {
+            throw new IllegalArgumentException("样本数量必须大于0: " + sampleCount);
+        }
+        
         samples.clear();
         Random random = new Random(42);
         

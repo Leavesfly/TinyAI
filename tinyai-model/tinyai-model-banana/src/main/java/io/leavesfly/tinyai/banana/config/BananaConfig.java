@@ -87,21 +87,21 @@ public class BananaConfig implements Serializable {
     // ==================== Dropout配置 ====================
     
     /** 残差dropout概率，默认0.1 */
-    private double dropoutRate = 0.1;
+    private float dropoutRate = 0.1f;
     
     /** 注意力dropout概率，默认0.1 */
-    private double attentionDropout = 0.1;
+    private float attentionDropout = 0.1f;
     
     /** 嵌入dropout概率，默认0.1 */
-    private double embeddingDropout = 0.1;
+    private float embeddingDropout = 0.1f;
     
     // ==================== 初始化配置 ====================
     
     /** 层归一化epsilon，默认1e-5 */
-    private double layerNormEpsilon = 1e-5;
+    private float layerNormEpsilon = 1e-5f;
     
     /** 权重初始化范围，默认0.02 */
-    private double initializerRange = 0.02;
+    private float initializerRange = 0.02f;
     
     /**
      * 默认构造函数，创建Tiny配置
@@ -127,9 +127,9 @@ public class BananaConfig implements Serializable {
         config.setPatchSize(16);
         config.setNumEncoderLayers(2);
         config.setCrossModalHeads(4);
-        config.setDropoutRate(0.0);
-        config.setAttentionDropout(0.0);
-        config.setEmbeddingDropout(0.0);
+        config.setDropoutRate(0.0f);
+        config.setAttentionDropout(0.0f);
+        config.setEmbeddingDropout(0.0f);
         config.updateNumPatches();
         return config;
     }
@@ -204,22 +204,43 @@ public class BananaConfig implements Serializable {
     
     /**
      * 估算模型参数量
+     * 
+     * 计算公式：
+     * - 文本嵌入层: vocabSize * hiddenSize
+     * - 图像Patch嵌入(Conv2D): patchSize * patchSize * imageChannels * hiddenSize + hiddenSize(bias)
+     * - 位置编码: numPatches * hiddenSize
+     * - 每个Transformer层: 4 * hiddenSize^2 (QKV+O投影) + 2 * hiddenSize * ffnHiddenSize (FFN) + 4 * hiddenSize (LayerNorm)
+     * - 跨模态注意力层: 4 * hiddenSize^2 (QKV+O投影) + 2 * hiddenSize (LayerNorm)
+     * - 图像编码器层: 与Transformer层相同
      */
     public long estimateParameters() {
         // 文本嵌入: vocabSize * hiddenSize
         long textEmbedding = (long) vocabSize * hiddenSize;
         
-        // 图像Patch嵌入: (patchSize * patchSize * imageChannels) * hiddenSize
-        long patchEmbedding = (long) (patchSize * patchSize * imageChannels) * hiddenSize;
+        // 图像Patch嵌入(Conv2D权重 + bias): patchSize^2 * channels * hiddenSize + hiddenSize
+        long patchEmbedding = (long) (patchSize * patchSize * imageChannels) * hiddenSize + hiddenSize;
         
-        // Transformer层: 每层约 12 * hiddenSize^2
-        long transformerParams = (long) numLayers * 12L * hiddenSize * hiddenSize;
+        // 位置编码: numPatches * hiddenSize
+        long positionEmbedding = (long) numPatches * hiddenSize;
         
-        // 编码器层
-        long encoderParams = (long) numEncoderLayers * 12L * hiddenSize * hiddenSize;
+        // 每个Transformer层的参数量:
+        // - 自注意力QKV投影: 3 * hiddenSize * hiddenSize + 3 * hiddenSize (bias)
+        // - 输出投影: hiddenSize * hiddenSize + hiddenSize (bias)
+        // - FFN: hiddenSize * ffnHiddenSize + ffnHiddenSize + ffnHiddenSize * hiddenSize + hiddenSize
+        // - LayerNorm: 2 * (hiddenSize + hiddenSize)
+        long selfAttnParams = 4L * hiddenSize * hiddenSize + 4L * hiddenSize;
+        long ffnParams = 2L * hiddenSize * ffnHiddenSize + hiddenSize + ffnHiddenSize;
+        long layerNormParams = 4L * hiddenSize;
+        long perLayerParams = selfAttnParams + ffnParams + layerNormParams;
         
-        // 总参数量
-        return textEmbedding + patchEmbedding + transformerParams + encoderParams;
+        long transformerParams = (long) numLayers * perLayerParams;
+        long encoderParams = (long) numEncoderLayers * perLayerParams;
+        
+        // 跨模态注意力层: QKV投影 + 输出投影 + LayerNorm
+        long crossModalParams = enableCrossModalAttention ? (selfAttnParams + 2L * hiddenSize) : 0;
+        
+        return textEmbedding + patchEmbedding + positionEmbedding 
+             + transformerParams + encoderParams + crossModalParams;
     }
     
     /**
@@ -343,6 +364,7 @@ public class BananaConfig implements Serializable {
     
     public void setImageSize(int imageSize) {
         this.imageSize = imageSize;
+        updateNumPatches();
     }
     
     public int getPatchSize() {
@@ -351,6 +373,7 @@ public class BananaConfig implements Serializable {
     
     public void setPatchSize(int patchSize) {
         this.patchSize = patchSize;
+        updateNumPatches();
     }
     
     public int getImageChannels() {
@@ -417,43 +440,43 @@ public class BananaConfig implements Serializable {
         this.enableAutoRegressiveGeneration = enableAutoRegressiveGeneration;
     }
     
-    public double getDropoutRate() {
+    public float getDropoutRate() {
         return dropoutRate;
     }
     
-    public void setDropoutRate(double dropoutRate) {
+    public void setDropoutRate(float dropoutRate) {
         this.dropoutRate = dropoutRate;
     }
     
-    public double getAttentionDropout() {
+    public float getAttentionDropout() {
         return attentionDropout;
     }
     
-    public void setAttentionDropout(double attentionDropout) {
+    public void setAttentionDropout(float attentionDropout) {
         this.attentionDropout = attentionDropout;
     }
     
-    public double getEmbeddingDropout() {
+    public float getEmbeddingDropout() {
         return embeddingDropout;
     }
     
-    public void setEmbeddingDropout(double embeddingDropout) {
+    public void setEmbeddingDropout(float embeddingDropout) {
         this.embeddingDropout = embeddingDropout;
     }
     
-    public double getLayerNormEpsilon() {
+    public float getLayerNormEpsilon() {
         return layerNormEpsilon;
     }
     
-    public void setLayerNormEpsilon(double layerNormEpsilon) {
+    public void setLayerNormEpsilon(float layerNormEpsilon) {
         this.layerNormEpsilon = layerNormEpsilon;
     }
     
-    public double getInitializerRange() {
+    public float getInitializerRange() {
         return initializerRange;
     }
     
-    public void setInitializerRange(double initializerRange) {
+    public void setInitializerRange(float initializerRange) {
         this.initializerRange = initializerRange;
     }
 }

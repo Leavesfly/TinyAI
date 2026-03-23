@@ -1,5 +1,9 @@
 package io.leavesfly.tinyai.banana.config;
 
+import java.util.Optional;
+
+/**
+
 /**
  * Banana模型支持的任务类型
  * 
@@ -58,14 +62,20 @@ public enum TaskType {
     
     /**
      * 根据code获取TaskType
+     * 
+     * @param code 任务类型代码
+     * @return 匹配的TaskType，未找到时返回空Optional
      */
-    public static TaskType fromCode(String code) {
+    public static Optional<TaskType> fromCode(String code) {
+        if (code == null) {
+            return Optional.empty();
+        }
         for (TaskType type : values()) {
             if (type.code.equals(code)) {
-                return type;
+                return Optional.of(type);
             }
         }
-        return GENERAL_MULTIMODAL; // 默认返回通用任务
+        return Optional.empty();
     }
     
     @Override

@@ -57,15 +57,10 @@ public class Position2D extends Module {
     @Override
     public void resetParameters() {
         // 使用小方差的正态分布初始化位置嵌入
-        // 这样位置编码在训练初期不会主导特征
-        NdArray data = positionEmbedding.data();
-        float[] array = data.getArray();
-        
-        // 正态分布: mean=0, std=0.02
-        java.util.Random random = new java.util.Random(42);
-        for (int i = 0; i < array.length; i++) {
-            array[i] = (float) (random.nextGaussian() * 0.02);
-        }
+        // std=0.02 使位置编码在训练初期不会主导特征
+        NdArray initialized = NdArray.randn(positionEmbedding.data().getShape()).mulNum(0.02f);
+        System.arraycopy(initialized.getArray(), 0, positionEmbedding.data().getArray(), 0,
+                initialized.getArray().length);
     }
     
     /**

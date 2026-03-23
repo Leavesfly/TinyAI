@@ -120,6 +120,31 @@ public class MiniMindConfig implements Serializable {
      */
     private float moeLoadBalanceWeight = 0.01f;
 
+    /**
+     * MoE 路由噪声因子
+     */
+    private float moeNoiseFactor = 0.1f;
+
+    /**
+     * MoE 重要性损失系数
+     */
+    private float moeImportanceCoef = 0.01f;
+
+    /**
+     * MoE 负载损失系数
+     */
+    private float moeLoadCoef = 0.01f;
+
+    /**
+     * 是否使用共享专家
+     */
+    private boolean moeSharedExperts = false;
+
+    /**
+     * 是否启用负载均衡
+     */
+    private boolean moeEnableLoadBalance = true;
+
     // ========== 训练相关配置 ==========
 
     /**
@@ -222,6 +247,11 @@ public class MiniMindConfig implements Serializable {
         config.numExperts = 4;
         config.numExpertsPerToken = 2;
         config.moeLoadBalanceWeight = 0.01f;
+        config.moeNoiseFactor = 0.1f;
+        config.moeImportanceCoef = 0.01f;
+        config.moeLoadCoef = 0.01f;
+        config.moeSharedExperts = false;
+        config.moeEnableLoadBalance = true;
         return config;
     }
 
@@ -423,32 +453,52 @@ public class MiniMindConfig implements Serializable {
     public float getMoeLoadBalanceWeight() { return moeLoadBalanceWeight; }
     public void setMoeLoadBalanceWeight(float moeLoadBalanceWeight) { this.moeLoadBalanceWeight = moeLoadBalanceWeight; }
 
-    public float getInitStd() { return initStd; }
-    public void setInitStd(float initStd) { this.initStd = initStd; }
+    public float getMoeNoiseFactor() { return moeNoiseFactor; }
+    public void setMoeNoiseFactor(float moeNoiseFactor) { this.moeNoiseFactor = moeNoiseFactor; }
 
-    public boolean isUseGradientCheckpointing() { return useGradientCheckpointing; }
-    public void setUseGradientCheckpointing(boolean useGradientCheckpointing) {
-        this.useGradientCheckpointing = useGradientCheckpointing;
-    }
+    public float getMoeImportanceCoef() { return moeImportanceCoef; }
+    public void setMoeImportanceCoef(float moeImportanceCoef) { this.moeImportanceCoef = moeImportanceCoef; }
+
+    public float getMoeLoadCoef() { return moeLoadCoef; }
+    public void setMoeLoadCoef(float moeLoadCoef) { this.moeLoadCoef = moeLoadCoef; }
+
+    public boolean isMoeSharedExperts() { return moeSharedExperts; }
+    public void setMoeSharedExperts(boolean moeSharedExperts) { this.moeSharedExperts = moeSharedExperts; }
+
+    public boolean isMoeEnableLoadBalance() { return moeEnableLoadBalance; }
+    public void setMoeEnableLoadBalance(boolean moeEnableLoadBalance) { this.moeEnableLoadBalance = moeEnableLoadBalance; }
 
     public int getEosTokenId() { return eosTokenId; }
     public void setEosTokenId(int eosTokenId) { this.eosTokenId = eosTokenId; }
 
     @Override
     public String toString() {
-        return "MiniMindConfig{" +
-                "modelSize=" + getModelSize() +
-                ", vocabSize=" + vocabSize +
-                ", maxSeqLen=" + maxSeqLen +
-                ", hiddenSize=" + hiddenSize +
-                ", numLayers=" + numLayers +
-                ", numHeads=" + numHeads +
-                ", ffnHiddenSize=" + ffnHiddenSize +
-                ", dropout=" + dropout +
-                ", activation='" + activationFunction + '\'' +
-                ", useRoPE=" + useRoPE +
-                ", useMoE=" + useMoE +
-                ", estimatedParams=" + estimateParameters() +
-                '}';
+        StringBuilder sb = new StringBuilder();
+        sb.append("MiniMindConfig{");
+        sb.append("modelSize=").append(getModelSize());
+        sb.append(", vocabSize=").append(vocabSize);
+        sb.append(", maxSeqLen=").append(maxSeqLen);
+        sb.append(", hiddenSize=").append(hiddenSize);
+        sb.append(", numLayers=").append(numLayers);
+        sb.append(", numHeads=").append(numHeads);
+        sb.append(", ffnHiddenSize=").append(ffnHiddenSize);
+        sb.append(", dropout=").append(dropout);
+        sb.append(", activation='").append(activationFunction).append('\'');
+        sb.append(", useRoPE=").append(useRoPE);
+        sb.append(", useMoE=").append(useMoE);
+        
+        if (useMoE) {
+            sb.append(", numExperts=").append(numExperts);
+            sb.append(", numExpertsPerToken=").append(numExpertsPerToken);
+            sb.append(", moeNoiseFactor=").append(moeNoiseFactor);
+            sb.append(", moeImportanceCoef=").append(moeImportanceCoef);
+            sb.append(", moeLoadCoef=").append(moeLoadCoef);
+            sb.append(", moeSharedExperts=").append(moeSharedExperts);
+            sb.append(", moeEnableLoadBalance=").append(moeEnableLoadBalance);
+        }
+        
+        sb.append(", estimatedParams=").append(estimateParameters());
+        sb.append('}');
+        return sb.toString();
     }
 }

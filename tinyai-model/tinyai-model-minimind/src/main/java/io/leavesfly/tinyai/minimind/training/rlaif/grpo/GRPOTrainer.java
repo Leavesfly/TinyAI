@@ -4,14 +4,13 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
 
 import io.leavesfly.tinyai.minimind.training.dataset.RLAIFDataset;
+import io.leavesfly.tinyai.minimind.training.rlaif.BaseRLTrainer;
 import io.leavesfly.tinyai.minimind.training.rlaif.ppo.ValueNetwork;
 import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * GRPO (Group Relative Policy Optimization) 训练器
@@ -31,7 +30,7 @@ import java.util.Map;
  * @author leavesfly
  * @since 2024
  */
-public class GRPOTrainer {
+public class GRPOTrainer extends BaseRLTrainer {
     
     private final MiniMindModel actor;
     private final ValueNetwork critic;
@@ -55,6 +54,7 @@ public class GRPOTrainer {
      */
     public GRPOTrainer(MiniMindModel actor, ValueNetwork critic,
                       RLAIFDataset dataset, GRPOConfig config) {
+        super(actor);
         this.actor = actor;
         this.critic = critic;
         this.dataset = dataset;
@@ -104,7 +104,7 @@ public class GRPOTrainer {
     /**
      * 训练一个epoch
      */
-    private void trainOneEpoch() {
+    protected void trainOneEpoch() {
         dataset.prepare(true);
         float epochLoss = 0.0f;
         int batchCount = 0;
@@ -218,9 +218,9 @@ public class GRPOTrainer {
         totalLoss.backward();
         
         // 4. 梯度裁剪
-        clipGradients(actor);
+        clipGradients(actor, config.getMaxGradNorm());
         if (critic != null) {
-            clipGradients(critic);
+            clipGradients(critic, config.getMaxGradNorm());
         }
         
         // 5. 更新参数
@@ -233,67 +233,6 @@ public class GRPOTrainer {
         totalLoss.unChainBackward();
         
         return lossValue;
-    }
-    
-    /**
-     * 计算对数概率
-     */
-    private Variable computeLogProb(Variable logits, Variable labels) {
-        Variable logProbs = logSoftmax(logits);
-        Variable meanLogProb = logProbs.mean(0, true);
-        return meanLogProb;
-    }
-    
-    /**
-     * Log Softmax
-     */
-    private Variable logSoftmax(Variable x) {
-        Variable expX = x.exp();
-        Variable sumExp = expX.sum();
-        Variable logSumExp = sumExp.log();
-        return x.sub(logSumExp);
-    }
-    
-    /**
-     * 梯度裁剪
-     */
-    private void clipGradients(Object model) {
-        float maxNorm = config.getMaxGradNorm();
-        if (maxNorm <= 0) return;
-        
-        Map<String, Parameter> params;
-        if (model instanceof MiniMindModel) {
-            params = ((MiniMindModel) model).getAllParams();
-        } else if (model instanceof ValueNetwork) {
-            // ValueNetwork返回v2.core.ParameterV1,暂不支持
-            return;
-        } else {
-            return;
-        }
-        
-        float totalNorm = 0.0f;
-        for (Parameter param : params.values()) {
-            if (param.getGrad() != null) {
-                float[] gradData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) param.getGrad()).buffer;
-                for (float g : gradData) {
-                    totalNorm += g * g;
-                }
-            }
-        }
-        
-        totalNorm = (float) Math.sqrt(totalNorm);
-        
-        if (totalNorm > maxNorm) {
-            float scale = maxNorm / (totalNorm + 1e-6f);
-            for (Parameter param : params.values()) {
-                if (param.getGrad() != null) {
-                    float[] gradData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) param.getGrad()).buffer;
-                    for (int i = 0; i < gradData.length; i++) {
-                        gradData[i] *= scale;
-                    }
-                }
-            }
-        }
     }
     
     public List<Float> getLossHistory() {

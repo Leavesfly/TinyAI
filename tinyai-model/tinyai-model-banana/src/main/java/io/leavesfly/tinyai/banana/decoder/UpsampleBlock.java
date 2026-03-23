@@ -35,6 +35,7 @@ public class UpsampleBlock extends Module {
     private final int outChannels;
     private final int inSize;
     private final int outSize;
+    private final String activationType;
     
     // 通道投影层
     private final Linear channelProjection;
@@ -43,7 +44,7 @@ public class UpsampleBlock extends Module {
     private final LayerNorm layerNorm;
     
     /**
-     * 构造函数
+     * 构造函数（默认使用 ReLU 激活函数）
      * 
      * @param name 模块名称
      * @param inChannels 输入通道数
@@ -53,11 +54,27 @@ public class UpsampleBlock extends Module {
      */
     public UpsampleBlock(String name, int inChannels, int outChannels, 
                          int inSize, int outSize) {
+        this(name, inChannels, outChannels, inSize, outSize, "relu");
+    }
+    
+    /**
+     * 构造函数
+     * 
+     * @param name 模块名称
+     * @param inChannels 输入通道数
+     * @param outChannels 输出通道数
+     * @param inSize 输入空间尺寸（假设正方形）
+     * @param outSize 输出空间尺寸（假设正方形）
+     * @param activationType 激活函数类型: "relu", "gelu", "tanh", "none"
+     */
+    public UpsampleBlock(String name, int inChannels, int outChannels, 
+                         int inSize, int outSize, String activationType) {
         super(name);
         this.inChannels = inChannels;
         this.outChannels = outChannels;
         this.inSize = inSize;
         this.outSize = outSize;
+        this.activationType = activationType;
         
         // 通道投影：in_channels -> out_channels
         this.channelProjection = new Linear(
@@ -111,13 +128,34 @@ public class UpsampleBlock extends Module {
         // 4. LayerNorm
         projected = layerNorm.forward(projected);
         
-        // 5. ReLU激活
-        projected = projected.relu();
+        // 5. 激活函数
+        projected = applyActivation(projected);
         
         // 6. 恢复维度顺序: [batch, out_h, out_w, out_channels] -> [batch, out_channels, out_h, out_w]
         Variable output = permuteNHWCToNCHW(projected);
         
         return output;
+    }
+    
+    /**
+     * 应用激活函数
+     * 
+     * @param x 输入张量
+     * @return 激活后的张量
+     */
+    private Variable applyActivation(Variable x) {
+        switch (activationType.toLowerCase()) {
+            case "relu":
+                return x.relu();
+            case "gelu":
+                return x.gelu();
+            case "tanh":
+                return x.tanh();
+            case "none":
+                return x;
+            default:
+                throw new IllegalArgumentException("不支持的激活函数类型: " + activationType);
+        }
     }
     
     /**

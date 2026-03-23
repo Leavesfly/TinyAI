@@ -156,49 +156,53 @@ public class PretrainTrainer {
         boolean prevTrain = io.leavesfly.tinyai.util.Config.train;
         io.leavesfly.tinyai.util.Config.train = true;
         
-        double epochLoss = 0.0;
-        int batchCount = 0;
-        
-        long epochStartTime = System.currentTimeMillis();
-        
-        while (dataset.hasNextBatch()) {
-            BananaDataset.Batch batch = dataset.getNextBatch();
+        try {
+            double epochLoss = 0.0;
+            int batchCount = 0;
             
-            // 训练一步
-            float stepLoss = trainStep(batch);
+            long epochStartTime = System.currentTimeMillis();
             
-            epochLoss += stepLoss;
-            batchCount++;
-            currentStep++;
-            
-            // 记录损失
-            lossHistory.add(stepLoss);
-            
-            // 打印日志
-            if (currentStep % logInterval == 0) {
-                double avgLoss = lossHistory.stream()
-                    .skip(Math.max(0, lossHistory.size() - logInterval))
-                    .mapToDouble(Float::doubleValue)
-                    .average()
-                    .orElse(0.0);
+            while (dataset.hasNextBatch()) {
+                BananaDataset.Batch batch = dataset.getNextBatch();
                 
-                System.out.printf("Epoch %d/%d | Step %d | Loss: %.4f | LR: %.6f%n",
-                    currentEpoch + 1, maxEpochs, currentStep, avgLoss, currentLearningRate);
+                // 训练一步
+                float stepLoss = trainStep(batch);
+                
+                epochLoss += stepLoss;
+                batchCount++;
+                currentStep++;
+                
+                // 记录损失
+                lossHistory.add(stepLoss);
+                
+                // 打印日志
+                if (currentStep % logInterval == 0) {
+                    double avgLoss = lossHistory.stream()
+                        .skip(Math.max(0, lossHistory.size() - logInterval))
+                        .mapToDouble(Float::doubleValue)
+                        .average()
+                        .orElse(0.0);
+                    
+                    System.out.printf("Epoch %d/%d | Step %d | Loss: %.4f | LR: %.6f%n",
+                        currentEpoch + 1, maxEpochs, currentStep, avgLoss, currentLearningRate);
+                }
+                
+                // 保存检查点
+                if (currentStep % saveInterval == 0) {
+                    saveCheckpoint();
+                }
             }
             
-            // 保存检查点
-            if (currentStep % saveInterval == 0) {
-                saveCheckpoint();
-            }
+            long epochEndTime = System.currentTimeMillis();
+            double avgEpochLoss = batchCount > 0 ? epochLoss / batchCount : 0.0;
+            
+            System.out.println(String.format(
+                "Epoch %d 完成 | 平均损失: %.4f | 耗时: %d ms",
+                currentEpoch + 1, avgEpochLoss, epochEndTime - epochStartTime
+            ));
+        } finally {
+            io.leavesfly.tinyai.util.Config.train = prevTrain;
         }
-        
-        long epochEndTime = System.currentTimeMillis();
-        double avgEpochLoss = batchCount > 0 ? epochLoss / batchCount : 0.0;
-        
-        System.out.println(String.format(
-            "Epoch %d 完成 | 平均损失: %.4f | 耗时: %d ms",
-            currentEpoch + 1, avgEpochLoss, epochEndTime - epochStartTime
-        ));
         
         dataset.reset();
     }
@@ -296,37 +300,7 @@ public class PretrainTrainer {
      * 梯度裁剪
      */
     private void clipGradients() {
-        // 计算梯度范数
-        double totalNorm = 0.0;
-        
-        for (var param : model.getAllParams().values()) {
-            if (param.getGrad() != null) {
-                NdArray grad = param.getGrad();
-                float[] gradData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) grad).buffer;
-                
-                for (float g : gradData) {
-                    totalNorm += g * g;
-                }
-            }
-        }
-        
-        totalNorm = Math.sqrt(totalNorm);
-        
-        // 如果超过阈值,进行裁剪
-        if (totalNorm > maxGradNorm) {
-            float clipCoef = maxGradNorm / (float) totalNorm;
-            
-            for (var param : model.getAllParams().values()) {
-                if (param.getGrad() != null) {
-                    NdArray grad = param.getGrad();
-                    float[] gradData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) grad).buffer;
-                    
-                    for (int i = 0; i < gradData.length; i++) {
-                        gradData[i] *= clipCoef;
-                    }
-                }
-            }
-        }
+        BaseBananaTrainer.clipGradients(model, maxGradNorm);
     }
     
     /**
@@ -349,28 +323,14 @@ public class PretrainTrainer {
      * 创建检查点目录
      */
     private void createCheckpointDir() {
-        try {
-            Path path = Paths.get(checkpointDir);
-            if (!Files.exists(path)) {
-                Files.createDirectories(path);
-            }
-        } catch (IOException e) {
-            System.err.println("创建检查点目录失败: " + e.getMessage());
-        }
+        BaseBananaTrainer.createCheckpointDir(checkpointDir);
     }
     
     /**
      * 计算总参数量
      */
     private long calculateTotalParams() {
-        long totalParams = 0;
-        for (var param : model.getAllParams().values()) {
-            int[] dims = param.getValue().getShape().getShapeDims();
-            long size = 1;
-            for (int d : dims) size *= d;
-            totalParams += size;
-        }
-        return totalParams;
+        return BaseBananaTrainer.calculateTotalParams(model);
     }
     
     /**

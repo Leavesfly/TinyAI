@@ -186,46 +186,51 @@ public class FinetuneTrainer {
         trainDataset.prepare(true);  // 打乱数据
         
         // 设置训练模式
+        boolean prevTrain = io.leavesfly.tinyai.util.Config.train;
         io.leavesfly.tinyai.util.Config.train = true;
         
-        double epochLoss = 0.0;
-        int batchCount = 0;
-        
-        long epochStartTime = System.currentTimeMillis();
-        
-        while (trainDataset.hasNextBatch()) {
-            BananaDataset.Batch batch = trainDataset.getNextBatch();
+        try {
+            double epochLoss = 0.0;
+            int batchCount = 0;
             
-            // 训练一步
-            float stepLoss = trainStep(batch);
+            long epochStartTime = System.currentTimeMillis();
             
-            epochLoss += stepLoss;
-            batchCount++;
-            globalStep++;
-            
-            // 记录损失
-            trainLossHistory.add(stepLoss);
-            
-            // 打印日志
-            if (globalStep % logInterval == 0) {
-                double avgLoss = trainLossHistory.stream()
-                    .skip(Math.max(0, trainLossHistory.size() - logInterval))
-                    .mapToDouble(Float::doubleValue)
-                    .average()
-                    .orElse(0.0);
+            while (trainDataset.hasNextBatch()) {
+                BananaDataset.Batch batch = trainDataset.getNextBatch();
                 
-                System.out.printf("Epoch %d/%d | Step %d | Train Loss: %.4f%n",
-                    currentEpoch + 1, maxEpochs, globalStep, avgLoss);
+                // 训练一步
+                float stepLoss = trainStep(batch);
+                
+                epochLoss += stepLoss;
+                batchCount++;
+                globalStep++;
+                
+                // 记录损失
+                trainLossHistory.add(stepLoss);
+                
+                // 打印日志
+                if (globalStep % logInterval == 0) {
+                    double avgLoss = trainLossHistory.stream()
+                        .skip(Math.max(0, trainLossHistory.size() - logInterval))
+                        .mapToDouble(Float::doubleValue)
+                        .average()
+                        .orElse(0.0);
+                    
+                    System.out.printf("Epoch %d/%d | Step %d | Train Loss: %.4f%n",
+                        currentEpoch + 1, maxEpochs, globalStep, avgLoss);
+                }
             }
+            
+            long epochEndTime = System.currentTimeMillis();
+            double avgEpochLoss = batchCount > 0 ? epochLoss / batchCount : 0.0;
+            
+            System.out.println(String.format(
+                "Epoch %d 训练完成 | 平均损失: %.4f | 耗时: %d ms",
+                currentEpoch + 1, avgEpochLoss, epochEndTime - epochStartTime
+            ));
+        } finally {
+            io.leavesfly.tinyai.util.Config.train = prevTrain;
         }
-        
-        long epochEndTime = System.currentTimeMillis();
-        double avgEpochLoss = batchCount > 0 ? epochLoss / batchCount : 0.0;
-        
-        System.out.println(String.format(
-            "Epoch %d 训练完成 | 平均损失: %.4f | 耗时: %d ms",
-            currentEpoch + 1, avgEpochLoss, epochEndTime - epochStartTime
-        ));
         
         trainDataset.reset();
     }
@@ -290,41 +295,44 @@ public class FinetuneTrainer {
         valDataset.prepare(false);  // 不打乱
         
         // 设置推理模式
+        boolean prevTrain = io.leavesfly.tinyai.util.Config.train;
         io.leavesfly.tinyai.util.Config.train = false;
         
-        double totalLoss = 0.0;
-        int batchCount = 0;
-        
-        while (valDataset.hasNextBatch()) {
-            BananaDataset.Batch batch = valDataset.getNextBatch();
+        try {
+            double totalLoss = 0.0;
+            int batchCount = 0;
             
-            // 获取输入数据
-            NdArray textInput = batch.getTextInput();
-            NdArray imageInput = batch.getImageInput();
+            while (valDataset.hasNextBatch()) {
+                BananaDataset.Batch batch = valDataset.getNextBatch();
+                
+                // 获取输入数据
+                NdArray textInput = batch.getTextInput();
+                NdArray imageInput = batch.getImageInput();
+                
+                Variable textVar = new Variable(textInput);
+                Variable imageVar = new Variable(imageInput);
+                
+                // 前向传播(不计算梯度)
+                Variable textFeatures = model.encodeText(textVar);
+                Variable imageFeatures = model.encodeImage(imageVar);
+                Variable fusedResult = bananaBlock.forwardMultiModal(
+                    textFeatures, imageFeatures, TaskType.TEXT_TO_IMAGE
+                );
+                
+                // 对齐形状：对序列维度进行平均池化
+                Variable fusedPooled = fusedResult.mean(1, false);
+                Variable imagePooled = imageFeatures.mean(1, false);
+                
+                // 计算损失
+                Variable loss = computeLoss(fusedPooled, imagePooled);
+                totalLoss += loss.getValue().getNumber().floatValue();
+                batchCount++;
+            }
             
-            Variable textVar = new Variable(textInput);
-            Variable imageVar = new Variable(imageInput);
-            
-            // 前向传播(不计算梯度)
-            Variable textFeatures = model.encodeText(textVar);
-            Variable imageFeatures = model.encodeImage(imageVar);
-            Variable fusedResult = bananaBlock.forwardMultiModal(
-                textFeatures, imageFeatures, TaskType.TEXT_TO_IMAGE
-            );
-            
-            // 对齐形状：对序列维度进行平均池化
-            Variable fusedPooled = fusedResult.mean(1, false);
-            Variable imagePooled = imageFeatures.mean(1, false);
-            
-            // 计算损失
-            Variable loss = computeLoss(fusedPooled, imagePooled);
-            totalLoss += loss.getValue().getNumber().floatValue();
-            batchCount++;
+            return batchCount > 0 ? (float) (totalLoss / batchCount) : 0.0f;
+        } finally {
+            io.leavesfly.tinyai.util.Config.train = prevTrain;
         }
-        
-        valDataset.reset();
-        
-        return batchCount > 0 ? (float) (totalLoss / batchCount) : 0.0f;
     }
     
     /**
@@ -342,35 +350,7 @@ public class FinetuneTrainer {
      * 梯度裁剪
      */
     private void clipGradients() {
-        double totalNorm = 0.0;
-        
-        for (var param : model.getAllParams().values()) {
-            if (param.getGrad() != null) {
-                NdArray grad = param.getGrad();
-                float[] gradData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) grad).buffer;
-                
-                for (float g : gradData) {
-                    totalNorm += g * g;
-                }
-            }
-        }
-        
-        totalNorm = Math.sqrt(totalNorm);
-        
-        if (totalNorm > maxGradNorm) {
-            float clipCoef = maxGradNorm / (float) totalNorm;
-            
-            for (var param : model.getAllParams().values()) {
-                if (param.getGrad() != null) {
-                    NdArray grad = param.getGrad();
-                    float[] gradData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) grad).buffer;
-                    
-                    for (int i = 0; i < gradData.length; i++) {
-                        gradData[i] *= clipCoef;
-                    }
-                }
-            }
-        }
+        BaseBananaTrainer.clipGradients(model, maxGradNorm);
     }
     
     /**
@@ -392,28 +372,14 @@ public class FinetuneTrainer {
      * 创建检查点目录
      */
     private void createCheckpointDir() {
-        try {
-            Path path = Paths.get(checkpointDir);
-            if (!Files.exists(path)) {
-                Files.createDirectories(path);
-            }
-        } catch (IOException e) {
-            System.err.println("创建检查点目录失败: " + e.getMessage());
-        }
+        BaseBananaTrainer.createCheckpointDir(checkpointDir);
     }
     
     /**
      * 计算总参数量
      */
     private long calculateTotalParams() {
-        long totalParams = 0;
-        for (var param : model.getAllParams().values()) {
-            int[] dims = param.getValue().getShape().getShapeDims();
-            long size = 1;
-            for (int d : dims) size *= d;
-            totalParams += size;
-        }
-        return totalParams;
+        return BaseBananaTrainer.calculateTotalParams(model);
     }
     
     /**

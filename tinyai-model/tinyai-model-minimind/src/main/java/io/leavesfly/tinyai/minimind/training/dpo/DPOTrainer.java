@@ -254,35 +254,35 @@ public class DPOTrainer {
         NdArray rejectedLabels = batch.getRejectedLabels();
         NdArray promptMask = batch.getPromptMask();
         
-        // 1. 策略模型前向传播
-        policyModel.setTraining(true);
         Variable chosenInputVar = new Variable(chosenInput);
         Variable rejectedInputVar = new Variable(rejectedInput);
+        Variable chosenLabelsVar = new Variable(chosenLabels);
+        Variable rejectedLabelsVar = new Variable(rejectedLabels);
+        Variable maskVar = new Variable(promptMask);
         
+        // 1. 参考模型前向传播 (不需要梯度，使用 detached 计算)
+        referenceModel.setTraining(false);
+        Variable refChosenLogits = referenceModel.predict(new Variable(chosenInput));
+        Variable refRejectedLogits = referenceModel.predict(new Variable(rejectedInput));
+        float refChosenLogProb = dpoLoss.computeLogProbsDetached(refChosenLogits, chosenLabelsVar, maskVar);
+        float refRejectedLogProb = dpoLoss.computeLogProbsDetached(refRejectedLogits, rejectedLabelsVar, maskVar);
+        
+        // 2. 策略模型前向传播 (保持计算图，支持反向传播)
+        policyModel.setTraining(true);
         Variable policyChosenLogits = policyModel.predict(chosenInputVar);
         Variable policyRejectedLogits = policyModel.predict(rejectedInputVar);
         
-        // 2. 参考模型前向传播(不计算梯度)
-        Variable refChosenLogits = referenceModel.predict(chosenInputVar);
-        Variable refRejectedLogits = referenceModel.predict(rejectedInputVar);
-        
-        // 3. 计算log概率
-        Variable maskVar = new Variable(promptMask);
-        Variable chosenLabelsVar = new Variable(chosenLabels);
-        Variable rejectedLabelsVar = new Variable(rejectedLabels);
-        
+        // 3. 计算策略模型的 log 概率 (在计算图中)
         Variable policyChosenLogProbs = dpoLoss.computeLogProbs(policyChosenLogits, chosenLabelsVar, maskVar);
         Variable policyRejectedLogProbs = dpoLoss.computeLogProbs(policyRejectedLogits, rejectedLabelsVar, maskVar);
-        Variable refChosenLogProbs = dpoLoss.computeLogProbs(refChosenLogits, chosenLabelsVar, maskVar);
-        Variable refRejectedLogProbs = dpoLoss.computeLogProbs(refRejectedLogits, rejectedLabelsVar, maskVar);
         
-        // 4. 计算DPO损失
-        Variable loss = dpoLoss.loss(policyChosenLogProbs, policyRejectedLogProbs, 
-                                     refChosenLogProbs, refRejectedLogProbs);
+        // 4. 计算 DPO 损失 (参考模型的 log prob 作为常量传入)
+        Variable loss = dpoLoss.loss(policyChosenLogProbs, policyRejectedLogProbs,
+                                     refChosenLogProb, refRejectedLogProb);
         
         float lossValue = loss.getValue().getNumber().floatValue();
         
-        // 5. 计算准确率(chosen的log概率是否 > rejected)
+        // 5. 计算准确率 (chosen 的 log 概率是否 > rejected)
         float chosenProb = policyChosenLogProbs.getValue().getNumber().floatValue();
         float rejectedProb = policyRejectedLogProbs.getValue().getNumber().floatValue();
         float accuracy = chosenProb > rejectedProb ? 1.0f : 0.0f;
@@ -296,6 +296,9 @@ public class DPOTrainer {
         
         // 8. 参数更新
         optimizer.update();
+        
+        // 9. 断开计算图，释放内存
+        loss.unChainBackward();
         
         return new float[]{lossValue, accuracy};
     }

@@ -83,6 +83,16 @@ public class MultiHeadAttention extends Module {
      * 是否处于训练模式
      */
     private boolean training = true;
+    
+    /**
+     * 掩码缓存：缓存已创建的因果掩码
+     */
+    private Variable cachedMask;
+    
+    /**
+     * 缓存的掩码大小：记录缓存的掩码对应的序列长度
+     */
+    private int cachedMaskSize = -1;
 
     /**
      * 构造多头注意力层
@@ -365,11 +375,22 @@ public class MultiHeadAttention extends Module {
     
     /**
      * 应用因果掩码（使用 Variable.maskedFill）
+     * 优化：添加掩码缓存，只在序列长度变化时重新创建
      */
     private Variable applyCausalMaskVar(Variable scores, int batchSize, int numHeads,
                                         int qSeqLen, int kvSeqLen, int startPos) {
         // scores: [batch, numHeads, qSeqLen, kvSeqLen]
-        // 创建因果掩码矩阵
+        
+        // 缓存键必须包含 batchSize，避免不同 batch 大小时复用错误形状的掩码
+        int cacheKey = batchSize * 100000000 + qSeqLen * 10000 + kvSeqLen;
+        
+        // 检查缓存是否有效
+        if (cachedMask != null && cachedMaskSize == cacheKey) {
+            // 使用缓存的掩码
+            return scores.maskedFill(cachedMask, -1e9f);
+        }
+        
+        // 创建新的因果掩码矩阵
         NdArray maskData = NdArray.zeros(Shape.of(batchSize, numHeads, qSeqLen, kvSeqLen));
         float[] maskBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) maskData).buffer;
         
@@ -387,11 +408,13 @@ public class MultiHeadAttention extends Module {
             }
         }
         
-        Variable mask = new Variable(maskData);
-        mask.setRequireGrad(false);
+        // 缓存新创建的掩码
+        cachedMask = new Variable(maskData);
+        cachedMask.setRequireGrad(false);
+        cachedMaskSize = cacheKey;
         
         // 使用 maskedFill 将掩码位置填充为较大的负数（避免使用负无穷导致 NaN）
-        return scores.maskedFill(mask, -1e9f);
+        return scores.maskedFill(cachedMask, -1e9f);
     }
     
     /**
@@ -400,14 +423,19 @@ public class MultiHeadAttention extends Module {
     private Variable softmaxLastDim(Variable input, int batchSize, int numHeads,
                                     int qSeqLen, int kvSeqLen) {
         // input: [batch, numHeads, qSeqLen, kvSeqLen]
-        // Reshape 为 3D: [batch*numHeads*qSeqLen, kvSeqLen]
-        Variable reshaped = input.reshape(Shape.of(batchSize * numHeads * qSeqLen, kvSeqLen));
+        // 从实际张量形状获取维度，避免参数与实际形状不一致
+        int[] actualShape = input.getValue().getShape().getShapeDims();
+        int actualRows = actualShape[0] * actualShape[1] * actualShape[2];
+        int actualCols = actualShape[3];
+        
+        // Reshape 为 2D: [batch*numHeads*qSeqLen, kvSeqLen]
+        Variable reshaped = input.reshape(Shape.of(actualRows, actualCols));
         
         // 应用 softmax
         Variable softmaxed = reshaped.softMax();
         
-        // Reshape 回 4D
-        return softmaxed.reshape(Shape.of(batchSize, numHeads, qSeqLen, kvSeqLen));
+        // Reshape 回 4D（使用实际形状）
+        return softmaxed.reshape(Shape.of(actualShape[0], actualShape[1], actualShape[2], actualShape[3]));
     }
     
     /**

@@ -82,7 +82,9 @@ public class MiniMindBlock extends Module {
                 config.getFfnHiddenSize(),
                 config.getMaxSeqLen(),
                 config.getDropout(),
-                config.getEpsilon()
+                config.getEpsilon(),
+                config.getActivationFunction(),
+                config.isPreLayerNorm()
             );
             layers.add(layer);
             registerModule("layer_" + i, layer);

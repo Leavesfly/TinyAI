@@ -185,8 +185,8 @@ public class MiniMindModel extends Model {
             currentLen++;
             generatedTokens.add(nextToken);
 
-            // 检查是否遇到结束符（假设 EOS token ID 为 2）
-            if (nextToken == 2) {
+            // 检查是否遇到结束符
+            if (nextToken == config.getEosTokenId()) {
                 break;
             }
         }
@@ -313,8 +313,16 @@ public class MiniMindModel extends Model {
             sum += probs[i];
         }
 
-        for (int i = 0; i < probs.length; i++) {
-            probs[i] /= sum;
+        // 添加 sum == 0 的保护，避免 NaN
+        if (sum == 0.0f) {
+            // 如果所有概率都为 0，则均匀分布
+            for (int i = 0; i < probs.length; i++) {
+                probs[i] = 1.0f / probs.length;
+            }
+        } else {
+            for (int i = 0; i < probs.length; i++) {
+                probs[i] /= sum;
+            }
         }
 
         return probs;

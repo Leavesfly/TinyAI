@@ -143,15 +143,15 @@ public class MiniMindMoETransformerLayer extends Module {
         // 2. MoE 部分: x = x + MoE(norm2(x))
         Variable norm2Output = norm2.forward(afterAttn);
         
-        // 获取 Router 输出（用于计算负载均衡损失）
+        // Router 只调用一次，结果同时用于专家路由和负载均衡损失计算
         ExpertRouter router = moeLayer.getRouter();
         ExpertRouter.RouterOutput routerOutput = router.forwardRouter(norm2Output);
         
-        // MoE 前向传播
-        Variable moeOutput = moeLayer.forwardVar(norm2Output);
+        // 使用已计算好的 routerOutput 进行 MoE 前向传播（避免重复路由）
+        Variable moeOutput = moeLayer.forwardWithRouterOutput(norm2Output, routerOutput);
         Variable output = afterAttn.add(moeOutput);
 
-        // 3. 计算负载均衡损失
+        // 3. 计算负载均衡损失（复用同一个 routerOutput）
         float balanceLoss = 0.0f;
         if (training && moeConfig.isEnableLoadBalance()) {
             MoELayer.LoadBalanceStats stats = moeLayer.getLoadBalanceStats(routerOutput);

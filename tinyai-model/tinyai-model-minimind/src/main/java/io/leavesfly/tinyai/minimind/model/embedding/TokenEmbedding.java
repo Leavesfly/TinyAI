@@ -20,6 +20,7 @@ public class TokenEmbedding extends Module {
 
     private final int vocabSize;
     private final int embeddingDim;
+    private final float initStd;
     private Parameter weight;
 
     /**
@@ -29,14 +30,26 @@ public class TokenEmbedding extends Module {
      * @param embeddingDim 嵌入维度
      */
     public TokenEmbedding(int vocabSize, int embeddingDim) {
+        this(vocabSize, embeddingDim, 0.02f);
+    }
+
+    /**
+     * 构造 Token 嵌入层
+     *
+     * @param vocabSize    词汇表大小
+     * @param embeddingDim 嵌入维度
+     * @param initStd      初始化标准差
+     */
+    public TokenEmbedding(int vocabSize, int embeddingDim, float initStd) {
         super("TokenEmbedding");
         this.vocabSize = vocabSize;
         this.embeddingDim = embeddingDim;
+        this.initStd = initStd;
 
         // 注册嵌入矩阵参数: [vocabSize, embeddingDim]
         NdArray embeddingMatrix = NdArray.likeRandomN(Shape.of(vocabSize, embeddingDim));
-        // 缩放到合适的标准差 0.02
-        embeddingMatrix = embeddingMatrix.mulNum(0.02f);
+        // 缩放到合适的标准差
+        embeddingMatrix = embeddingMatrix.mulNum(initStd);
         this.weight = registerParameter("weight", new Parameter(embeddingMatrix, true));
     }
 
@@ -52,6 +65,18 @@ public class TokenEmbedding extends Module {
         int[] shape = tokenIds.getShape().getShapeDims();
         int batchSize = shape[0];
         int seqLen = shape.length > 1 ? shape[1] : 1;
+
+        // Token ID 边界检查
+        float[] tokenIdsData = tokenIds.getValue().getArray();
+        for (int i = 0; i < tokenIdsData.length; i++) {
+            int tokenId = (int) tokenIdsData[i];
+            if (tokenId < 0 || tokenId >= vocabSize) {
+                throw new IllegalArgumentException(
+                    String.format("Token ID %d at position %d is out of range [0, %d)", 
+                        tokenId, i, vocabSize)
+                );
+            }
+        }
 
         // 使用 Variable 层面的 indexSelect 进行嵌入查找
         // 将 tokenIds reshape 为一维: [batch_size * seq_len]

@@ -9,7 +9,9 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * MiniMind API服务器
@@ -27,6 +29,21 @@ import java.util.concurrent.Executors;
  * @since 2024
  */
 public class MiniMindAPIServer {
+    
+    /** 最大请求体大小: 1MB */
+    private static final int MAX_REQUEST_BODY_SIZE = 1024 * 1024;
+    
+    /** 速率限制: 每个IP每分钟最大请求数 */
+    private static final int MAX_REQUESTS_PER_MINUTE = 60;
+    
+    /** 可选的 API Key（为空则不启用认证） */
+    private static String apiKey = null;
+    
+    /** 每个IP的请求计数器 */
+    private static final ConcurrentHashMap<String, AtomicInteger> requestCounters = new ConcurrentHashMap<>();
+    
+    /** 计数器重置时间戳 */
+    private static volatile long counterResetTime = System.currentTimeMillis();
     
     private final HttpServer server;
     private final int port;
@@ -136,7 +153,47 @@ public class MiniMindAPIServer {
     }
     
     /**
-     * 发送文本响应
+     * 设置 API Key（设置后所有请求需携带 Authorization: Bearer <key>）
+     */
+    public static void setApiKey(String key) {
+        apiKey = key;
+    }
+    
+    /**
+     * 验证请求的认证和速率限制
+     * 
+     * @return 如果验证通过返回 true，否则已发送错误响应并返回 false
+     */
+    static boolean validateRequest(HttpExchange exchange) throws IOException {
+        // API Key 认证
+        if (apiKey != null && !apiKey.isEmpty()) {
+            String authHeader = exchange.getRequestHeaders().getFirst("Authorization");
+            if (authHeader == null || !authHeader.equals("Bearer " + apiKey)) {
+                sendJSONResponse(exchange, 401, 
+                    "{\"error\":{\"message\":\"Invalid or missing API key\",\"type\":\"authentication_error\",\"code\":401}}");
+                return false;
+            }
+        }
+        
+        // 速率限制
+        String clientIp = exchange.getRemoteAddress().getAddress().getHostAddress();
+        long now = System.currentTimeMillis();
+        if (now - counterResetTime > 60_000) {
+            requestCounters.clear();
+            counterResetTime = now;
+        }
+        AtomicInteger counter = requestCounters.computeIfAbsent(clientIp, k -> new AtomicInteger(0));
+        if (counter.incrementAndGet() > MAX_REQUESTS_PER_MINUTE) {
+            sendJSONResponse(exchange, 429, 
+                "{\"error\":{\"message\":\"Rate limit exceeded\",\"type\":\"rate_limit_error\",\"code\":429}}");
+            return false;
+        }
+        
+        return true;
+    }
+    
+    /**
+     * 发送文本响应（使用 try-with-resources 确保资源释放）
      */
     static void sendResponse(HttpExchange exchange, int statusCode, String response) throws IOException {
         byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
@@ -145,13 +202,13 @@ public class MiniMindAPIServer {
         addCORSHeaders(exchange);
         
         exchange.sendResponseHeaders(statusCode, bytes.length);
-        OutputStream os = exchange.getResponseBody();
-        os.write(bytes);
-        os.close();
+        try (OutputStream outputStream = exchange.getResponseBody()) {
+            outputStream.write(bytes);
+        }
     }
     
     /**
-     * 发送JSON响应
+     * 发送JSON响应（使用 try-with-resources 确保资源释放）
      */
     static void sendJSONResponse(HttpExchange exchange, int statusCode, String json) throws IOException {
         byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
@@ -160,9 +217,9 @@ public class MiniMindAPIServer {
         addCORSHeaders(exchange);
         
         exchange.sendResponseHeaders(statusCode, bytes.length);
-        OutputStream os = exchange.getResponseBody();
-        os.write(bytes);
-        os.close();
+        try (OutputStream outputStream = exchange.getResponseBody()) {
+            outputStream.write(bytes);
+        }
     }
     
     /**
@@ -175,10 +232,13 @@ public class MiniMindAPIServer {
     }
     
     /**
-     * 读取请求体
+     * 读取请求体（带大小限制）
      */
     static String readRequestBody(HttpExchange exchange) throws IOException {
         byte[] bytes = exchange.getRequestBody().readAllBytes();
+        if (bytes.length > MAX_REQUEST_BODY_SIZE) {
+            throw new IOException("Request body too large: " + bytes.length + " bytes (max: " + MAX_REQUEST_BODY_SIZE + ")");
+        }
         return new String(bytes, StandardCharsets.UTF_8);
     }
     

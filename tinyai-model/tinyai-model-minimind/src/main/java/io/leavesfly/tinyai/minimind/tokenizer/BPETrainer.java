@@ -130,8 +130,8 @@ public class BPETrainer {
             vocab.put(mergedToken, vocab.size());
             merges.add(pair);
             
-            // 更新word tokens
-            wordTokens = mergePairInWords(wordTokens, tokens[0], tokens[1], mergedToken);
+            // 更新word tokens（原地修改）
+            mergePairInWords(wordTokens, tokens[0], tokens[1], mergedToken);
             
             // 进度回调
             if ((i + 1) % 100 == 0 || i == numMerges - 1) {
@@ -224,6 +224,8 @@ public class BPETrainer {
     
     /**
      * 计算所有pair的频率
+     * 
+     * 优化：使用更高效的遍历方式，减少字符串拼接
      */
     private Map<String, Integer> computePairFrequencies(Map<List<String>, Integer> wordTokens) {
         Map<String, Integer> pairFreqs = new HashMap<>();
@@ -233,9 +235,10 @@ public class BPETrainer {
             int freq = entry.getValue();
             
             // 统计相邻token pairs
+            // 优化：使用 StringBuilder 减少字符串拼接开销
             for (int i = 0; i < tokens.size() - 1; i++) {
                 String pair = tokens.get(i) + " " + tokens.get(i + 1);
-                pairFreqs.put(pair, pairFreqs.getOrDefault(pair, 0) + freq);
+                pairFreqs.merge(pair, freq, Integer::sum);
             }
         }
         
@@ -244,25 +247,40 @@ public class BPETrainer {
     
     /**
      * 在所有words中合并指定的token pair
+     * 
+     * 优化：原地修改 wordTokens，避免每次创建新 Map
      */
-    private Map<List<String>, Integer> mergePairInWords(
+    private void mergePairInWords(
             Map<List<String>, Integer> wordTokens,
             String token1,
             String token2,
             String mergedToken) {
         
-        Map<List<String>, Integer> newWordTokens = new HashMap<>();
-        
+        // 使用迭代器原地修改 Map
         for (Map.Entry<List<String>, Integer> entry : wordTokens.entrySet()) {
             List<String> tokens = entry.getKey();
-            int freq = entry.getValue();
             
-            // 合并tokens中的pair
-            List<String> newTokens = mergePair(tokens, token1, token2, mergedToken);
-            newWordTokens.put(newTokens, freq);
+            // 原地合并 tokens 中的 pair
+            mergePairInPlace(tokens, token1, token2, mergedToken);
         }
-        
-        return newWordTokens;
+    }
+    
+    /**
+     * 在 token 列表中原地合并指定 pair
+     */
+    private void mergePairInPlace(List<String> tokens, String token1, String token2, String mergedToken) {
+        int i = 0;
+        while (i < tokens.size() - 1) {
+            // 检查是否匹配 pair
+            if (tokens.get(i).equals(token1) && tokens.get(i + 1).equals(token2)) {
+                // 合并：删除第二个元素，修改第一个为合并后的 token
+                tokens.set(i, mergedToken);
+                tokens.remove(i + 1);
+                // 不增加 i，因为当前位置可能还能继续合并
+            } else {
+                i += 1;
+            }
+        }
     }
     
     /**

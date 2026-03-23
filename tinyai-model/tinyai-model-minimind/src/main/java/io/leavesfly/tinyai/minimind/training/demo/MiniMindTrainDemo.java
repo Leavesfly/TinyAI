@@ -11,10 +11,10 @@ import static io.leavesfly.tinyai.minimind.training.demo.DemoTrainingStages.*;
  * 提供完整的 LLM 训练流程演示：
  * 1. 数据准备 - 生成各阶段训练数据
  * 2. 预训练 - 无监督语言建模
- * 3. SFT微调 - 监督指令微调
- * 4. LoRA微调 - 参数高效微调
- * 5. DPO训练 - 直接偏好优化
- * 6. RL训练 - 强化学习优化
+ * 3. SFT微调 - 监督指令微调（全参数）
+ * 4. DPO训练 - 直接偏好优化（人类偏好对齐）
+ * 5. RL训练 - 强化学习优化
+ * 6. LoRA微调 - 参数高效微调（特定任务适配）
  * 7. 推理测试 - 文本生成
  * <p>
  * 数据集特点：超小规模、适合教学、覆盖完整流程
@@ -42,17 +42,17 @@ public class MiniMindTrainDemo {
             // 步骤2: 监督微调（SFT）
             MiniMindModel sftModel = runSupervisedFinetuning(pretrainedModel);
 
-            // 步骤3: LoRA微调
-            MiniMindModel loraModel = runLoRAFinetuning(sftModel);
+            // 步骤3: DPO训练（人类偏好对齐）
+            MiniMindModel dpoModel = runDPOTraining(sftModel);
 
-            // 步骤4: DPO训练
-            MiniMindModel dpoModel = runDPOTraining(loraModel);
-
-            // 步骤5: 强化学习训练
+            // 步骤4: 强化学习训练
             MiniMindModel rlModel = runReinforcementLearningTraining(dpoModel);
 
+            // 步骤5: LoRA微调（特定任务适配）
+            MiniMindModel loraModel = runLoRAFinetuning(rlModel);
+
             // 步骤6: 推理测试
-            runInference(rlModel);
+            runInference(loraModel);
 
             printSuccess();
 
@@ -69,7 +69,7 @@ public class MiniMindTrainDemo {
         System.out.println("=".repeat(80));
         System.out.println();
         System.out.println("训练流程:");
-        System.out.println("  [0] 数据准备 → [1] 预训练 → [2] SFT → [3] LoRA → [4] DPO → [5] RL → [6] 推理");
+        System.out.println("  [0] 数据准备 → [1] 预训练 → [2] SFT → [3] DPO → [4] RL → [5] LoRA → [6] 推理");
         System.out.println();
     }
 

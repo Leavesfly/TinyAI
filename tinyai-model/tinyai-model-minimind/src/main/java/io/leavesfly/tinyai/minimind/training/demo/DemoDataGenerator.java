@@ -412,4 +412,19 @@ public class DemoDataGenerator {
         writeToFile(rlTexts, filePath);
         System.out.println("  ✓ RL训练数据: " + rlTexts.size() + " 条");
     }
+
+    /**
+     * 将文本列表写入文件，每行一条
+     *
+     * @param lines    文本行列表
+     * @param filePath 文件路径
+     */
+    private static void writeToFile(List<String> lines, String filePath) throws IOException {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
+            for (String line : lines) {
+                writer.write(line);
+                writer.newLine();
+            }
+        }
+    }
 }

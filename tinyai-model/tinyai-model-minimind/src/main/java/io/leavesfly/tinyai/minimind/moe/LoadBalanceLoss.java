@@ -53,18 +53,21 @@ public class LoadBalanceLoss {
         float[] importance = stats.getImportance();
         float[] load = stats.getLoad();
         
-        // 1. Importance Loss: num_experts · Σ(importance_i · load_i)
-        float importanceLoss = 0.0f;
+        // 1. Switch Transformer 标准的辅助损失
+        // Auxiliary Loss = numExperts * sum(fraction_i * probability_i)
+        // 其中 fraction_i 是分配给专家 i 的 token 比例
+        // probability_i 是路由到专家 i 的平均概率
+        float auxiliaryLoss = 0.0f;
         for (int i = 0; i < numExperts; i++) {
-            importanceLoss += importance[i] * load[i];
+            auxiliaryLoss += load[i] * importance[i];
         }
-        importanceLoss *= numExperts;
+        auxiliaryLoss *= numExperts;
         
         // 2. Load Loss: 变异系数CV(load)
         float loadLoss = coefficientOfVariation(load);
         
-        // 3. 总损失
-        float totalLoss = importanceCoef * importanceLoss + loadCoef * loadLoss;
+        // 3. 总损失：使用辅助损失替代原来的 importance loss
+        float totalLoss = importanceCoef * auxiliaryLoss + loadCoef * loadLoss;
         
         return totalLoss;
     }

@@ -2,7 +2,6 @@ package io.leavesfly.tinyai.minimind.cli;
 
 import io.leavesfly.tinyai.minimind.cli.MiniMindCLI.Command;
 import io.leavesfly.tinyai.minimind.cli.MiniMindCLI.ArgParser;
-import io.leavesfly.tinyai.minimind.model.MiniMindConfig;
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
 import io.leavesfly.tinyai.minimind.tokenizer.MiniMindTokenizer;
 
@@ -43,25 +42,9 @@ public class ChatCommand implements Command {
         MiniMindTokenizer tokenizer;
         
         try {
-            if (new File(modelPath).exists()) {
-                System.out.println("正在加载模型: " + modelPath);
-                // TODO: 实现模型加载逻辑
-                // model = MiniMindModel.load(modelPath);
-                // tokenizer = MiniMindTokenizer.load(modelPath + "/tokenizer.json");
-                System.out.println("[注意] 模型加载功能开发中,使用默认配置");
-                MiniMindConfig config = MiniMindConfig.createSmallConfig();
-                model = new MiniMindModel("minimind-chat", config);
-                tokenizer = MiniMindTokenizer.createCharLevelTokenizer(
-                    config.getVocabSize(), config.getMaxSeqLen()
-                );
-            } else {
-                System.out.println("模型文件不存在,使用默认配置");
-                MiniMindConfig config = MiniMindConfig.createSmallConfig();
-                model = new MiniMindModel("minimind-chat", config);
-                tokenizer = MiniMindTokenizer.createCharLevelTokenizer(
-                    config.getVocabSize(), config.getMaxSeqLen()
-                );
-            }
+            ModelLoader.ModelLoadResult loadResult = ModelLoader.loadModel(modelPath, "minimind-chat");
+            model = loadResult.getModel();
+            tokenizer = loadResult.getTokenizer();
             
             System.out.println("模型加载完成!");
             

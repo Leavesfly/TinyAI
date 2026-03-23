@@ -10,6 +10,7 @@ import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 import java.util.Map;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Random;
 
 /**
  * Expert Router - 专家路由网络
@@ -172,21 +173,37 @@ public class ExpertRouter extends Module {
     }
     
     /**
-     * 添加噪声(Noisy Top-K)
+     * 添加噪声(Noisy Top-K Gating)
      * 
-     * 噪声公式: noise = StandardNormal() * noiseFactor * Softplus(W_noise · x)
+     * 使用标准高斯噪声,噪声幅度由 noiseFactor 控制:
+     * noisy_logits = logits + StandardNormal() * noiseFactor
+     * 
+     * 参考: Shazeer et al. 2017 "Outrageously Large Neural Networks"
+     * 
+     * 修复说明: 通过 Variable 运算添加噪声,确保噪声参与梯度计算
      */
     private Variable addNoise(Variable gateLogits) {
         NdArray logitsData = gateLogits.getValue();
-        float[] logitsBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) logitsData).buffer;
-        
-        // 简化实现:直接添加高斯噪声
-        for (int i = 0; i < logitsBuffer.length; i++) {
-            float noise = (float) (Math.random() - 0.5) * 2 * noiseFactor;
-            logitsBuffer[i] += noise;
+        int[] shape = logitsData.getShape().getShapeDims();
+        int totalElements = 1;
+        for (int dim : shape) {
+            totalElements *= dim;
         }
         
-        return gateLogits;
+        // 创建噪声数组
+        float[] noiseBuffer = new float[totalElements];
+        Random random = new Random();
+        for (int i = 0; i < totalElements; i++) {
+            noiseBuffer[i] = (float) random.nextGaussian() * noiseFactor;
+        }
+        
+        // 将噪声包装为 Variable(不需要梯度)
+        NdArray noiseNdArray = NdArray.of(noiseBuffer, logitsData.getShape());
+        Variable noiseVar = new Variable(noiseNdArray);
+        noiseVar.setRequireGrad(false);
+        
+        // 通过 Variable.add() 运算添加噪声,确保噪声通过计算图传播
+        return gateLogits.add(noiseVar);
     }
     
     // 已删除 softmax 方法，改用 Variable.softMax() 算子

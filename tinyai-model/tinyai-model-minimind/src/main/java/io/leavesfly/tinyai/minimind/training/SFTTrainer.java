@@ -25,29 +25,19 @@ import java.util.List;
  * @author leavesfly
  * @since 2024
  */
-public class SFTTrainer {
+public class SFTTrainer extends BaseTrainer {
     
-    private final MiniMindModel model;
     private final SFTDataset dataset;
     private final SoftmaxCrossEntropy lossFunction;
     private final Adam optimizer;
     
-    private int maxEpochs;
     private float learningRate;
-    private float maxGradNorm;
-    private int logInterval;
-    private int saveInterval;
-    private String checkpointDir;
-    
-    private int currentEpoch;
-    private int currentStep;
-    private List<Float> lossHistory;
     
     /**
      * 构造函数
      */
     public SFTTrainer(MiniMindModel model, SFTDataset dataset) {
-        this.model = model;
+        super(model);
         this.dataset = dataset;
         this.lossFunction = new SoftmaxCrossEntropy();
         
@@ -61,10 +51,6 @@ public class SFTTrainer {
         
         // 创建优化器
         this.optimizer = new Adam(model, learningRate, 0.9f, 0.999f, 1e-8f);
-        
-        this.currentEpoch = 0;
-        this.currentStep = 0;
-        this.lossHistory = new ArrayList<>();
     }
     
     /**
@@ -79,81 +65,14 @@ public class SFTTrainer {
         return this;
     }
     
-    /**
-     * 开始训练
-     */
-    public void train() {
-        System.out.println("=".repeat(60));
-        System.out.println("开始SFT微调");
-        System.out.println("=".repeat(60));
-        System.out.println("训练样本数: " + dataset.getSampleCount());
-        System.out.println("批次数量: " + dataset.getBatchCount());
-        System.out.println("最大轮次: " + maxEpochs);
-        System.out.println("学习率: " + learningRate);
-        System.out.println("=".repeat(60));
-        
-        createCheckpointDir();
-        
-        for (currentEpoch = 0; currentEpoch < maxEpochs; currentEpoch++) {
-            trainOneEpoch();
-        }
-        
-        System.out.println("SFT微调完成!");
-    }
+    // ==================== 实现抽象方法 ====================
     
-    /**
-     * 训练一个epoch
-     */
-    private void trainOneEpoch() {
-        dataset.prepare(true);
-        model.setTraining(true);
+    @Override
+    protected float trainStep(Object batch) {
+        SFTDataset.Batch sftBatch = (SFTDataset.Batch) batch;
         
-        double epochLoss = 0.0;
-        int batchCount = 0;
-        
-        long epochStartTime = System.currentTimeMillis();
-        
-        while (dataset.hasNextBatch()) {
-            SFTDataset.Batch batch = dataset.getNextBatch();
-            float stepLoss = trainStep(batch);
-            
-            epochLoss += stepLoss;
-            batchCount++;
-            currentStep++;
-            
-            lossHistory.add(stepLoss);
-            
-            if (currentStep % logInterval == 0) {
-                double avgLoss = lossHistory.stream()
-                    .skip(Math.max(0, lossHistory.size() - logInterval))
-                    .mapToDouble(Float::doubleValue)
-                    .average()
-                    .orElse(0.0);
-                
-                System.out.printf("Epoch %d/%d | Step %d | Loss: %.4f%n",
-                    currentEpoch + 1, maxEpochs, currentStep, avgLoss);
-            }
-            
-            if (currentStep % saveInterval == 0) {
-                saveCheckpoint();
-            }
-        }
-        
-        long epochEndTime = System.currentTimeMillis();
-        double avgEpochLoss = batchCount > 0 ? epochLoss / batchCount : 0.0;
-        
-        System.out.printf("Epoch %d 完成 | 平均损失: %.6f | 耗时: %d ms%n",
-            currentEpoch + 1, avgEpochLoss, epochEndTime - epochStartTime);
-        
-        dataset.reset();
-    }
-    
-    /**
-     * 训练一步
-     */
-    private float trainStep(SFTDataset.Batch batch) {
-        NdArray inputArray = batch.getInput();
-        NdArray labelArray = batch.getLabels();
+        NdArray inputArray = sftBatch.getInput();
+        NdArray labelArray = sftBatch.getLabels();
         // 注: 掩码暂不使用，SoftmaxCE 已计算平均损失
         
         Variable input = new Variable(inputArray);
@@ -187,7 +106,7 @@ public class SFTTrainer {
         // 反向传播
         loss.backward();
         
-        // 梯度裁剪
+        // 梯度裁剪（继承自BaseTrainer）
         clipGradients();
         
         // 更新参数
@@ -199,75 +118,51 @@ public class SFTTrainer {
         return lossValue;
     }
     
-    /**
-     * 梯度裁剪
-     */
-    private void clipGradients() {
-        double totalNorm = 0.0;
-        
-        for (var param : model.getAllParams().values()) {
-            if (param.getGrad() != null) {
-                NdArray grad = param.getGrad();
-                float[] gradData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) grad).buffer;
-                
-                for (float g : gradData) {
-                    totalNorm += g * g;
-                }
-            }
-        }
-        
-        totalNorm = Math.sqrt(totalNorm);
-        
-        if (totalNorm > maxGradNorm) {
-            float clipCoef = maxGradNorm / (float) totalNorm;
-            
-            for (var param : model.getAllParams().values()) {
-                if (param.getGrad() != null) {
-                    NdArray grad = param.getGrad();
-                    float[] gradData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) grad).buffer;
-                    
-                    for (int i = 0; i < gradData.length; i++) {
-                        gradData[i] *= clipCoef;
-                    }
-                }
-            }
-        }
+    @Override
+    protected String getTrainerName() {
+        return "SFT微调";
+    }
+    
+    @Override
+    protected void printTrainingInfo() {
+        System.out.println("=".repeat(60));
+        System.out.println("开始SFT微调");
+        System.out.println("=".repeat(60));
+        System.out.println("训练样本数: " + dataset.getSampleCount());
+        System.out.println("批次数量: " + dataset.getBatchCount());
+        System.out.println("最大轮次: " + maxEpochs);
+        System.out.println("学习率: " + learningRate);
+        System.out.println("=".repeat(60));
+    }
+    
+    @Override
+    protected void prepareDataset() {
+        dataset.prepare(true);
+    }
+    
+    @Override
+    protected boolean hasNextBatch() {
+        return dataset.hasNextBatch();
+    }
+    
+    @Override
+    protected Object getNextBatch() {
+        return dataset.getNextBatch();
+    }
+    
+    @Override
+    protected void resetDataset() {
+        dataset.reset();
+    }
+    
+    @Override
+    protected String getCheckpointPrefix() {
+        return "sft_checkpoint";
     }
     
     /**
-     * 保存检查点
+     * 设置检查点目录
      */
-    private void saveCheckpoint() {
-        String filename = String.format("sft_checkpoint_epoch%d_step%d.model", 
-            currentEpoch, currentStep);
-        String filepath = Paths.get(checkpointDir, filename).toString();
-        
-        try {
-            model.save(new File(filepath));
-            System.out.println("SFT检查点已保存: " + filepath);
-        } catch (Exception e) {
-            System.err.println("保存检查点失败: " + e.getMessage());
-        }
-    }
-    
-    /**
-     * 创建检查点目录
-     */
-    private void createCheckpointDir() {
-        try {
-            Path path = Paths.get(checkpointDir);
-            if (!Files.exists(path)) {
-                Files.createDirectories(path);
-            }
-        } catch (IOException e) {
-            System.err.println("创建检查点目录失败: " + e.getMessage());
-        }
-    }
-    
-    public List<Float> getLossHistory() {
-        return new ArrayList<>(lossHistory);
-    }
-    
     public void setCheckpointDir(String checkpointDir) {
         this.checkpointDir = checkpointDir;
     }

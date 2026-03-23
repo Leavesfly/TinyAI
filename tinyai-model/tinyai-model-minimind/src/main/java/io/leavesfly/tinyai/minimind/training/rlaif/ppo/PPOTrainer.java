@@ -60,11 +60,14 @@ public class PPOTrainer {
         this.config = config;
         this.ppoLoss = new PPOLoss(config);
         
-        // 创建优化器(简化实现:ValueNetwork不是Model,手动管理参数)
+        // 创建优化器
         this.actorOptimizer = new Adam(actor, config.getActorLearningRate(), 
                                        0.9f, 0.999f, 1e-8f);
-        // Critic优化器设为null(简化实现)
-        this.criticOptimizer = null;
+        // 修复: 将 ValueNetwork 包装为 Model 后创建优化器
+        io.leavesfly.tinyai.ml.model.Model criticModel = 
+            new io.leavesfly.tinyai.ml.model.Model("critic", critic);
+        this.criticOptimizer = new Adam(criticModel, config.getCriticLearningRate(), 
+                                        0.9f, 0.999f, 1e-8f);
         
         this.maxEpochs = 1;
         this.logInterval = 10;

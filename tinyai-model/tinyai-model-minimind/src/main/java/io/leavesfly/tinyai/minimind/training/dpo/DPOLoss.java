@@ -42,100 +42,129 @@ public class DPOLoss {
     /**
      * 计算DPO损失
      * 
-     * @param chosenLogProbs 策略模型在chosen响应上的对数概率
-     * @param rejectedLogProbs 策略模型在rejected响应上的对数概率
-     * @param refChosenLogProbs 参考模型在chosen响应上的对数概率
-     * @param refRejectedLogProbs 参考模型在rejected响应上的对数概率
+     * @param chosenLogProbs 策略模型在chosen响应上的对数概率 (在计算图中)
+     * @param rejectedLogProbs 策略模型在rejected响应上的对数概率 (在计算图中)
+     * @param refChosenLogProbValue 参考模型在chosen响应上的对数概率 (标量常量)
+     * @param refRejectedLogProbValue 参考模型在rejected响应上的对数概率 (标量常量)
      * @return DPO损失
      */
     public Variable loss(Variable chosenLogProbs, Variable rejectedLogProbs,
-                        Variable refChosenLogProbs, Variable refRejectedLogProbs) {
+                        float refChosenLogProbValue, float refRejectedLogProbValue) {
         
-        // 计算策略模型的log ratio
-        // log(π_θ(y_w|x)/π_θ(y_l|x)) = log π_θ(y_w|x) - log π_θ(y_l|x)
+        // 计算策略模型的log ratio (在计算图中，可反向传播)
+        // log(π_θ(y_w|x)) - log(π_θ(y_l|x))
         Variable policyLogRatio = chosenLogProbs.sub(rejectedLogProbs);
         
-        // 计算参考模型的log ratio
-        // log(π_ref(y_w|x)/π_ref(y_l|x)) = log π_ref(y_w|x) - log π_ref(y_l|x)
-        Variable refLogRatio = refChosenLogProbs.sub(refRejectedLogProbs);
+        // 参考模型的log ratio (常量，不参与梯度)
+        float refLogRatioValue = refChosenLogProbValue - refRejectedLogProbValue;
         
-        // 计算隐式奖励: β * [log(π_θ/π_ref)(y_w) - log(π_θ/π_ref)(y_l)]
-        // = β * [(log π_θ(y_w) - log π_ref(y_w)) - (log π_θ(y_l) - log π_ref(y_l))]
-        Variable implicitReward = policyLogRatio.sub(refLogRatio);
+        // 隐式奖励: policy_log_ratio - ref_log_ratio
+        Variable implicitReward = policyLogRatio.sub(new Variable(NdArray.of(refLogRatioValue)));
         Variable scaledReward = implicitReward.mul(new Variable(NdArray.of(beta)));
         
-        // 计算sigmoid损失: -log(σ(scaled_reward))
-        // 等价于: log(1 + exp(-scaled_reward)) = softplus(-scaled_reward)
+        // 计算sigmoid损失: -log(σ(scaled_reward)) = softplus(-scaled_reward)
         Variable negScaledReward = scaledReward.mul(new Variable(NdArray.of(-1.0f)));
         Variable dpoLoss = softplus(negScaledReward);
         
         // 应用标签平滑
         if (labelSmoothing > 0) {
-            // 添加正则化项鼓励chosen和rejected的logprobs都接近0
             Variable regularization = chosenLogProbs.add(rejectedLogProbs).mul(
                 new Variable(NdArray.of(-labelSmoothing * 0.5f))
             );
             dpoLoss = dpoLoss.add(regularization);
         }
         
-        // 返回平均损失
-        return dpoLoss.mean(0, true);
-    }
-    
-    /**
-     * 计算log(sigmoid(x)) = -log(1 + exp(-x))
-     * 
-     * 使用数值稳定的实现:
-     * log(sigmoid(x)) = -log(1 + exp(-x))
-     *                 = -softplus(-x)
-     *                 = x - softplus(x)  (当x > 0时)
-     *                 = -softplus(-x)     (当x < 0时)
-     * 
-     * @param x 输入
-     * @return log(sigmoid(x))
-     */
-    private Variable logSigmoid(Variable x) {
-        // 使用log(sigmoid(x)) = -log(1 + exp(-x))的稳定实现
-        // 等价于: x - softplus(x)
-        return x.sub(softplus(x));
+        return dpoLoss;
     }
     
     /**
      * Softplus函数: softplus(x) = log(1 + exp(x))
-     * 简化实现,适用于TinyAI的Variable API
      * 
      * @param x 输入
      * @return softplus(x)
      */
     private Variable softplus(Variable x) {
-        // softplus(x) = log(1 + exp(x))
         Variable expX = x.exp();
         Variable onePlusExp = expX.add(new Variable(NdArray.of(1.0f)));
         return onePlusExp.log();
     }
     
     /**
-     * 计算序列的对数概率
-     * 使用 mask 排除 prompt 部分，只计算 response 部分的对数概率
+     * 计算序列的对数概率 (保持计算图，用于策略模型)
+     * 
+     * 通过 logSoftmax + one-hot gather + mask 实现，保持完整的计算图以支持反向传播。
      * 
      * @param logits 模型输出logits [batch, seq_len, vocab_size]
      * @param labels 标签 [batch, seq_len]
      * @param mask 掩码 [batch, seq_len], 1表示计算(response)，0表示忽略(prompt)
-     * @return 每个序列的平均对数概率
+     * @return 序列的平均对数概率 (标量Variable，保持计算图)
      */
     public Variable computeLogProbs(Variable logits, Variable labels, Variable mask) {
-        // 获取维度信息
+        int[] logitsShape = logits.getValue().getShape().getShapeDims();
+        int batchSize = logitsShape[0];
+        int seqLen = logitsShape[1];
+        int vocabSize = logitsShape[2];
+        int totalTokens = batchSize * seqLen;
+        
+        // 1. reshape logits 为 [totalTokens, vocabSize]
+        Variable logitsFlat = logits.reshape(Shape.of(totalTokens, vocabSize));
+        
+        // 2. 计算 logSoftmax (在计算图中，支持反向传播)
+        Variable logProbs = logitsFlat.logSoftmax(-1);  // [totalTokens, vocabSize]
+        
+        // 3. 构造 one-hot 矩阵来 gather 目标 token 的 log prob
+        float[] labelsData = labels.getValue().getArray();
+        float[] maskData = mask.getValue().getArray();
+        float[] oneHotMasked = new float[totalTokens * vocabSize];
+        int validTokenCount = 0;
+        
+        for (int i = 0; i < totalTokens; i++) {
+            if (maskData[i] > 0.5f) {
+                int labelIdx = (int) labelsData[i];
+                if (labelIdx >= 0 && labelIdx < vocabSize) {
+                    oneHotMasked[i * vocabSize + labelIdx] = 1.0f;
+                    validTokenCount++;
+                }
+            }
+        }
+        
+        // 4. 用 one-hot 乘以 logProbs，然后 sum 得到每个 token 的 log prob
+        // logProbs * oneHot 只保留目标 token 位置的值，其余为 0
+        Variable oneHotVar = new Variable(NdArray.of(oneHotMasked, Shape.of(totalTokens, vocabSize)));
+        Variable selectedLogProbs = logProbs.mul(oneHotVar);  // [totalTokens, vocabSize]
+        
+        // 5. 对 vocabSize 维度求和，得到每个 token 的 log prob
+        Variable tokenLogProbs = selectedLogProbs.sum();  // 标量：所有 masked token 的 log prob 之和
+        
+        // 6. 除以有效 token 数得到平均 log prob
+        if (validTokenCount > 0) {
+            Variable divisor = new Variable(NdArray.of(1.0f / validTokenCount));
+            return tokenLogProbs.mul(divisor);
+        }
+        
+        return tokenLogProbs;
+    }
+    
+    /**
+     * 计算序列的对数概率 (不保持计算图，用于参考模型)
+     * 
+     * 参考模型是冻结的，不需要梯度，直接手动计算更高效。
+     * 
+     * @param logits 模型输出logits [batch, seq_len, vocab_size]
+     * @param labels 标签 [batch, seq_len]
+     * @param mask 掩码 [batch, seq_len], 1表示计算(response)，0表示忽略(prompt)
+     * @return 平均对数概率 (float 标量)
+     */
+    public float computeLogProbsDetached(Variable logits, Variable labels, Variable mask) {
         int[] logitsShape = logits.getValue().getShape().getShapeDims();
         int batchSize = logitsShape[0];
         int seqLen = logitsShape[1];
         int vocabSize = logitsShape[2];
         
-        // 获取原始数据
         float[] logitsData = logits.getValue().getArray();
         float[] labelsData = labels.getValue().getArray();
         float[] maskData = mask.getValue().getArray();
         
-        // 计算每个 token 的 log 概率
         float totalLogProb = 0.0f;
         int validTokens = 0;
         
@@ -143,14 +172,11 @@ public class DPOLoss {
             for (int s = 0; s < seqLen; s++) {
                 int flatIdx = b * seqLen + s;
                 
-                // 只计算 mask=1 的位置 (response 部分)
                 if (maskData[flatIdx] > 0.5f) {
                     int labelIdx = (int) labelsData[flatIdx];
-                    
-                    // 提取当前位置的 logits
                     int logitsOffset = (b * seqLen + s) * vocabSize;
                     
-                    // 计算 log softmax
+                    // 数值稳定的 log softmax
                     float maxLogit = Float.NEGATIVE_INFINITY;
                     for (int v = 0; v < vocabSize; v++) {
                         maxLogit = Math.max(maxLogit, logitsData[logitsOffset + v]);
@@ -162,7 +188,6 @@ public class DPOLoss {
                     }
                     float logSumExp = maxLogit + (float) Math.log(sumExp);
                     
-                    // log 概率 = logit - log_sum_exp
                     float logProb = logitsData[logitsOffset + labelIdx] - logSumExp;
                     totalLogProb += logProb;
                     validTokens++;
@@ -170,8 +195,6 @@ public class DPOLoss {
             }
         }
         
-        // 返回平均 log 概率
-        float avgLogProb = validTokens > 0 ? totalLogProb / validTokens : 0.0f;
-        return new Variable(NdArray.of(avgLogProb));
+        return validTokens > 0 ? totalLogProb / validTokens : 0.0f;
     }
 }

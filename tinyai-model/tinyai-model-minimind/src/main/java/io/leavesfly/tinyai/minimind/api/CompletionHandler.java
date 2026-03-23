@@ -66,6 +66,11 @@ public class CompletionHandler implements HttpHandler {
             return;
         }
         
+        // 认证和速率限制
+        if (!MiniMindAPIServer.validateRequest(exchange)) {
+            return;
+        }
+        
         try {
             // 读取请求
             String requestBody = MiniMindAPIServer.readRequestBody(exchange);

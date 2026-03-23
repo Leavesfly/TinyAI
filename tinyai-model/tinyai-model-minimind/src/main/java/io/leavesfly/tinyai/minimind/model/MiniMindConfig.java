@@ -1,5 +1,7 @@
 package io.leavesfly.tinyai.minimind.model;
 
+import java.io.Serializable;
+
 /**
  * MiniMind 模型配置类
  * <p>
@@ -11,7 +13,14 @@ package io.leavesfly.tinyai.minimind.model;
  * @version 1.0
  * @since 2025-01-01
  */
-public class MiniMindConfig {
+public class MiniMindConfig implements Serializable {
+
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * EOS token ID (默认为 2)
+     */
+    private int eosTokenId = 2;
 
     // ========== 基础配置 ==========
 
@@ -148,6 +157,10 @@ public class MiniMindConfig {
         config.numHeads = 16;
         config.ffnHiddenSize = 1024;
         config.dropout = 0.1f;
+        config.attentionDropout = 0.1f;
+        config.epsilon = 1e-5f;
+        config.ropeTheta = 10000.0f;
+        config.useBias = false;
         config.activationFunction = "silu";
         config.useRoPE = true;
         config.preLayerNorm = true;
@@ -177,6 +190,10 @@ public class MiniMindConfig {
         config.numHeads = 16;
         config.ffnHiddenSize = 2048;
         config.dropout = 0.1f;
+        config.attentionDropout = 0.1f;
+        config.epsilon = 1e-5f;
+        config.ropeTheta = 10000.0f;
+        config.useBias = false;
         config.activationFunction = "silu";
         config.useRoPE = true;
         config.preLayerNorm = true;
@@ -248,8 +265,23 @@ public class MiniMindConfig {
         if (hiddenSize % numHeads != 0) {
             throw new IllegalStateException("hiddenSize must be divisible by numHeads");
         }
+        if (ffnHiddenSize <= 0) {
+            throw new IllegalStateException("ffnHiddenSize must be positive");
+        }
         if (dropout < 0 || dropout >= 1) {
             throw new IllegalStateException("dropout must be in [0, 1)");
+        }
+        if (attentionDropout < 0 || attentionDropout >= 1) {
+            throw new IllegalStateException("attentionDropout must be in [0, 1)");
+        }
+        if (epsilon <= 0) {
+            throw new IllegalStateException("epsilon must be positive");
+        }
+        if (ropeTheta <= 0) {
+            throw new IllegalStateException("ropeTheta must be positive");
+        }
+        if (initStd <= 0) {
+            throw new IllegalStateException("initStd must be positive");
         }
         if (useMoE) {
             if (numExperts <= 0) {
@@ -292,17 +324,31 @@ public class MiniMindConfig {
         // Transformer Layers
         for (int i = 0; i < numLayers; i++) {
             // Attention: QKV projections + Output projection
+            // QKV: 3 * hiddenSize * hiddenSize (with bias: + 3 * hiddenSize)
+            // Output: hiddenSize * hiddenSize (with bias: + hiddenSize)
             params += (long) hiddenSize * hiddenSize * 4;
+            if (useBias) {
+                params += (long) hiddenSize * 4;
+            }
 
             // FFN
             if (useMoE) {
                 // MoE: numExperts * (hiddenSize * ffnHiddenSize * 2)
                 params += (long) numExperts * hiddenSize * ffnHiddenSize * 2;
+                if (useBias) {
+                    params += (long) numExperts * (ffnHiddenSize + hiddenSize) * 2;
+                }
                 // Router: hiddenSize * numExperts
                 params += (long) hiddenSize * numExperts;
+                if (useBias) {
+                    params += (long) numExperts;
+                }
             } else {
                 // Standard FFN: hiddenSize * ffnHiddenSize * 2
                 params += (long) hiddenSize * ffnHiddenSize * 2;
+                if (useBias) {
+                    params += (long) ffnHiddenSize + hiddenSize;
+                }
             }
 
             // LayerNorm: 2 * hiddenSize (gamma + beta)
@@ -314,6 +360,9 @@ public class MiniMindConfig {
 
         // LM Head: hiddenSize * vocabSize (may share with embedding)
         params += (long) hiddenSize * vocabSize;
+        if (useBias) {
+            params += (long) vocabSize;
+        }
 
         return params;
     }
@@ -381,6 +430,9 @@ public class MiniMindConfig {
     public void setUseGradientCheckpointing(boolean useGradientCheckpointing) {
         this.useGradientCheckpointing = useGradientCheckpointing;
     }
+
+    public int getEosTokenId() { return eosTokenId; }
+    public void setEosTokenId(int eosTokenId) { this.eosTokenId = eosTokenId; }
 
     @Override
     public String toString() {

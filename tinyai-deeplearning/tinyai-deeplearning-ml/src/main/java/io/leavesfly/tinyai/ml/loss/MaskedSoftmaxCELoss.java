@@ -137,58 +137,46 @@ public class MaskedSoftmaxCELoss extends Loss {
     /**
      * 计算标准的Softmax交叉熵损失（每个位置的损失）
      * 
-     * @param y       真实标签
-     * @param predict 预测值
-     * @return 每个位置的损失值
+     * 使用 logSoftmax + one-hot gather 的方式逐位置计算交叉熵，
+     * 全程保持计算图连通，确保梯度能正确回传。
+     * 
+     * @param y       真实标签 (batch_size, seq_len)
+     * @param predict 预测值 (batch_size, seq_len, vocab_size)
+     * @return 每个位置的损失值，保持在计算图中
      */
     private Variable computeSoftmaxCrossEntropy(Variable y, Variable predict) {
-        NdArray predictArray = predict.getValue();
-        NdArray labelsArray = y.getValue();
+        int[] predictShape = predict.getValue().getShape().getShapeDims();
+        int batchSize = predictShape[0];
+        int seqLen = predictShape[1];
+        int vocabSize = predictShape[2];
+        int totalTokens = batchSize * seqLen;
         
-        Shape predictShape = predictArray.getShape();
-        int batchSize = predictShape.getDimension(0);
-        int seqLen = predictShape.getDimension(1);
-        int vocabSize = predictShape.getDimension(2);
+        // 1. reshape logits 为 (totalTokens, vocabSize)，保持计算图
+        Variable logitsFlat = predict.reshape(Shape.of(totalTokens, vocabSize));
         
-        // 重塑预测值为(batch_size * seq_len, vocab_size)
-        NdArray flatPredict = predictArray.reshape(Shape.of(batchSize * seqLen, vocabSize));
+        // 2. 计算 logSoftmax（在计算图中，支持反向传播）
+        Variable logProbs = logitsFlat.logSoftmax(-1);
         
-        // 重塑标签为(batch_size * seq_len,)
-        NdArray flatLabels = labelsArray.reshape(Shape.of(batchSize * seqLen, 1));
-        
-        // 计算softmax交叉熵损失
-        Variable flatPredictVar = new Variable(flatPredict);
-        Variable flatLabelsVar = new Variable(flatLabels);
-        Variable flatLoss = flatPredictVar.softmaxCrossEntropy(flatLabelsVar);
-        
-        // 重新调整为(batch_size, seq_len)形状（这里需要特殊处理）
-        return reshapeLossToSequence(flatLoss, batchSize, seqLen);
-    }
-    
-    /**
-     * 将损失重塑为序列形状
-     * 
-     * @param flatLoss  展平的损失
-     * @param batchSize 批次大小
-     * @param seqLen    序列长度
-     * @return 重塑后的损失
-     */
-    private Variable reshapeLossToSequence(Variable flatLoss, int batchSize, int seqLen) {
-        // 由于softmaxCrossEntropy返回的是标量，我们需要手动计算每个位置的损失
-        // 这里使用简化的实现，实际项目中可能需要更复杂的处理
-        
-        // 创建每个位置的损失数组
-        float[][] lossMatrix = new float[batchSize][seqLen];
-        float avgLoss = flatLoss.getValue().getNumber().floatValue();
-        
-        // 将平均损失分配到每个位置（简化处理）
-        for (int i = 0; i < batchSize; i++) {
-            for (int j = 0; j < seqLen; j++) {
-                lossMatrix[i][j] = avgLoss;
+        // 3. 构造 one-hot 矩阵来 gather 目标 token 的 log prob
+        float[] labelsData = y.getValue().getArray();
+        float[] oneHotData = new float[totalTokens * vocabSize];
+        for (int i = 0; i < totalTokens; i++) {
+            int labelIdx = Math.round(labelsData[i]);
+            if (labelIdx >= 0 && labelIdx < vocabSize) {
+                oneHotData[i * vocabSize + labelIdx] = 1.0f;
             }
         }
         
-        return new Variable(NdArray.of(lossMatrix));
+        // 4. logProbs * oneHot 只保留目标 token 位置的值
+        Variable oneHotVar = new Variable(NdArray.of(oneHotData, Shape.of(totalTokens, vocabSize)));
+        Variable selectedLogProbs = logProbs.mul(oneHotVar);
+        
+        // 5. 对 vocabSize 维度求和，得到每个 token 的 log prob -> (totalTokens, 1)
+        Variable tokenLogProbs = selectedLogProbs.sumTo(Shape.of(totalTokens, 1));
+        
+        // 6. 取负值得到交叉熵损失，reshape 为 (batchSize, seqLen)
+        Variable negTokenLogProbs = tokenLogProbs.mul(new Variable(NdArray.of(-1.0f)));
+        return negTokenLogProbs.reshape(Shape.of(batchSize, seqLen));
     }
     
     /**

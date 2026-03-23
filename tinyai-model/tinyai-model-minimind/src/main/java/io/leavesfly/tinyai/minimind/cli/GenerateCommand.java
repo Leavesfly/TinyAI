@@ -2,7 +2,6 @@ package io.leavesfly.tinyai.minimind.cli;
 
 import io.leavesfly.tinyai.minimind.cli.MiniMindCLI.Command;
 import io.leavesfly.tinyai.minimind.cli.MiniMindCLI.ArgParser;
-import io.leavesfly.tinyai.minimind.model.MiniMindConfig;
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
 import io.leavesfly.tinyai.minimind.tokenizer.MiniMindTokenizer;
 
@@ -46,28 +45,9 @@ public class GenerateCommand implements Command {
         // 实际生成逻辑
         try {
             // 1. 加载或创建模型
-            MiniMindModel model;
-            MiniMindTokenizer tokenizer;
-            
-            if (new File(modelPath).exists()) {
-                System.out.println("正在加载模型: " + modelPath);
-                // TODO: 实现模型加载逻辑
-                // model = MiniMindModel.load(modelPath);
-                // tokenizer = MiniMindTokenizer.load(modelPath + "/tokenizer.json");
-                System.out.println("[注意] 模型加载功能开发中,使用默认配置");
-                MiniMindConfig config = MiniMindConfig.createSmallConfig();
-                model = new MiniMindModel("minimind-generate", config);
-                tokenizer = MiniMindTokenizer.createCharLevelTokenizer(
-                    config.getVocabSize(), config.getMaxSeqLen()
-                );
-            } else {
-                System.out.println("模型文件不存在,使用默认配置");
-                MiniMindConfig config = MiniMindConfig.createSmallConfig();
-                model = new MiniMindModel("minimind-generate", config);
-                tokenizer = MiniMindTokenizer.createCharLevelTokenizer(
-                    config.getVocabSize(), config.getMaxSeqLen()
-                );
-            }
+            ModelLoader.ModelLoadResult loadResult = ModelLoader.loadModel(modelPath, "minimind-generate");
+            MiniMindModel model = loadResult.getModel();
+            MiniMindTokenizer tokenizer = loadResult.getTokenizer();
             
             // 2. 编码输入
             List<Integer> promptIds = tokenizer.encode(prompt, false, false);

@@ -2,6 +2,7 @@ package io.leavesfly.tinyai.minimind.training.demo;
 
 import io.leavesfly.tinyai.minimind.model.MiniMindConfig;
 import io.leavesfly.tinyai.minimind.tokenizer.MiniMindTokenizer;
+import org.json.JSONObject;
 
 import java.io.*;
 import java.util.*;
@@ -13,7 +14,7 @@ import java.util.*;
  * - 路径常量
  * - 共享状态（分词器）
  * - 模型配置
- * - 文件读写工具
+ * - JSONL 文件读写工具
  * 
  * @author TinyAI Team
  */
@@ -58,9 +59,9 @@ public class DemoConfig {
     // ========== 文件工具 ==========
 
     /**
-     * 从文件读取文本行
+     * 从 JSONL 文件读取文本行
      */
-    public static List<String> readFromFile(String filePath) throws IOException {
+    public static List<String> readJsonlFile(String filePath) throws IOException {
         List<String> lines = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
             String line;
@@ -74,9 +75,9 @@ public class DemoConfig {
     }
 
     /**
-     * 写入文件
+     * 写入 JSONL 文件
      */
-    public static void writeToFile(List<String> lines, String filePath) throws IOException {
+    public static void writeJsonlFile(List<String> lines, String filePath) throws IOException {
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(filePath))) {
             for (String line : lines) {
                 writer.write(line);
@@ -96,30 +97,5 @@ public class DemoConfig {
             list.add(value);
         }
         return list;
-    }
-
-    /**
-     * 提取奖励值
-     */
-    public static float extractReward(String text) {
-        if (text.startsWith("[REWARD:")) {
-            int endIdx = text.indexOf("]");
-            if (endIdx > 0) {
-                String rewardStr = text.substring(8, endIdx);
-                try {
-                    return Float.parseFloat(rewardStr);
-                } catch (NumberFormatException e) {
-                    return 0.5f;
-                }
-            }
-        }
-        return 0.5f;
-    }
-
-    /**
-     * 移除奖励标签
-     */
-    public static String removeRewardLabel(String text) {
-        return text.replaceFirst("^\\[REWARD:[0-9.]+\\]\\s*", "");
     }
 }

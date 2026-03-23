@@ -22,13 +22,15 @@ public class KVCache {
 
     /**
      * 缓存的 Key 向量
-     * Shape: [batchSize, numHeads, seqLen, headDim]
+     * Shape: [batchSize, numHeads, maxCacheLen, headDim]
+     * 使用预分配策略，避免每次更新都创建新数组
      */
     private NdArray cachedK;
 
     /**
      * 缓存的 Value 向量
-     * Shape: [batchSize, numHeads, seqLen, headDim]
+     * Shape: [batchSize, numHeads, maxCacheLen, headDim]
+     * 使用预分配策略，避免每次更新都创建新数组
      */
     private NdArray cachedV;
 
@@ -71,8 +73,10 @@ public class KVCache {
         this.headDim = headDim;
         this.maxCacheLen = maxCacheLen;
         this.currentSeqLen = 0;
-        this.cachedK = null;
-        this.cachedV = null;
+        
+        // 优化: 预分配最大长度的缓冲区，避免每次更新都创建新数组
+        this.cachedK = NdArray.zeros(Shape.of(batchSize, numHeads, maxCacheLen, headDim));
+        this.cachedV = NdArray.zeros(Shape.of(batchSize, numHeads, maxCacheLen, headDim));
     }
 
     /**
@@ -83,74 +87,89 @@ public class KVCache {
      * @return 更新后的完整 K、V 数组
      */
     public NdArray[] update(NdArray newK, NdArray newV) {
-        if (cachedK == null || cachedV == null) {
-            // 首次初始化缓存
-            cachedK = newK;
-            cachedV = newV;
-            currentSeqLen = newK.getShape().getShapeDims()[2];
-        } else {
-            // 拼接新的 K、V 到缓存
-            cachedK = concatenateSeqDim(cachedK, newK);
-            cachedV = concatenateSeqDim(cachedV, newV);
-            currentSeqLen += newK.getShape().getShapeDims()[2];
-
-            // 如果超出最大长度，截断旧数据
-            if (currentSeqLen > maxCacheLen) {
-                int excessLen = currentSeqLen - maxCacheLen;
-                cachedK = sliceSeqDim(cachedK, excessLen, maxCacheLen);
-                cachedV = sliceSeqDim(cachedV, excessLen, maxCacheLen);
-                currentSeqLen = maxCacheLen;
-            }
-        }
-
-        return new NdArray[]{cachedK, cachedV};
-    }
-
-    /**
-     * 在序列维度(dim=2)上拼接两个 NdArray
-     *
-     * @param cached 已缓存的数据
-     * @param newData 新数据
-     * @return 拼接后的数组
-     */
-    private NdArray concatenateSeqDim(NdArray cached, NdArray newData) {
-        int[] cachedShape = cached.getShape().getShapeDims();
-        int[] newShape = newData.getShape().getShapeDims();
-
-        int batch = cachedShape[0];
-        int heads = cachedShape[1];
-        int oldSeqLen = cachedShape[2];
+        int[] newShape = newK.getShape().getShapeDims();
         int newSeqLen = newShape[2];
-        int dim = cachedShape[3];
-
-        int totalSeqLen = oldSeqLen + newSeqLen;
-
-        // 创建拼接后的数组
-        float[] result = new float[batch * heads * totalSeqLen * dim];
-        float[] cachedData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) cached).buffer;
+        
+        // 检查是否会超出最大长度
+        if (currentSeqLen + newSeqLen > maxCacheLen) {
+            // 滑动窗口：移除旧数据
+            int excessLen = (currentSeqLen + newSeqLen) - maxCacheLen;
+            shiftCache(excessLen);
+            currentSeqLen -= excessLen;
+        }
+        
+        // 优化: 直接写入预分配位置，避免创建新数组
+        copyToBuffer(cachedK, newK, currentSeqLen);
+        copyToBuffer(cachedV, newV, currentSeqLen);
+        
+        currentSeqLen += newSeqLen;
+        
+        // 返回当前有效部分
+        return new NdArray[]{
+            sliceSeqDim(cachedK, 0, currentSeqLen),
+            sliceSeqDim(cachedV, 0, currentSeqLen)
+        };
+    }
+    
+    /**
+     * 将新数据拷贝到预分配缓冲区的指定位置
+     * 
+     * @param buffer 预分配的缓冲区
+     * @param newData 新数据
+     * @param offset 写入位置的偏移量
+     */
+    private void copyToBuffer(NdArray buffer, NdArray newData, int offset) {
+        float[] bufferData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) buffer).buffer;
         float[] newDataArr = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) newData).buffer;
-
-        // 按序列维度拼接
-        for (int b = 0; b < batch; b++) {
-            for (int h = 0; h < heads; h++) {
-                for (int s = 0; s < oldSeqLen; s++) {
-                    for (int d = 0; d < dim; d++) {
-                        int srcIdx = ((b * heads + h) * oldSeqLen + s) * dim + d;
-                        int dstIdx = ((b * heads + h) * totalSeqLen + s) * dim + d;
-                        result[dstIdx] = cachedData[srcIdx];
-                    }
-                }
+        
+        int[] newShape = newData.getShape().getShapeDims();
+        int newSeqLen = newShape[2];
+        
+        // 直接拷贝到预分配位置
+        for (int b = 0; b < batchSize; b++) {
+            for (int h = 0; h < numHeads; h++) {
                 for (int s = 0; s < newSeqLen; s++) {
-                    for (int d = 0; d < dim; d++) {
-                        int srcIdx = ((b * heads + h) * newSeqLen + s) * dim + d;
-                        int dstIdx = ((b * heads + h) * totalSeqLen + (oldSeqLen + s)) * dim + d;
-                        result[dstIdx] = newDataArr[srcIdx];
+                    for (int d = 0; d < headDim; d++) {
+                        int srcIdx = ((b * numHeads + h) * newSeqLen + s) * headDim + d;
+                        int dstIdx = ((b * numHeads + h) * maxCacheLen + (offset + s)) * headDim + d;
+                        bufferData[dstIdx] = newDataArr[srcIdx];
                     }
                 }
             }
         }
-
-        return NdArray.of(result, Shape.of(batch, heads, totalSeqLen, dim));
+    }
+    
+    /**
+     * 滑动窗口：移除旧数据
+     * 
+     * @param shiftLen 需要移除的序列长度
+     */
+    private void shiftCache(int shiftLen) {
+        // 将数据向前移动 shiftLen 个位置
+        shiftBuffer(cachedK, shiftLen);
+        shiftBuffer(cachedV, shiftLen);
+    }
+    
+    /**
+     * 移动缓冲区数据
+     * 
+     * @param buffer 缓冲区
+     * @param shiftLen 移动长度
+     */
+    private void shiftBuffer(NdArray buffer, int shiftLen) {
+        float[] bufferData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) buffer).buffer;
+        
+        for (int b = 0; b < batchSize; b++) {
+            for (int h = 0; h < numHeads; h++) {
+                for (int s = shiftLen; s < maxCacheLen; s++) {
+                    for (int d = 0; d < headDim; d++) {
+                        int srcIdx = ((b * numHeads + h) * maxCacheLen + s) * headDim + d;
+                        int dstIdx = ((b * numHeads + h) * maxCacheLen + (s - shiftLen)) * headDim + d;
+                        bufferData[dstIdx] = bufferData[srcIdx];
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -191,9 +210,12 @@ public class KVCache {
      * 清空缓存
      */
     public void clear() {
-        cachedK = null;
-        cachedV = null;
         currentSeqLen = 0;
+        // 清空预分配缓冲区
+        float[] kBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) cachedK).buffer;
+        float[] vBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) cachedV).buffer;
+        java.util.Arrays.fill(kBuffer, 0.0f);
+        java.util.Arrays.fill(vBuffer, 0.0f);
     }
 
     /**
@@ -207,20 +229,20 @@ public class KVCache {
      * 获取缓存的 Key
      */
     public NdArray getCachedK() {
-        return cachedK;
+        return sliceSeqDim(cachedK, 0, currentSeqLen);
     }
 
     /**
      * 获取缓存的 Value
      */
     public NdArray getCachedV() {
-        return cachedV;
+        return sliceSeqDim(cachedV, 0, currentSeqLen);
     }
 
     /**
      * 判断缓存是否为空
      */
     public boolean isEmpty() {
-        return cachedK == null || cachedV == null;
+        return currentSeqLen == 0;
     }
 }

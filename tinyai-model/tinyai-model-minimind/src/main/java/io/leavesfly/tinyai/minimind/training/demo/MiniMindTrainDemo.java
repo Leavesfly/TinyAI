@@ -1,7 +1,9 @@
 package io.leavesfly.tinyai.minimind.training.demo;
 
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
+import io.leavesfly.tinyai.minimind.cli.ModelLoader;
 
+import static io.leavesfly.tinyai.minimind.training.demo.DemoConfig.*;
 import static io.leavesfly.tinyai.minimind.training.demo.DemoDataGenerator.*;
 import static io.leavesfly.tinyai.minimind.training.demo.DemoTrainingStages.*;
 
@@ -51,8 +53,13 @@ public class MiniMindTrainDemo {
             // 步骤5: LoRA微调（特定任务适配）
             MiniMindModel loraModel = runLoRAFinetuning(rlModel);
 
-            // 步骤6: 推理测试
-            runInference(loraModel);
+            // 保存最终模型到 CHECKPOINT_DIR/model/ 目录
+            String modelName = loraModel.getName();
+            System.out.println("\n💾 保存最终模型...");
+            ModelLoader.saveModel(loraModel, getSharedTokenizer(), modelName);
+
+            // 步骤6: 从模型文件加载并推理测试
+            runInference(modelName);
 
             printSuccess();
 

@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.minimind.training.demo;
 
+import io.leavesfly.tinyai.minimind.cli.ModelLoader;
 import io.leavesfly.tinyai.minimind.model.MiniMindConfig;
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
 import io.leavesfly.tinyai.minimind.tokenizer.MiniMindTokenizer;
@@ -79,7 +80,7 @@ public class DemoTrainingStages {
         // 3. 创建MiniMind模型（使用实际词汇表大小）
         System.out.println("\n📝 创建MiniMind模型...");
         MiniMindConfig config = createMicroConfig(tokenizer.getVocabSize());
-        MiniMindModel model = new MiniMindModel("minimind-pretrain", config);
+        MiniMindModel model = new MiniMindModel("tiny-minimind", config);
 
         System.out.println("  ✓ 模型配置: Micro (教学专用)");
         System.out.println("  ✓ 词汇表大小: " + config.getVocabSize());
@@ -361,15 +362,30 @@ public class DemoTrainingStages {
     // ========== 步骤6: 推理测试 ==========
 
     /**
-     * 执行推理测试
+     * 从模型文件加载模型后执行推理测试
+     *
+     * @param modelName 模型名称，用于从 CHECKPOINT_DIR/model/{modelName}/ 加载
      */
-    public static void runInference(MiniMindModel model) {
+    public static void runInference(String modelName) {
         System.out.println("\n" + "=".repeat(80));
-        System.out.println("🚀 步骤6: MiniMind 推理测试");
+        System.out.println("🚀 步骤6: MiniMind 推理测试（从模型文件加载）");
         System.out.println("=".repeat(80));
 
+        // 从模型文件加载模型和分词器
+        MiniMindModel model;
+        MiniMindTokenizer tokenizer;
+        try {
+            System.out.println("\n📂 从模型文件加载模型: " + modelName);
+            ModelLoader.ModelLoadResult loadResult = ModelLoader.loadModel("", modelName);
+            model = loadResult.getModel();
+            tokenizer = loadResult.getTokenizer();
+        } catch (Exception e) {
+            System.err.println("❌ 模型加载失败: " + e.getMessage());
+            e.printStackTrace();
+            return;
+        }
+
         model.setTraining(false);
-        MiniMindTokenizer tokenizer = getSharedTokenizer();
 
         // 使用训练数据中出现过的短语作为 prompt，这样模型更容易续写
         List<String> testPrompts = Arrays.asList("Machine learning is", "Neural networks are", "Deep learning", "AI technology");

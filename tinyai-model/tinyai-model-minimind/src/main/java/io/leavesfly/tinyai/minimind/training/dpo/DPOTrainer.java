@@ -152,6 +152,8 @@ public class DPOTrainer extends BaseTrainer {
     public void train() {
         printTrainingInfo();
         
+        createCheckpointDir();
+        
         // 训练循环
         for (currentEpoch = 0; currentEpoch < maxEpochs; currentEpoch++) {
             trainOneEpoch();

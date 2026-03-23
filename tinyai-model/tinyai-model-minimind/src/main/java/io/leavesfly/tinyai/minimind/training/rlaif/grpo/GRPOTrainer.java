@@ -102,6 +102,8 @@ public class GRPOTrainer extends BaseRLTrainer {
         System.out.println("样本数: " + dataset.getSampleCount());
         System.out.println("=".repeat(70));
         
+        createCheckpointDir();
+        
         for (currentEpoch = 0; currentEpoch < maxEpochs; currentEpoch++) {
             trainOneEpoch();
         }

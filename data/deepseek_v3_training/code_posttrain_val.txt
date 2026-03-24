@@ -1,0 +1,40 @@
+[CODING] <|im_start|>user
+How to define a function in Python?<|im_end|>
+<|im_start|>assistant
+Use def keyword followed by function name parentheses for parameters and colon then indent the function body<|im_end|>
+[CODING] <|im_start|>user
+What is list comprehension in Python?<|im_end|>
+<|im_start|>assistant
+List comprehension provides concise syntax to create lists using bracket notation with for loop and optional if condition<|im_end|>
+[CODING] <|im_start|>user
+How to handle exceptions in Python?<|im_end|>
+<|im_start|>assistant
+Use try block for code that may raise exceptions except block to catch and handle specific exception types and finally for cleanup<|im_end|>
+[CODING] <|im_start|>user
+What are Python decorators?<|im_end|>
+<|im_start|>assistant
+Decorators are functions that modify behavior of other functions using at symbol syntax wrapping the original function with additional functionality<|im_end|>
+[CODING] <|im_start|>user
+How to read files in Python?<|im_end|>
+<|im_start|>assistant
+Use open function with file path and mode then read content with read or readlines method always close file or use with statement<|im_end|>
+[CODING] <|im_start|>user
+How to declare a class in Java?<|im_end|>
+<|im_start|>assistant
+Use public class keyword followed by class name then curly braces containing fields methods and constructors<|im_end|>
+[CODING] <|im_start|>user
+What is inheritance in Java?<|im_end|>
+<|im_start|>assistant
+Inheritance allows a class to inherit fields and methods from parent class using extends keyword promoting code reuse<|im_end|>
+[CODING] <|im_start|>user
+How to create an interface in Java?<|im_end|>
+<|im_start|>assistant
+Use interface keyword followed by name declare method signatures without implementation classes implement interface with implements keyword<|im_end|>
+[CODING] <|im_start|>user
+What is Java generics?<|im_end|>
+<|im_start|>assistant
+Generics enable types to be parameters when defining classes interfaces and methods providing compile time type safety<|im_end|>
+[CODING] <|im_start|>user
+How to handle null in Java?<|im_end|>
+<|im_start|>assistant
+Check for null before dereferencing use Optional class or annotations like NonNull to prevent null pointer exceptions<|im_end|>

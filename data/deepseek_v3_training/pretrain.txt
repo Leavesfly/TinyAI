@@ -1,0 +1,130 @@
+Mixture of Experts is a neural network architecture that uses multiple expert networks
+MoE models route inputs to different expert networks based on learned gating mechanisms
+The gating network in MoE decides which experts should process each input
+MoE achieves sparse activation by only using a subset of experts for each input
+Top K routing selects the K most relevant experts for each input token
+Load balancing in MoE ensures all experts are utilized evenly during training
+MoE models can scale to billions of parameters while maintaining efficient inference
+DeepSeek V3 uses eight expert networks with top two routing strategy
+Expert networks in MoE specialize in different aspects of the input distribution
+MoE reduces computational cost by activating only a fraction of total parameters
+Auxiliary loss in MoE encourages balanced expert utilization
+Sparse MoE models achieve better performance than dense models with similar compute
+Expert capacity limits the number of tokens each expert can process per batch
+MoE routing can be learned jointly with the model during training
+Switch Transformer uses one expert per token for extreme sparsity
+MoE enables training of very large models on limited hardware resources
+Expert parallelism allows MoE layers to scale across multiple devices
+Dynamic routing in MoE adapts to different input patterns automatically
+MoE models show strong few shot learning capabilities
+Load balancing loss prevents expert collapse where some experts are never used
+MoE gating uses softmax to produce probability distribution over experts
+Hard routing selects top K experts while soft routing uses weighted combination
+MoE architecture is particularly effective for multi task learning
+Expert dropout can improve MoE model robustness and generalization
+MoE models can learn hierarchical specialization across expert networks
+DeepSeek is a series of advanced language models with innovative architectures
+DeepSeek V3 combines MoE with task aware routing for improved performance
+Task aware architecture in DeepSeek adapts to different downstream tasks
+DeepSeek models support reasoning coding math and multimodal tasks
+DeepSeek V3 achieves state of the art results on code generation benchmarks
+The reasoning module in DeepSeek enhances logical inference capabilities
+DeepSeek supports ten programming languages including Python Java and C plus plus
+Code quality in DeepSeek is evaluated on correctness readability efficiency and style
+DeepSeek V3 uses multi head latent attention for efficient processing
+Task type classification helps DeepSeek route inputs to specialized experts
+DeepSeek models can handle sequences up to thousands of tokens
+The architecture of DeepSeek V3 enables twenty five percent parameter activation
+DeepSeek V3 training uses load balanced MoE loss for expert utilization
+Inference in DeepSeek V3 is four times faster than equivalent dense models
+DeepSeek supports both causal language modeling and instruction tuning
+The reflection module in DeepSeek R1 enables self correction during reasoning
+DeepSeek models show strong performance on mathematical problem solving
+Multi task learning in DeepSeek improves generalization across domains
+DeepSeek V3 pre training uses large scale diverse text corpora
+Post training in DeepSeek fine tunes the model for specific applications
+DeepSeek achieves competitive results while using fewer active parameters
+The gating network in DeepSeek learns task specific expert selection
+DeepSeek models support both English and Chinese languages
+Code synthesis in DeepSeek generates functionally correct programs
+DeepSeek V3 architecture enables efficient deployment on edge devices
+Reasoning in AI involves drawing logical conclusions from available information
+Chain of thought prompting improves reasoning by showing intermediate steps
+Task aware models adapt their reasoning strategy based on problem type
+Mathematical reasoning requires understanding of numerical relationships and operations
+Logical inference applies rules to derive new facts from existing knowledge
+Multi step reasoning breaks complex problems into manageable sub problems
+Reasoning confidence indicates the model certainty in its conclusions
+Commonsense reasoning requires understanding of everyday knowledge and context
+Analogical reasoning transfers knowledge from familiar to novel situations
+Causal reasoning identifies cause and effect relationships between events
+Abstract reasoning manipulates concepts without concrete examples
+Deductive reasoning applies general principles to specific cases
+Inductive reasoning generalizes from specific observations to broad patterns
+Abductive reasoning infers the most likely explanation for observations
+Spatial reasoning involves understanding geometric relationships and transformations
+Temporal reasoning tracks changes and sequences over time
+Reasoning modules can be trained to verify their own conclusions
+Self correction in reasoning improves accuracy through iterative refinement
+Reasoning traces provide interpretability by showing thought process
+Meta reasoning involves thinking about thinking and strategy selection
+Programming languages provide formal systems for instructing computers
+Python is widely used for machine learning and data science applications
+Java is a statically typed object oriented programming language
+JavaScript enables interactive web applications in browsers
+C plus plus offers low level control with high level abstractions
+Code generation models translate natural language to executable programs
+Syntax correctness ensures code follows language grammar rules
+Code readability makes programs easier to understand and maintain
+Algorithm efficiency measures computational complexity and resource usage
+Code style guidelines promote consistency across programming projects
+Debugging identifies and fixes errors in program logic
+Unit testing verifies individual components function correctly
+Version control tracks changes and enables collaboration on code
+Code refactoring improves structure without changing behavior
+Documentation explains code purpose usage and implementation
+API design defines interfaces for software components
+Error handling manages exceptional conditions gracefully
+Code optimization improves performance and resource efficiency
+Design patterns provide reusable solutions to common problems
+Type systems prevent errors by checking data type compatibility
+Transformer architecture revolutionized natural language processing
+Self attention computes relationships between all positions in parallel
+Multi head attention captures different types of dependencies simultaneously
+Positional encoding adds sequence order information to token embeddings
+Query key value projections enable flexible attention computation
+Scaled dot product attention prevents gradient issues with large dimensions
+Attention weights show which input positions influence each output
+Layer normalization stabilizes training in deep transformer networks
+Feed forward networks process each position independently in transformers
+Residual connections enable training of very deep transformer models
+Transformer decoder uses masked self attention for autoregressive generation
+Cross attention connects encoder and decoder in sequence to sequence tasks
+Pre training on large corpora gives transformers broad language understanding
+Fine tuning adapts pre trained transformers to downstream tasks efficiently
+Transformers eliminate recurrence enabling parallel sequence processing
+Attention visualization reveals linguistic patterns learned by the model
+Sparse attention reduces computational cost for long sequences
+Relative position encoding captures position relationships more flexibly
+Transformer XL extends context through segment level recurrence
+GPT uses decoder only transformers for language generation
+Deep learning uses neural networks with multiple layers
+Backpropagation computes gradients for training neural networks
+Gradient descent optimizes network parameters iteratively
+Loss functions measure prediction errors during training
+Activation functions introduce non linearity into networks
+Batch normalization accelerates training and improves stability
+Dropout prevents overfitting by randomly disabling neurons
+Learning rate controls optimization step size
+Adam optimizer adapts learning rates for each parameter
+Regularization techniques prevent models from overfitting
+Early stopping monitors validation performance to prevent overfitting
+Data augmentation increases training data diversity
+Transfer learning reuses knowledge from pre trained models
+Neural networks can approximate any continuous function
+Deep architectures learn hierarchical feature representations
+Convolutional networks excel at processing grid structured data
+Recurrent networks handle sequential and temporal data
+Attention mechanisms focus on relevant input parts
+Skip connections help gradients flow in deep networks
+Embedding layers map discrete tokens to continuous vectors

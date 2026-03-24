@@ -85,7 +85,7 @@ public class DeepSeekV3RLHFTrainer {
         this.moeQualityWeight = 0.5f;
         this.moeLoadBalanceWeight = (float) config.getLoadBalanceLossWeight();
         this.logInterval = 20;
-        this.checkpointDir = "./checkpoints/deepseek_v3_rlhf";
+        this.checkpointDir = "./checkpoints/deepseek_v3/rlhf";
         
         this.optimizer = new Adam(model, learningRate, 0.9f, 0.999f, 1e-8f);
         

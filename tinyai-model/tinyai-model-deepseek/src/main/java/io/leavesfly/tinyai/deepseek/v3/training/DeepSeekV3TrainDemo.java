@@ -1120,21 +1120,21 @@ public class DeepSeekV3TrainDemo {
                 
                 // Greedy解码
                 System.out.println("  策略1 [Greedy贪婪]: ");
-                var greedyResult = inference.generateGreedy(promptIds, 12);
+                var greedyResult = inference.generateGreedy(promptIds, model.getConfig().getNPositions());
                 String greedyText = sharedTokenizer.decode(greedyResult.tokens);
                 System.out.println("    → " + greedyText);
                 
                 // Temperature采样
                 System.out.println("  策略2 [Temperature=0.8]: ");
                 var tempResult = inference.generateWithTemperature(
-                    promptIds, 12, 0.8f
+                    promptIds, model.getConfig().getNPositions(), 0.8f
                 );
                 String tempText = sharedTokenizer.decode(tempResult.tokens);
                 System.out.println("    → " + tempText);
                 
                 // Top-K采样
                 System.out.println("  策略3 [Top-K=50]: ");
-                var topKResult = inference.generateTopK(promptIds, 12, 50);
+                var topKResult = inference.generateTopK(promptIds, model.getConfig().getNPositions(), 50);
                 String topKText = sharedTokenizer.decode(topKResult.tokens);
                 System.out.println("    → " + topKText);
                 

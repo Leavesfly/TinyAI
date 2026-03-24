@@ -86,7 +86,7 @@ public class GPT3Finetune {
         this.logInterval = 50;
         this.evalInterval = 100;
         this.patience = 3;
-        this.checkpointDir = "./checkpoints/gpt3_finetune";
+        this.checkpointDir = "./checkpoints/gpt3/finetune";
 
         // 使用Adam优化器（比SGD收敛更快更稳定）
         this.optimizer = new Adam(model, learningRate, 0.9f, 0.999f, 1e-8f);

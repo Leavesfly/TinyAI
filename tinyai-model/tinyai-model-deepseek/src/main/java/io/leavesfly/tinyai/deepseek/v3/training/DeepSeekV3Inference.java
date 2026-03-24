@@ -26,6 +26,13 @@ import java.util.List;
 public class DeepSeekV3Inference extends DeepSeekBaseInference {
     
     private final DeepSeekV3Model model;
+    private final int maxSeqLen;
+
+    /**
+     * EOS token ID，生成时遇到此 token 立即停止。
+     * DeepSeek 与 GPT 系列共享词表规范，EOS 对应 vocabSize - 1。
+     */
+    private final int eosTokenId;
     
     /**
      * 构造函数
@@ -33,6 +40,8 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
     public DeepSeekV3Inference(DeepSeekV3Model model) {
         super();
         this.model = model;
+        this.maxSeqLen = model.getConfig().getNPositions();
+        this.eosTokenId = model.getConfig().getVocabSize() - 1;
     }
     
     // ==================== 贪婪解码 ====================
@@ -53,6 +62,8 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
         List<ReasoningStep> reasoningSteps = new ArrayList<>();
         
         for (int i = 0; i < maxNewTokens; i++) {
+            if (generated.size() >= maxSeqLen) break;
+
             int[] currentSeq = toIntArray(generated);
             Variable inputVar = new Variable(createInputArray(currentSeq));
             
@@ -80,6 +91,8 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
             // 采样
             int nextToken = sampleFromProbs(probs);
             generated.add(nextToken);
+
+            if (nextToken == eosTokenId) break;
             
             reasoningSteps.add(new ReasoningStep(
                 i,
@@ -111,6 +124,8 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
         List<ReasoningStep> reasoningSteps = new ArrayList<>();
         
         for (int i = 0; i < maxNewTokens; i++) {
+            if (generated.size() >= maxSeqLen) break;
+
             int[] currentSeq = toIntArray(generated);
             Variable inputVar = new Variable(createInputArray(currentSeq));
             
@@ -138,6 +153,8 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
             // 采样
             int nextToken = sampleFromProbs(probs);
             generated.add(nextToken);
+
+            if (nextToken == eosTokenId) break;
             
             reasoningSteps.add(new ReasoningStep(
                 i,
@@ -169,6 +186,8 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
         List<ReasoningStep> reasoningSteps = new ArrayList<>();
         
         for (int i = 0; i < maxNewTokens; i++) {
+            if (generated.size() >= maxSeqLen) break;
+
             int[] currentSeq = toIntArray(generated);
             Variable inputVar = new Variable(createInputArray(currentSeq));
             
@@ -223,6 +242,8 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
             int sampledIdx = sampleFromProbs(nucleusProbArray);
             int nextToken = nucleusIndices.get(sampledIdx);
             generated.add(nextToken);
+
+            if (nextToken == eosTokenId) break;
             
             reasoningSteps.add(new ReasoningStep(
                 i,
@@ -254,6 +275,8 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
         List<ReasoningStep> reasoningSteps = new ArrayList<>();
         
         for (int i = 0; i < maxNewTokens; i++) {
+            if (generated.size() >= maxSeqLen) break;
+
             int[] currentSeq = toIntArray(generated);
             Variable inputVar = new Variable(createInputArray(currentSeq));
             
@@ -308,6 +331,8 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
             int sampledIdx = sampleFromProbs(nucleusProbArray);
             int nextToken = nucleusIndices.get(sampledIdx);
             generated.add(nextToken);
+
+            if (nextToken == eosTokenId) break;
             
             reasoningSteps.add(new ReasoningStep(
                 i,

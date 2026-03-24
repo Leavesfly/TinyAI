@@ -87,7 +87,7 @@ public class DeepSeekV3Posttrain {
         this.valInterval = 500;
         this.saveInterval = 2000;
         this.patience = 3;
-        this.checkpointDir = "./checkpoints/deepseek_v3_posttrain";
+        this.checkpointDir = "./checkpoints/deepseek_v3/posttrain";
         
         // 创建优化器
         this.optimizer = new Adam(model, initialLearningRate, 0.9f, 0.999f, 1e-8f);

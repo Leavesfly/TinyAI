@@ -111,7 +111,7 @@ public class DeepSeekR1RLVRTrainer {
         this.verificationWeight = 0.1f;      // 验证完整性
         
         this.logInterval = 10;
-        this.checkpointDir = "./checkpoints/deepseek_r1_rlvr";
+        this.checkpointDir = "./checkpoints/deepseek_r1/rlvr";
         
         // 使用SGD优化器
         this.optimizer = new SGD(model, learningRate);

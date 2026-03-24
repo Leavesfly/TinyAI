@@ -76,7 +76,7 @@ public class DeepSeekV3Pretrain {
         this.moeLoadBalanceWeight = (float) config.getLoadBalanceLossWeight();
         this.logInterval = 100;
         this.saveInterval = 5000;
-        this.checkpointDir = "./checkpoints/deepseek_v3_pretrain";
+        this.checkpointDir = "./checkpoints/deepseek_v3/pretrain";
         
         // 创建优化器
         this.optimizer = new Adam(model, initialLearningRate, 0.9f, 0.999f, 1e-8f);

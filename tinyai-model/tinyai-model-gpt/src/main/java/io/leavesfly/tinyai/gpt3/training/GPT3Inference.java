@@ -27,6 +27,13 @@ public class GPT3Inference {
     private final int maxSeqLen;
 
     /**
+     * EOS（End of Sequence）token ID。
+     * GPT-2/GPT-3 中 <|endoftext|> 对应 vocabSize - 1（即 50256）。
+     * 生成过程中遇到此 token 时立即停止，避免无意义的续写。
+     */
+    private final int eosTokenId;
+
+    /**
      * 构造函数
      *
      * @param model GPT-3模型
@@ -34,6 +41,7 @@ public class GPT3Inference {
     public GPT3Inference(GPT3Model model) {
         this.model = model;
         this.maxSeqLen = model.getConfig().getNPositions();
+        this.eosTokenId = model.getConfig().getVocabSize() - 1;
     }
 
     /**
@@ -54,7 +62,10 @@ public class GPT3Inference {
             NdArray logitsArray = logits.getValue();
 
             int lastPos = currentSeq.length - 1;
-            generated.add(argmax(logitsArray, 0, lastPos));
+            int nextToken = argmax(logitsArray, 0, lastPos);
+            generated.add(nextToken);
+
+            if (nextToken == eosTokenId) break;
         }
 
         return toArray(generated);
@@ -119,7 +130,10 @@ public class GPT3Inference {
             }
             for (int j = 0; j < vocabSize; j++) probs[j] /= sum;
 
-            generated.add(sample(probs, random));
+            int nextToken = sample(probs, random);
+            generated.add(nextToken);
+
+            if (nextToken == eosTokenId) break;
         }
 
         return toArray(generated);
@@ -170,7 +184,10 @@ public class GPT3Inference {
             for (int j = 0; j < topK; j++) topKProbs[j] /= sum;
 
             int sampledIdx = sample(topKProbs, random);
-            generated.add(topKIndices[sampledIdx]);
+            int nextToken = topKIndices[sampledIdx];
+            generated.add(nextToken);
+
+            if (nextToken == eosTokenId) break;
         }
 
         return toArray(generated);
@@ -240,7 +257,10 @@ public class GPT3Inference {
             for (int j = 0; j < nucleusSize; j++) nucleusProbs[j] /= sum;
 
             int sampledIdx = sample(nucleusProbs, random);
-            generated.add(indices[sampledIdx]);
+            int nextToken = indices[sampledIdx];
+            generated.add(nextToken);
+
+            if (nextToken == eosTokenId) break;
         }
 
         return toArray(generated);
@@ -262,10 +282,14 @@ public class GPT3Inference {
         beams.add(initialBeam);
 
         for (int step = 0; step < maxNewTokens; step++) {
+            // 所有 beam 都已遇到 EOS，提前结束
+            if (beams.stream().allMatch(b -> b.finished)) break;
+
             List<Beam> candidates = new ArrayList<>();
 
             for (Beam beam : beams) {
-                if (beam.tokens.size() >= maxSeqLen) {
+                // 已完成的 beam 直接保留，不再扩展
+                if (beam.finished || beam.tokens.size() >= maxSeqLen) {
                     candidates.add(beam);
                     continue;
                 }
@@ -296,6 +320,7 @@ public class GPT3Inference {
                     newBeam.tokens.addAll(beam.tokens);
                     newBeam.tokens.add(idx);
                     newBeam.score = beam.score + logProbs[idx];
+                    newBeam.finished = (idx == eosTokenId);
                     candidates.add(newBeam);
                 }
             }
@@ -312,6 +337,7 @@ public class GPT3Inference {
     private static class Beam {
         List<Integer> tokens = new ArrayList<>();
         float score = 0.0f;
+        boolean finished = false;
     }
 
     private NdArray createInputArray(int[] sequence) {

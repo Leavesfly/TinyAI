@@ -19,11 +19,18 @@ public class DeepSeekR1Inference extends DeepSeekBaseInference {
     
     private final DeepSeekR1Model model;
     private final int maxSeqLen;
+
+    /**
+     * EOS token ID，生成时遇到此 token 立即停止。
+     * DeepSeek 与 GPT 系列共享词表规范，EOS 对应 vocabSize - 1。
+     */
+    private final int eosTokenId;
     
     public DeepSeekR1Inference(DeepSeekR1Model model) {
         super();
         this.model = model;
         this.maxSeqLen = model.getConfig().getNPositions();
+        this.eosTokenId = model.getConfig().getVocabSize() - 1;
     }
     
     /**
@@ -48,8 +55,9 @@ public class DeepSeekR1Inference extends DeepSeekBaseInference {
             
             int lastPos = currentSeq.length - 1;
             int nextToken = argmax(logits, 0, lastPos);  // 跳过PAD token
-            
             generated.add(nextToken);
+
+            if (nextToken == eosTokenId) break;
             
             // 记录推理步骤
             reasoningSteps.add(new ReasoningStep(
@@ -109,8 +117,9 @@ public class DeepSeekR1Inference extends DeepSeekBaseInference {
             }
             
             int nextToken = sample(probs);
-            
             generated.add(nextToken);
+
+            if (nextToken == eosTokenId) break;
             
             reasoningSteps.add(new ReasoningStep(
                 i, 0, 0.0,  // numSteps和confidence不再可用

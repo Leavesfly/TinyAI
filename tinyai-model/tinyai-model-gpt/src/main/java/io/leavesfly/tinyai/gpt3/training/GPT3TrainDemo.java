@@ -219,7 +219,7 @@ public class GPT3TrainDemo {
 
         // 配置微调训练器
         GPT3Finetune finetune = new GPT3Finetune(pretrainedModel, trainDataset, valDataset)
-                .configure(3, 6e-5f, 2)
+                .configure(10, 6e-5f, 2)
                 .setCheckpoint(CHECKPOINT_DIR + "/finetune", 500);
 
         finetune.train();
@@ -250,35 +250,35 @@ public class GPT3TrainDemo {
 
         // 1. 贪婪解码
         System.out.println("--- 1. 贪婪解码 (Greedy) ---");
-        int[] greedyResult = inference.generateGreedy(prompt, 8);
+        int[] greedyResult = inference.generateGreedy(prompt, model.getConfig().getNPositions());
         System.out.println("生成结果: " + sharedTokenizer.decode(greedyResult));
 
         // 2. 带KV Cache的贪婪解码（GPT-3特有加速）
         System.out.println("\n--- 2. 带KV Cache的贪婪解码（GPT-3特有加速）---");
         long start = System.currentTimeMillis();
-        int[] cacheResult = inference.generateGreedyWithCache(prompt, 8);
+        int[] cacheResult = inference.generateGreedyWithCache(prompt, model.getConfig().getNPositions());
         long elapsed = System.currentTimeMillis() - start;
         System.out.println("生成结果: " + sharedTokenizer.decode(cacheResult));
         System.out.println("KV Cache推理耗时: " + elapsed + " ms");
 
         // 3. Temperature采样（temperature=0.8）
         System.out.println("\n--- 3. Temperature采样 (T=0.8) ---");
-        int[] tempResult = inference.generateWithTemperature(prompt, 8, 0.8f);
+        int[] tempResult = inference.generateWithTemperature(prompt, model.getConfig().getNPositions(), 0.8f);
         System.out.println("生成结果: " + sharedTokenizer.decode(tempResult));
 
         // 4. Top-K采样（K=10）
         System.out.println("\n--- 4. Top-K采样 (K=10, T=1.0) ---");
-        int[] topKResult = inference.generateTopK(prompt, 8, 10, 1.0f);
+        int[] topKResult = inference.generateTopK(prompt, model.getConfig().getNPositions(), 10, 1.0f);
         System.out.println("生成结果: " + sharedTokenizer.decode(topKResult));
 
         // 5. Top-P采样（p=0.9）
         System.out.println("\n--- 5. Top-P/Nucleus采样 (P=0.9, T=1.0) ---");
-        int[] topPResult = inference.generateTopP(prompt, 8, 0.9f, 1.0f);
+        int[] topPResult = inference.generateTopP(prompt, model.getConfig().getNPositions(), 0.9f, 1.0f);
         System.out.println("生成结果: " + sharedTokenizer.decode(topPResult));
 
         // 6. Beam Search（beam=3）
         System.out.println("\n--- 6. Beam Search (beamSize=3) ---");
-        int[] beamResult = inference.generateBeamSearch(prompt, 8, 3);
+        int[] beamResult = inference.generateBeamSearch(prompt, model.getConfig().getNPositions(), 3);
         System.out.println("生成结果: " + sharedTokenizer.decode(beamResult));
 
         System.out.println("\n推理演示完成!");

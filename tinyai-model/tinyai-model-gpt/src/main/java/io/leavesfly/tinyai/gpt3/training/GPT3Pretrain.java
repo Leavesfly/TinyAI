@@ -79,7 +79,7 @@ public class GPT3Pretrain {
         this.maxGradNorm = 1.0f;
         this.logInterval = 100;
         this.saveInterval = 1;
-        this.checkpointDir = "./checkpoints/gpt3_pretrain";
+        this.checkpointDir = "./checkpoints/gpt3/pretrain";
 
         // 使用Adam优化器，收敛速度比SGD快3-5倍
         this.optimizer = new Adam(model, initialLearningRate, 0.9f, 0.999f, 1e-8f);

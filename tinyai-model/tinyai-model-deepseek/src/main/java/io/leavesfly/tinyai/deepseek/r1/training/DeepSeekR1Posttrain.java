@@ -77,7 +77,7 @@ public class DeepSeekR1Posttrain {
         this.logInterval = 5;
         this.evalInterval = 100;
         this.patience = 3;
-        this.checkpointDir = "./checkpoints/deepseek_r1_posttrain";
+        this.checkpointDir = "./checkpoints/deepseek_r1/posttrain";
         
         // 使用SGD替代Adam，减少临时NdArray对象创建，降低内存占用
         this.optimizer = new SGD(model, learningRate);

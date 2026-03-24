@@ -81,7 +81,7 @@ public class DeepSeekR1Pretrain {
         this.maxGradNorm = 1.0f;
         this.logInterval = 100;
         this.saveInterval = 5000;
-        this.checkpointDir = "./checkpoints/deepseek_r1_pretrain";
+        this.checkpointDir = "./checkpoints/deepseek_r1/pretrain";
         
         // 创建优化器
         // 使用SGD替代Adam，减少临时NdArray对象创建，降低内存占用

@@ -438,7 +438,7 @@ public class DeepSeekR1TrainDemo {
                 // Greedy解码
                 System.out.println("  策略1 [Greedy贪婪解码]: ");
                 DeepSeekR1Inference.GenerationResult greedyResult = 
-                    inference.generateGreedy(promptIds, 10);
+                    inference.generateGreedy(promptIds, model.getConfig().getNPositions());
                 String greedyText = sharedTokenizer.decode(greedyResult.tokens);
                 System.out.println("    → " + greedyText);
                 // 调试：显示生成的token详情
@@ -457,7 +457,7 @@ public class DeepSeekR1TrainDemo {
                 // Temperature采样
                 System.out.println("  策略2 [Temperature=0.8]: ");
                 DeepSeekR1Inference.GenerationResult tempResult = 
-                    inference.generateWithTemperature(promptIds, 10, 0.8f);
+                    inference.generateWithTemperature(promptIds, model.getConfig().getNPositions(), 0.8f);
                 String tempText = sharedTokenizer.decode(tempResult.tokens);
                 System.out.println("    → " + tempText);
                 

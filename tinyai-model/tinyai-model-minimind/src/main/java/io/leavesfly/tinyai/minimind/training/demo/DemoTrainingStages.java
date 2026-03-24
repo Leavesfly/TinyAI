@@ -66,7 +66,7 @@ public class DemoTrainingStages {
             pretrainTexts.add(new JSONObject(jsonLine).getString("text"));
         }
 
-        int batchSize = 2;
+        int batchSize = 4;
         PretrainDataset dataset = new PretrainDataset(tokenizer, maxSeqLen, batchSize);
         dataset.loadFromTexts(pretrainTexts);
         dataset.prepare(true);

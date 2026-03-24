@@ -1,20 +1,40 @@
-Instruction: What is deep learning? Response: Deep learning is a subset of machine learning that uses neural networks with multiple layers to learn hierarchical representations from data
-Instruction: Explain backpropagation. Response: Backpropagation is an algorithm that computes gradients of the loss function with respect to network parameters by applying the chain rule backwards through the computational graph
-Instruction: What is overfitting? Response: Overfitting occurs when a model learns the training data too well including noise and fails to generalize to new unseen data
-Instruction: How does dropout work? Response: Dropout randomly sets a fraction of activations to zero during training which prevents co adaptation of neurons and improves generalization
-Instruction: What is transfer learning? Response: Transfer learning reuses knowledge from a pretrained model on one task to improve performance on a related task with limited data
-Instruction: Explain convolutional neural networks. Response: Convolutional neural networks use convolutional layers to extract spatial features from images through learned filters
-Instruction: What are recurrent neural networks? Response: Recurrent neural networks process sequential data by maintaining hidden states that capture information from previous time steps
-Instruction: How does batch normalization work? Response: Batch normalization normalizes layer inputs across mini batches to reduce internal covariate shift and accelerate training
-Instruction: What is gradient descent? Response: Gradient descent is an optimization algorithm that iteratively updates parameters in the direction that reduces the loss function
-Instruction: Explain activation functions. Response: Activation functions introduce non linearity into neural networks enabling them to learn complex patterns beyond linear relationships
-Instruction: What is natural language processing? Response: Natural language processing is a field of AI that enables computers to understand analyze and generate human language
-Instruction: Explain word embeddings. Response: Word embeddings are dense vector representations of words that capture semantic relationships in a continuous space
-Instruction: What is tokenization? Response: Tokenization is the process of splitting text into smaller units like words subwords or characters for processing by language models
-Instruction: How do language models work? Response: Language models learn probability distributions over sequences of words and can predict the next word given previous context
-Instruction: What is sentiment analysis? Response: Sentiment analysis determines the emotional tone or opinion expressed in text such as positive negative or neutral
-Instruction: Explain named entity recognition. Response: Named entity recognition identifies and classifies entities like persons organizations and locations in text
-Instruction: What is machine translation? Response: Machine translation automatically converts text from one natural language to another using statistical or neural methods
-Instruction: How does text classification work? Response: Text classification assigns documents to predefined categories based on learned patterns in the text
-Instruction: What is question answering? Response: Question answering systems take natural language questions as input and provide accurate answers from knowledge sources
-Instruction: Explain sequence to sequence models. Response: Sequence to sequence models map input sequences to output sequences and are used for tasks like translation and summarization
+Question: What is deep learning?
+Answer: Deep learning is a subset of machine learning that uses neural networks with multiple layers to learn hierarchical representations from data.
+Question: How does backpropagation work?
+Answer: Backpropagation computes gradients of the loss with respect to parameters by applying the chain rule backward through the network.
+Question: What is the difference between AI, ML, and DL?
+Answer: AI is the broad concept of machines acting intelligently. ML is a subset of AI that learns from data. DL is a subset of ML using deep neural networks.
+Question: Why do we use activation functions?
+Answer: Activation functions introduce non-linearity into neural networks, enabling them to learn complex patterns that linear transformations cannot capture.
+Question: What is transfer learning?
+Answer: Transfer learning reuses a model trained on one task as the starting point for a model on a different but related task, saving training time and data.
+Question: What is a convolutional neural network?
+Answer: CNN is a neural network architecture designed for processing grid-like data such as images, using convolution operations to extract spatial features.
+Question: What is a recurrent neural network?
+Answer: RNN is a neural network designed for sequential data, where connections form a directed cycle allowing information to persist across time steps.
+Question: What is the vanishing gradient problem?
+Answer: Vanishing gradients occur when gradients become extremely small during backpropagation, preventing weights in early layers from being updated effectively.
+Question: What are LSTM networks?
+Answer: LSTM (Long Short-Term Memory) networks are RNNs with gating mechanisms that can learn long-term dependencies by controlling information flow.
+Question: What is dropout regularization?
+Answer: Dropout randomly zeros a fraction of neurons during training, preventing overfitting by making the network robust to the loss of any individual neuron.
+Question: What is the transformer architecture?
+Answer: Transformer is a neural network architecture based on self-attention mechanisms, enabling parallel processing of sequences without recurrence.
+Question: How does self-attention work?
+Answer: Self-attention computes attention weights between all positions in a sequence, allowing each position to attend to all other positions.
+Question: What is BERT?
+Answer: BERT (Bidirectional Encoder Representations from Transformers) is a pretrained language model that learns bidirectional representations using masked language modeling.
+Question: What is GPT?
+Answer: GPT (Generative Pre-trained Transformer) is an autoregressive language model trained to predict the next token given previous tokens.
+Question: Why are positional encodings needed in transformers?
+Answer: Transformers process all positions in parallel, so positional encodings inject sequence order information that would otherwise be lost.
+Question: What is gradient descent?
+Answer: Gradient descent is an optimization algorithm that iteratively adjusts parameters in the direction that reduces the loss function.
+Question: What is the Adam optimizer?
+Answer: Adam combines momentum and adaptive learning rates, computing individual learning rates for each parameter based on gradient history.
+Question: What is learning rate scheduling?
+Answer: Learning rate scheduling adjusts the learning rate during training, typically starting high and decreasing to fine-tune parameters.
+Question: What is batch normalization?
+Answer: Batch normalization normalizes layer inputs to have zero mean and unit variance, stabilizing and accelerating training.
+Question: What is weight decay?
+Answer: Weight decay adds a regularization term that penalizes large weights, helping prevent overfitting by keeping the model simple.

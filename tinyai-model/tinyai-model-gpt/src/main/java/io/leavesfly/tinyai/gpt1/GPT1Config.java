@@ -122,7 +122,7 @@ public class GPT1Config implements Serializable {
         config.setNLayer(6);
         config.setNHead(8);
         config.setNInner(256);
-        config.setNPositions(128);
+        config.setNPositions(32);
         return config;
     }
     

@@ -86,7 +86,7 @@ public class GPT1TrainingManager {
         System.out.println("\n📝 准备训练数据集...");
         GPT1Dataset dataset = new GPT1Dataset(
                 config.getNPositions(),
-                8,
+                4,
                 config.getVocabSize()
         );
         dataset.loadFromTexts(pretrainTexts, tokenizer);

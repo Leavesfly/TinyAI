@@ -134,13 +134,13 @@ public class GPT1TrainingManager {
         System.out.println("🎯 步骤2: GPT-1 微调 (Finetune/Posttrain)");
         System.out.println("=".repeat(80));
 
-        // 1. 加载微调数据
+        // 1. 加载微调数据（自动将 Question/Answer 格式转换为 Instruction/Response 格式）
         System.out.println("\n📝 加载微调数据...");
         String trainPath = DATA_DIR + "/finetune_train.txt";
         String valPath = DATA_DIR + "/finetune_val.txt";
 
-        List<String> trainTexts = readFromFile(trainPath);
-        List<String> valTexts = readFromFile(valPath);
+        List<String> trainTexts = readFinetuneFromFile(trainPath);
+        List<String> valTexts = readFinetuneFromFile(valPath);
 
         System.out.println("  ✓ 训练集: " + trainTexts.size() + " 条");
         System.out.println("  ✓ 验证集: " + valTexts.size() + " 条");
@@ -262,7 +262,7 @@ public class GPT1TrainingManager {
     }
 
     /**
-     * 从文件读取文本
+     * 从文件读取文本（通用，按行读取）
      */
     private List<String> readFromFile(String filePath) throws IOException {
         List<String> lines = new ArrayList<>();
@@ -275,5 +275,43 @@ public class GPT1TrainingManager {
             }
         }
         return lines;
+    }
+
+    /**
+     * 从文件读取微调数据，自动将 Question/Answer 格式转换为 "Instruction: xxx Response: yyy" 格式
+     *
+     * 支持两种数据格式：
+     * 1. 已包含 "Response:" 分隔符的单行格式（直接使用）
+     * 2. Question/Answer 多行格式（自动合并为单行）
+     *    Question: xxx
+     *    Answer: yyy
+     */
+    private List<String> readFinetuneFromFile(String filePath) throws IOException {
+        List<String> rawLines = readFromFile(filePath);
+
+        // 检查是否已经是 "Response:" 格式
+        boolean hasResponseSeparator = rawLines.stream().anyMatch(line -> line.contains("Response:"));
+        if (hasResponseSeparator) {
+            return rawLines;
+        }
+
+        // 将 Question/Answer 多行格式合并为 "Instruction: ... Response: ..." 单行格式
+        List<String> mergedTexts = new ArrayList<>();
+        for (int i = 0; i < rawLines.size() - 1; i += 2) {
+            String questionLine = rawLines.get(i).trim();
+            String answerLine = rawLines.get(i + 1).trim();
+
+            // 提取 Question 和 Answer 的内容
+            String question = questionLine.startsWith("Question:") 
+                    ? questionLine.substring("Question:".length()).trim() 
+                    : questionLine;
+            String answer = answerLine.startsWith("Answer:") 
+                    ? answerLine.substring("Answer:".length()).trim() 
+                    : answerLine;
+
+            // 合并为 "Instruction: xxx Response: yyy" 格式
+            mergedTexts.add("Instruction: " + question + " Response: " + answer);
+        }
+        return mergedTexts;
     }
 }

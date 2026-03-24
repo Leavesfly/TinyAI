@@ -1,6 +1,6 @@
-Instruction: What is top-k sampling? Response: Top-k sampling restricts generation to the k most likely next tokens at each step.
-Instruction: What is nucleus sampling? Response: Nucleus sampling selects from the smallest token set whose cumulative probability exceeds threshold p.
-Instruction: Explain beam search. Response: Beam search explores multiple generation paths simultaneously to find the most likely output sequence.
-Instruction: What is in-context learning? Response: In-context learning allows models to adapt to new tasks from examples without updating model weights.
-Instruction: What is positional encoding? Response: Positional encoding adds position information to token embeddings since attention has no inherent order.
-Instruction: Explain the feed-forward network. Response: The feed-forward network applies two linear transformations with activation between them in each transformer layer.
+Instruction: What is top-k sampling? Response: Top-k sampling restricts generation to the k most likely next tokens by zeroing probabilities outside the top k, preventing selection of very unlikely tokens while maintaining controlled randomness in generation.
+Instruction: What is nucleus sampling? Response: Nucleus sampling selects from the smallest token set whose cumulative probability exceeds threshold p, dynamically adapting the candidate pool based on distribution shape for natural and coherent generation.
+Instruction: Explain beam search. Response: Beam search explores multiple generation paths simultaneously by maintaining the k most probable partial sequences at each step, often producing higher quality outputs than greedy decoding at increased computational cost.
+Instruction: What is in-context learning? Response: In-context learning allows models to adapt to new tasks from examples in the prompt without updating model weights, demonstrating emergent capabilities that scale with model size and enable few-shot task performance.
+Instruction: What is positional encoding? Response: Positional encoding adds position information to token embeddings through sinusoidal functions or learned embeddings, enabling transformers to distinguish token order since attention has no inherent notion of sequence position.
+Instruction: Explain the feed-forward network. Response: The feed-forward network in transformers applies two linear transformations with non-linear activation between them independently to each position, providing additional representational capacity beyond the attention mechanism.

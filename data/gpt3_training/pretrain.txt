@@ -1,100 +1,100 @@
-deep learning is a subset of machine learning that uses neural networks with many layers
-neural networks learn representations from data through gradient descent optimization
-backpropagation computes gradients by applying the chain rule through the network layers
-convolutional neural networks excel at image recognition by learning spatial features
-recurrent neural networks process sequential data by maintaining hidden state over time
-batch normalization stabilizes training by normalizing layer inputs during forward pass
-dropout regularization prevents overfitting by randomly deactivating neurons during training
-residual connections allow gradients to flow directly through skip connections in deep networks
-layer normalization normalizes across the feature dimension and is used in transformers
-the adam optimizer combines momentum and adaptive learning rates for efficient optimization
-learning rate scheduling adjusts the learning rate during training to improve convergence
-transfer learning fine-tunes pretrained models on new tasks with limited data
-data augmentation artificially expands training data to improve model generalization
-regularization techniques like weight decay prevent neural networks from overfitting
-gradient clipping prevents exploding gradients by rescaling them to a maximum norm
-activation functions introduce non-linearity into neural networks enabling them to learn complex patterns
-the vanishing gradient problem occurs when gradients become too small in deep networks
-weight initialization strategies like xavier and he initialization help with training stability
-early stopping prevents overfitting by halting training when validation loss increases
-mini-batch gradient descent computes gradients on small subsets of data for efficiency
-momentum accelerates gradient descent by accumulating velocity in consistent directions
-the learning rate controls the step size during gradient descent optimization
-batch size affects the noise in gradient estimates and training dynamics
-epoch refers to one complete pass through the entire training dataset
-validation data is used to tune hyperparameters and monitor model performance
-test data provides final evaluation of model performance on unseen examples
-overfitting occurs when a model memorizes training data instead of learning patterns
-underfitting happens when a model is too simple to capture underlying patterns
-the bias-variance tradeoff balances model complexity with generalization ability
-cross-validation estimates model performance by partitioning data into multiple folds
-the transformer architecture uses self-attention to capture long-range dependencies
-multi-head attention allows the model to attend to different positions simultaneously
-the attention mechanism computes query key value products to weight token importance
-positional encoding adds position information to token embeddings in transformers
-causal language modeling trains the model to predict each token from previous tokens
-the feed-forward network in transformers applies two linear transformations with activation
-pre-layernorm applies normalization before attention and feed-forward sublayers
-the softmax function converts attention scores to probability distributions over tokens
-masked self-attention prevents future tokens from influencing current token predictions
-token embeddings map discrete token ids to continuous vector representations
-the encoder-decoder architecture processes input sequences and generates output sequences
-attention heads learn different patterns and relationships in the input data
-the residual connection adds the input of a sublayer to its output
-transformer models can be parallelized across sequence positions during training
-the key query and value projections transform embeddings for attention computation
-scaled dot-product attention divides attention scores by the square root of dimension
-the decoder uses cross-attention to attend to encoder outputs
-attention masks prevent attending to padding tokens or future positions
-the transformer was introduced in the attention is all you need paper
-bert uses bidirectional attention while gpt uses unidirectional causal attention
-gpt3 introduced parallel attention and mlp computation for improved efficiency
-rotary position embedding encodes position information through rotation in vector space
-sparse attention reduces computation by only attending to local and strided global positions
-gradient checkpointing trades computation for memory by recomputing activations backward
-kv cache stores key and value tensors to avoid redundant computation during inference
-few-shot learning allows gpt3 to perform tasks from a small number of examples in context
-in-context learning enables language models to adapt to tasks without gradient updates
-scaling laws show that model performance improves predictably with more compute and data
-the gpt3 model has 175 billion parameters trained on 300 billion tokens of text data
-autoregressive generation produces text one token at a time using the previous tokens
-the context window limits how many tokens a model can attend to at once
-temperature controls randomness in text generation with higher values increasing diversity
-top-k sampling restricts generation to the k most likely next tokens
-nucleus sampling selects from the smallest set of tokens whose cumulative probability exceeds p
-beam search explores multiple generation paths to find the most likely sequence
-the vocabulary size determines how many unique tokens the model can represent
-tokenization algorithms like bpe split words into frequent subword units
-the embedding dimension determines the size of token representation vectors
-larger models generally perform better but require more compute and memory
-zero-shot learning tests model ability to perform tasks without any examples
-natural language processing enables computers to understand and generate human language
-tokenization splits text into subword units using byte pair encoding or wordpiece
-word embeddings represent words as dense vectors in a continuous semantic space
-language models assign probabilities to sequences of tokens in natural language
-text generation produces coherent and contextually relevant text from a given prompt
-question answering systems extract or generate answers to questions from context
-text summarization condenses long documents into shorter informative summaries
-named entity recognition identifies and classifies named entities in text
-sentiment analysis determines the emotional tone or opinion expressed in text
-machine translation converts text from one language to another automatically
-part-of-speech tagging assigns grammatical categories to words in a sentence
-dependency parsing analyzes grammatical structure by identifying relationships between words
-coreference resolution determines which expressions refer to the same entity
-text classification assigns predefined categories to documents or sentences
-information extraction identifies structured information from unstructured text
-semantic similarity measures how close two pieces of text are in meaning
-language identification determines the language of a given text sample
-keyword extraction identifies the most important terms in a document
-text segmentation divides documents into coherent sections or topics
-speech recognition converts spoken language into written text
-matrix multiplication is the fundamental operation in neural network forward passes
-the cross entropy loss measures the difference between predicted and true distributions
-softmax converts logits to probability distributions by exponentiating and normalizing
-the gradient of a function indicates the direction of steepest ascent at each point
-the chain rule allows gradients to be propagated backward through composite functions
-the dot product measures similarity between two vectors in vector space
-the relu activation function outputs zero for negative inputs and passes positive values
-the sigmoid function maps inputs to values between zero and one
-the tanh activation function maps inputs to values between negative one and one
-normalization scales values to have zero mean and unit variance
+deep learning is a powerful subset of machine learning that uses neural networks with many layers to progressively extract higher-level features from raw input data, enabling remarkable breakthroughs in computer vision, natural language processing, and speech recognition.
+neural networks learn representations from data through gradient descent optimization by iteratively adjusting connection weights to minimize prediction error, automatically discovering hierarchical features without manual feature engineering.
+backpropagation computes gradients by applying the chain rule through the network layers, efficiently propagating error signals from the output back to earlier layers, forming the computational foundation for training all modern deep neural networks.
+convolutional neural networks excel at image recognition by learning spatial features through convolutional filters that detect edges, textures, and complex patterns hierarchically, revolutionizing computer vision applications from autonomous driving to medical diagnosis.
+recurrent neural networks process sequential data by maintaining hidden state over time, enabling the capture of temporal dependencies in text, speech, and time series, with LSTM and GRU variants solving the vanishing gradient problem for long sequences.
+batch normalization stabilizes training by normalizing layer inputs during forward pass to zero mean and unit variance, reducing internal covariate shift, allowing higher learning rates, and acting as a regularizer that improves generalization.
+dropout regularization prevents overfitting by randomly deactivating neurons during training with probability p, forcing the network to learn redundant representations and effectively training an ensemble of thinned networks that improves robustness.
+residual connections allow gradients to flow directly through skip connections in deep networks by adding the input of a layer to its output, enabling training of architectures with hundreds of layers that would otherwise suffer from degradation.
+layer normalization normalizes across the feature dimension and is used in transformers, providing stable training dynamics regardless of batch size by computing statistics per sample rather than across the batch dimension.
+the adam optimizer combines momentum and adaptive learning rates for efficient optimization by maintaining estimates of first and second moments of gradients, providing bias-corrected updates that work well across diverse architectures and tasks.
+learning rate scheduling adjusts the learning rate during training to improve convergence, with warmup phases for stability, constant phases for learning, and decay phases for fine-tuning, enabling better final performance than fixed learning rates.
+transfer learning fine-tunes pretrained models on new tasks with limited data by leveraging features learned on large source datasets, dramatically reducing the need for task-specific training data and accelerating development cycles.
+data augmentation artificially expands training data to improve model generalization by applying transformations like rotation, cropping, flipping, and color jittering, exposing the model to variations that improve robustness to real-world conditions.
+regularization techniques like weight decay prevent neural networks from overfitting by adding penalty terms to the loss that encourage smaller weights, improving generalization to unseen data by reducing model complexity.
+gradient clipping prevents exploding gradients by rescaling them to a maximum norm, stabilizing training in recurrent networks and transformers where gradients can grow exponentially through many layers during backpropagation.
+activation functions introduce non-linearity into neural networks enabling them to learn complex patterns that linear transformations alone cannot represent, with ReLU, GELU, and swish being popular choices for different architectures.
+the vanishing gradient problem occurs when gradients become too small in deep networks as they propagate backward through many layers, preventing earlier layers from learning effectively, addressed by residual connections and careful activation design.
+weight initialization strategies like xavier and he initialization help with training stability by setting initial weights to appropriate scales based on layer dimensions, preventing early training instability from too large or too small activations.
+early stopping prevents overfitting by halting training when validation loss increases, avoiding unnecessary computation while ensuring the model does not continue training on the training set beyond the point of best generalization.
+mini-batch gradient descent computes gradients on small subsets of data for efficiency, balancing the speed of stochastic updates with the stability of batch updates, enabling training on datasets too large to fit in memory.
+momentum accelerates gradient descent by accumulating velocity in consistent directions, damping oscillations and enabling faster convergence through ravines in the loss landscape where gradients point in different directions.
+the learning rate controls the step size during gradient descent optimization, with too large values causing divergence and too small values leading to slow convergence, making it the most important hyperparameter for training.
+batch size affects the noise in gradient estimates and training dynamics, with smaller batches providing regularization through noise but slower convergence, while larger batches enable efficient parallel computation but may generalize worse.
+epoch refers to one complete pass through the entire training dataset during training, with multiple epochs typically required for convergence as the model sees each example multiple times to refine its parameters.
+validation data is used to tune hyperparameters and monitor model performance during training, providing an unbiased estimate of generalization that guides decisions about learning rate, architecture, and regularization.
+test data provides final evaluation of model performance on unseen examples, held out from all training decisions to give an unbiased estimate of how the model will perform in production on new data.
+overfitting occurs when a model memorizes training data instead of learning patterns, resulting in excellent training performance but poor test performance, addressed through regularization, data augmentation, and early stopping.
+underfitting happens when a model is too simple to capture underlying patterns in the data, resulting in poor performance on both training and test sets, addressed by increasing model capacity or training longer.
+the bias-variance tradeoff balances model complexity with generalization ability, where high bias leads to underfitting simple models and high variance leads to overfitting complex models, requiring careful model selection.
+cross-validation estimates model performance by partitioning data into multiple folds, training on subsets while validating on held-out portions, providing robust performance estimates that account for data variability.
+the transformer architecture uses self-attention to capture long-range dependencies without recurrence, enabling parallel processing of sequences and scaling to models with hundreds of billions of parameters across language and vision tasks.
+multi-head attention allows the model to attend to different positions simultaneously by running multiple attention operations in parallel, capturing diverse relationships between tokens through different learned projection subspaces.
+the attention mechanism computes query key value products to weight token importance, where queries match against keys to determine attention weights that control how values are combined for each output position.
+positional encoding adds position information to token embeddings in transformers through sinusoidal functions or learned embeddings, enabling the model to distinguish token order without the sequential processing of recurrent networks.
+causal language modeling trains the model to predict each token from previous tokens in an autoregressive manner, enabling text generation by learning the probability distribution over sequences during pre-training on large corpora.
+the feed-forward network in transformers applies two linear transformations with activation between them, processing each position independently to provide additional representational power beyond the attention mechanism.
+pre-layernorm applies normalization before attention and feed-forward sublayers, providing more stable training dynamics than post-layernorm and enabling faster convergence in deep transformer architectures.
+the softmax function converts attention scores to probability distributions over tokens by exponentiating and normalizing, ensuring attention weights sum to one and can be interpreted as importance weights for weighted combination.
+masked self-attention prevents future tokens from influencing current token predictions by setting attention weights for future positions to negative infinity before softmax, essential for autoregressive language modeling.
+token embeddings map discrete token ids to continuous vector representations, learning dense embeddings where semantically similar tokens are close in the embedding space, forming the input representation for transformer models.
+the encoder-decoder architecture processes input sequences and generates output sequences, with the encoder producing contextualized representations and the decoder generating outputs using cross-attention to encoder states.
+attention heads learn different patterns and relationships in the input data, with some heads specializing in syntactic dependencies while others capture semantic relationships or positional patterns across different layers.
+the residual connection adds the input of a sublayer to its output, creating identity shortcuts that allow gradients to flow directly through the network and enabling training of very deep transformer architectures.
+transformer models can be parallelized across sequence positions during training unlike recurrent networks, enabling efficient GPU utilization and dramatically reducing training time for large language models.
+the key query and value projections transform embeddings for attention computation, with learned linear projections creating different views of the input that enable flexible information retrieval through dot-product attention.
+scaled dot-product attention divides attention scores by the square root of dimension to prevent the dot products from growing too large, ensuring stable gradients during training and more balanced attention distributions.
+the decoder uses cross-attention to attend to encoder outputs, allowing the generation process to incorporate relevant information from the source sequence while producing target tokens one at a time.
+attention masks prevent attending to padding tokens or future positions by adding large negative values before softmax, ensuring the model only attends to valid positions during attention computation.
+the transformer was introduced in the attention is all you need paper in 2017, revolutionizing natural language processing by replacing recurrence with self-attention and enabling the development of modern large language models.
+bert uses bidirectional attention while gpt uses unidirectional causal attention, with bert excelling at understanding tasks through masked language modeling and gpt excelling at generation through autoregressive pre-training.
+gpt3 introduced parallel attention and mlp computation for improved efficiency by computing attention and feed-forward layers simultaneously rather than sequentially, reducing training time while maintaining model quality.
+rotary position embedding encodes position information through rotation in vector space by applying rotation matrices to query and key vectors, providing better extrapolation to longer sequences than learned positional embeddings.
+sparse attention reduces computation by only attending to local and strided global positions, lowering the quadratic complexity of full attention to near-linear for long sequences while preserving the ability to capture long-range dependencies.
+gradient checkpointing trades computation for memory by recomputing activations during the backward pass rather than storing them, enabling training of larger models or longer sequences within memory constraints at the cost of additional computation.
+kv cache stores key and value tensors to avoid redundant computation during inference by caching previously computed key-value pairs, dramatically speeding up autoregressive generation by eliminating repeated attention computation for earlier tokens.
+few-shot learning allows gpt3 to perform tasks from a small number of examples in context by conditioning on demonstrations provided in the prompt, leveraging the model's pre-trained knowledge without updating parameters through gradient descent.
+in-context learning enables language models to adapt to tasks without gradient updates by recognizing patterns from examples in the prompt, demonstrating emergent capabilities that scale with model size and training data diversity.
+scaling laws show that model performance improves predictably with more compute and data following power-law relationships, enabling accurate prediction of larger model performance from smaller experiments and guiding efficient allocation of training resources.
+the gpt3 model has 175 billion parameters trained on 300 billion tokens of text data, demonstrating that scaling up model size and training data leads to emergent few-shot capabilities across diverse language tasks without task-specific fine-tuning.
+autoregressive generation produces text one token at a time using the previous tokens as context, sampling from the predicted probability distribution at each step while maintaining coherence through the model's learned understanding of language structure.
+the context window limits how many tokens a model can attend to at once, determining the maximum sequence length the model can process effectively and requiring techniques like chunking or summarization for longer documents.
+temperature controls randomness in text generation with higher values increasing diversity by flattening the probability distribution before sampling, while lower values make generation more deterministic and focused on high-probability tokens.
+top-k sampling restricts generation to the k most likely next tokens by zeroing out probabilities for tokens outside the top k, preventing selection of very unlikely tokens while maintaining controlled randomness in generation.
+nucleus sampling selects from the smallest set of tokens whose cumulative probability exceeds threshold p, dynamically adapting the candidate pool based on the shape of the probability distribution for more natural and coherent generation.
+beam search explores multiple generation paths to find the most likely sequence by maintaining the k most probable partial sequences at each step, often producing higher quality outputs than greedy decoding at the cost of additional computation.
+the vocabulary size determines how many unique tokens the model can represent, balancing between larger vocabularies that reduce sequence length and smaller vocabularies that provide better coverage of rare words through subword tokenization.
+tokenization algorithms like bpe split words into frequent subword units by iteratively merging the most common character pairs, enabling efficient handling of rare words and morphological variants while keeping vocabulary size manageable.
+the embedding dimension determines the size of token representation vectors, with larger dimensions providing greater representational capacity at the cost of increased computation and memory requirements throughout the network.
+larger models generally perform better but require more compute and memory for both training and inference, creating trade-offs between capability and efficiency that drive research into efficient architectures and compression techniques.
+zero-shot learning tests model ability to perform tasks without any examples by following natural language instructions, demonstrating the generalization capabilities that emerge from pre-training on diverse text corpora at scale.
+natural language processing enables computers to understand and generate human language by applying computational techniques to analyze, interpret, and produce text and speech, powering applications from search engines to virtual assistants.
+tokenization splits text into subword units using byte pair encoding or wordpiece algorithms, balancing vocabulary size with coverage of rare words and morphological variants for efficient neural network processing.
+word embeddings represent words as dense vectors in a continuous semantic space where similar words are close together, enabling neural networks to process text by mapping discrete vocabulary to learnable continuous representations.
+language models assign probabilities to sequences of tokens in natural language by learning distributions over sequences from large corpora, enabling text generation, completion, and evaluation through likelihood computation.
+text generation produces coherent and contextually relevant text from a given prompt by predicting subsequent tokens based on learned language patterns, powering applications from creative writing to code completion.
+question answering systems extract or generate answers to questions from context passages by identifying relevant spans or synthesizing information, used in search engines, virtual assistants, and knowledge management.
+text summarization condenses long documents into shorter informative summaries while preserving key information, using extractive methods to select important sentences or abstractive methods to generate novel summaries.
+named entity recognition identifies and classifies named entities in text into categories such as person, organization, and location, serving as a crucial component in information extraction and knowledge graph construction.
+sentiment analysis determines the emotional tone or opinion expressed in text by classifying text as positive, negative, or neutral, used extensively in social media monitoring, customer feedback analysis, and market research.
+machine translation converts text from one language to another automatically by learning mappings from source to target languages using parallel corpora, with neural models achieving human-level quality on many language pairs.
+part-of-speech tagging assigns grammatical categories to words in a sentence by labeling each word with its syntactic role such as noun, verb, adjective, or adverb, providing essential information for downstream parsing tasks.
+dependency parsing analyzes grammatical structure by identifying relationships between words and building trees that represent which words depend on which others, useful for understanding sentence structure and extracting semantic relationships.
+coreference resolution determines which expressions refer to the same entity by linking pronouns and noun phrases to their antecedents, essential for building coherent representations of documents and understanding discourse structure.
+text classification assigns predefined categories to documents or sentences by training models to predict labels from text content, used for spam detection, topic labeling, intent recognition, and sentiment analysis.
+information extraction identifies structured information from unstructured text by detecting entities, relationships, and events, enabling population of knowledge bases and databases from text sources like news articles and scientific papers.
+semantic similarity measures how close two pieces of text are in meaning using embedding-based methods or knowledge-based approaches, enabling tasks like duplicate detection, recommendation, and semantic search.
+language identification determines the language of a given text sample by analyzing character patterns and vocabulary, serving as a preprocessing step for multilingual systems and content categorization.
+keyword extraction identifies the most important terms in a document using statistical methods like TF-IDF or graph-based algorithms, enabling document summarization, indexing, and topic discovery.
+text segmentation divides documents into coherent sections or topics by detecting boundaries between different themes or discourse units, useful for document organization and information retrieval.
+speech recognition converts spoken language into written text by processing audio signals through acoustic and language models, enabling voice-based interfaces, transcription services, and accessibility tools.
+matrix multiplication is the fundamental operation in neural network forward passes, computing weighted sums of inputs by multiplying weight matrices with activation vectors, enabling efficient GPU parallelization through optimized linear algebra routines.
+the cross entropy loss measures the difference between predicted and true distributions by computing the negative log-likelihood of the correct class, heavily penalizing confident wrong predictions while encouraging calibrated probability estimates.
+softmax converts logits to probability distributions by exponentiating and normalizing to sum to one, enabling multi-class classification by producing interpretable probabilities from the raw output scores of neural networks.
+the gradient of a function indicates the direction of steepest ascent at each point, pointing toward the direction of maximum increase and enabling optimization by following the negative gradient to minimize loss functions.
+the chain rule allows gradients to be propagated backward through composite functions by multiplying partial derivatives at each step, forming the mathematical foundation for backpropagation that enables training of deep neural networks.
+the dot product measures similarity between two vectors in vector space by computing the sum of element-wise products, used extensively in attention mechanisms to compute query-key similarity scores for weighting information.
+the relu activation function outputs zero for negative inputs and passes positive values unchanged, providing sparse activations and efficient gradient flow while avoiding the vanishing gradient problems of sigmoid and tanh.
+the sigmoid function maps inputs to values between zero and one through the logistic formula, historically used in neural networks and still valuable for binary classification output layers and gating mechanisms.
+the tanh activation function maps inputs to values between negative one and one, providing zero-centered outputs that can speed up convergence compared to sigmoid while still suffering from vanishing gradients for large inputs.
+normalization scales values to have zero mean and unit variance, stabilizing neural network training by ensuring consistent activation distributions across layers and enabling the use of higher learning rates.

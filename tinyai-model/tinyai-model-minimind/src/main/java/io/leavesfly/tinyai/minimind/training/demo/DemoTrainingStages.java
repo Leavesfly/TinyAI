@@ -88,6 +88,10 @@ public class DemoTrainingStages {
         System.out.println("  ✓ 层数: " + config.getNumLayers());
         System.out.println("  ✓ 注意力头数: " + config.getNumHeads());
 
+        // 打印网络架构
+        System.out.println("\n📐 模型网络架构:");
+        model.getMiniMindBlock().printArchitecture();
+
         // 4. 训练
         System.out.println("\n📝 开始无监督预训练...");
         System.out.println("  - 训练目标: 因果语言建模 (下一个词预测)");

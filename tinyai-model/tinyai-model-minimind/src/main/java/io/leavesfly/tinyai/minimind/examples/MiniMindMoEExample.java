@@ -34,6 +34,11 @@ public class MiniMindMoEExample {
         model.printModelInfo();
         System.out.println();
 
+        // 2. 打印网络架构
+        System.out.println("2. 网络架构:");
+        model.getMiniMindBlock().printArchitecture();
+        System.out.println();
+
         // 2. 创建 Tokenizer
         System.out.println("2. 创建 Tokenizer...");
         MiniMindTokenizer tokenizer = MiniMindTokenizer.createCharLevelTokenizer(6400, 512);

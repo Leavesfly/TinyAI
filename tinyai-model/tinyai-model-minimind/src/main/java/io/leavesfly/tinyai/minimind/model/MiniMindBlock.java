@@ -324,6 +324,84 @@ public class MiniMindBlock extends Module {
     }
 
     /**
+     * 打印完整的网络层级架构
+     * <p>
+     * 以树状结构展示每一层的名称、类型和关键维度参数
+     */
+    public void printArchitecture() {
+        int hiddenSize = config.getHiddenSize();
+        int numHeads = config.getNumHeads();
+        int headDim = hiddenSize / numHeads;
+        int ffnHiddenSize = config.getFfnHiddenSize();
+        int vocabSize = config.getVocabSize();
+        int numLayers = config.getNumLayers();
+        boolean useMoE = config.isUseMoE();
+
+        String separator = "=".repeat(60);
+        System.out.println(separator);
+        System.out.println("  MiniMind Network Architecture");
+        System.out.println("  Mode: " + (useMoE ? "MoE (Mixture of Experts)" : "Standard"));
+        System.out.println(separator);
+
+        // Token Embedding
+        System.out.println("MiniMindBlock");
+        System.out.printf("  ├── TokenEmbedding          [vocab=%d, hidden=%d]%n",
+            vocabSize, hiddenSize);
+
+        // Transformer 层（后面还有 final_norm 和 lm_head，所以所有层都用 ├──）
+        String layerPrefix = useMoE ? "MoETransformerLayer" : "TransformerLayer";
+        for (int layerIndex = 0; layerIndex < numLayers; layerIndex++) {
+            String layerConnector = "  ├──";
+            String childConnector = "  │    ";
+
+            System.out.printf("%s %s[%d]%n", layerConnector, layerPrefix, layerIndex);
+            System.out.printf("%s  ├── LayerNorm(norm1)       [hidden=%d]%n",
+                childConnector, hiddenSize);
+            System.out.printf("%s  ├── MultiHeadAttention     [hidden=%d, heads=%d, head_dim=%d]%n",
+                childConnector, hiddenSize, numHeads, headDim);
+            System.out.printf("%s  │     ├── Q_proj           [%d → %d]%n",
+                childConnector, hiddenSize, hiddenSize);
+            System.out.printf("%s  │     ├── K_proj           [%d → %d]%n",
+                childConnector, hiddenSize, hiddenSize);
+            System.out.printf("%s  │     ├── V_proj           [%d → %d]%n",
+                childConnector, hiddenSize, hiddenSize);
+            System.out.printf("%s  │     └── O_proj           [%d → %d]%n",
+                childConnector, hiddenSize, hiddenSize);
+            System.out.printf("%s  ├── LayerNorm(norm2)       [hidden=%d]%n",
+                childConnector, hiddenSize);
+
+            if (useMoE) {
+                int numExperts = config.getNumExperts();
+                int numExpertsPerToken = config.getNumExpertsPerToken();
+                System.out.printf("%s  └── MoELayer              [experts=%d, top_k=%d]%n",
+                    childConnector, numExperts, numExpertsPerToken);
+                System.out.printf("%s        ├── Router           [hidden=%d → %d experts]%n",
+                    childConnector, hiddenSize, numExperts);
+                for (int expertIndex = 0; expertIndex < numExperts; expertIndex++) {
+                    boolean isLastExpert = (expertIndex == numExperts - 1);
+                    String expertConnector = isLastExpert ? "└──" : "├──";
+                    System.out.printf("%s        %s Expert[%d]       [%d → %d → %d]%n",
+                        childConnector, expertConnector, expertIndex,
+                        hiddenSize, ffnHiddenSize, hiddenSize);
+                }
+            } else {
+                System.out.printf("%s  └── FeedForward           [%d → %d → %d]%n",
+                    childConnector, hiddenSize, ffnHiddenSize, hiddenSize);
+            }
+        }
+
+        // Final LayerNorm
+        System.out.printf("  ├── LayerNorm(final_norm)  [hidden=%d]%n", hiddenSize);
+
+        // LM Head
+        System.out.printf("  └── Linear(lm_head)        [%d → %d]%n", hiddenSize, vocabSize);
+
+        System.out.println(separator);
+        System.out.printf("  Total Estimated Parameters: %,d%n", estimateParameters());
+        System.out.println(separator);
+    }
+
+    /**
      * MoE 输出结果（标准模式下 balanceLoss 为 0）
      */
     public static class MoEOutput {

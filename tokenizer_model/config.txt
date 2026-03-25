@@ -1,0 +1,3 @@
+max_seq_len=128
+vocab_size=222
+use_bpe=true

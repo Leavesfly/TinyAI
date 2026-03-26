@@ -74,32 +74,44 @@ public class GPT3TokenEmbedding extends Module {
     
     @Override
     public Variable forward(Variable... inputs) {
-        Variable tokenIds = inputs[0];  // shape: (batchSize, sequenceLength)
+        return forwardWithStartPos(inputs[0], 0);
+    }
+
+    /**
+     * 带起始位置偏移的前向传播（用于 KV Cache 增量推理）
+     *
+     * 在增量推理时，输入只有新 Token（如 1 个），但位置编码需要从 startPos 开始，
+     * 而不是从 0 开始。例如已生成 10 个 Token 后，第 11 个 Token 的位置应为 10。
+     *
+     * @param tokenIds 输入 Token ID，Shape: (batchSize, sequenceLength)
+     * @param startPos 位置编码的起始偏移量
+     * @return 嵌入向量，Shape: (batchSize, sequenceLength, embeddingDim)
+     */
+    public Variable forwardWithStartPos(Variable tokenIds, int startPos) {
         NdArray tokenData = tokenIds.getValue();
-        
+
         int batchSize = tokenData.getShape().getDimension(0);
         int sequenceLength = tokenData.getShape().getDimension(1);
-        
-        // 验证序列长度
-        if (sequenceLength > maxPositions) {
+
+        // 验证序列长度（含偏移）
+        if (startPos + sequenceLength > maxPositions) {
             throw new IllegalArgumentException(
-                String.format("输入序列长度(%d)超过最大位置数(%d)", sequenceLength, maxPositions)
+                String.format("位置偏移(%d)+序列长度(%d)超过最大位置数(%d)",
+                    startPos, sequenceLength, maxPositions)
             );
         }
-        
+
         // 1. 获取Token嵌入
         Variable tokenEmbeds = getTokenEmbeddings(tokenIds, batchSize, sequenceLength);
-        
-        // 2. 获取位置嵌入
-        Variable positionEmbeds = getPositionEmbeddings(sequenceLength, batchSize);
-        
+
+        // 2. 获取位置嵌入（从 startPos 开始）
+        Variable positionEmbeds = getPositionEmbeddings(sequenceLength, batchSize, startPos);
+
         // 3. 相加组合Token和位置嵌入
         Variable combined = tokenEmbeds.add(positionEmbeds);
-        
+
         // 4. 应用Dropout
-        Variable result = dropout.forward(combined);
-        
-        return result;
+        return dropout.forward(combined);
     }
     
     /**
@@ -132,35 +144,31 @@ public class GPT3TokenEmbedding extends Module {
     }
     
     /**
-     * 获取位置嵌入（使用Variable算子）
-     * 
+     * 获取位置嵌入（使用Variable算子，支持起始位置偏移）
+     *
      * @param sequenceLength 序列长度
-     * @param batchSize 批次大小
+     * @param batchSize      批次大小
+     * @param startPos       位置编码的起始偏移量（KV Cache 增量推理时使用）
      * @return 位置嵌入变量
      */
-    private Variable getPositionEmbeddings(int sequenceLength, int batchSize) {
-        // 使用IndexSelect算子实现position embedding lookup
-        // positionEmbedding: (maxPositions, embeddingDim)
-        // 需要选择前sequenceLength个位置，然后扩展到batchSize
-        
-        // 直接使用Parameter参与计算（Parameter继承自Variable），梯度可以直接传回Parameter
+    private Variable getPositionEmbeddings(int sequenceLength, int batchSize, int startPos) {
         Variable positionEmbedVar = positionEmbedding;
-        
-        // 创建位置索引: [0, 1, 2, ..., sequenceLength-1]
+
+        // 创建位置索引: [startPos, startPos+1, ..., startPos+sequenceLength-1]
         float[] posIndices = new float[sequenceLength];
         for (int i = 0; i < sequenceLength; i++) {
-            posIndices[i] = i;
+            posIndices[i] = startPos + i;
         }
         Variable posIndexVar = new Variable(NdArray.of(posIndices));
         posIndexVar.setRequireGrad(false);
-        
+
         // IndexSelect: 从(maxPositions, embeddingDim)中选择，得到(sequenceLength, embeddingDim)
         Variable posEmbeds = positionEmbedVar.indexSelect(0, posIndexVar);
-        
+
         // 扩展到batch维度: (sequenceLength, embeddingDim) -> (1, sequenceLength, embeddingDim) -> (batchSize, sequenceLength, embeddingDim)
         posEmbeds = posEmbeds.reshape(Shape.of(1, sequenceLength, embeddingDim));
         posEmbeds = posEmbeds.broadcastTo(Shape.of(batchSize, sequenceLength, embeddingDim));
-        
+
         return posEmbeds;
     }
     

@@ -346,27 +346,40 @@ public class GPT3Inference {
         return NdArray.of(data, Shape.of(1, sequence.length));
     }
 
+    /**
+     * 委托给 GPT3Model.argmax，消除重复代码
+     */
     private int argmax(NdArray logits, int batchIdx, int seqIdx) {
-        int vocabSize = logits.getShape().getDimension(2);
-        int maxIdx = 0;
-        float maxVal = logits.get(batchIdx, seqIdx, 0);
-        for (int i = 1; i < vocabSize; i++) {
-            float val = logits.get(batchIdx, seqIdx, i);
-            if (val > maxVal) {
-                maxVal = val;
-                maxIdx = i;
-            }
-        }
-        return maxIdx;
+        return GPT3Model.argmax(logits, batchIdx, seqIdx);
     }
 
+    /**
+     * 使用最小堆高效获取 Top-K 索引。
+     * 时间复杂度 O(V log K)，远优于全排序的 O(V log V)，
+     * 在 vocabSize 很大（如 50257）而 K 较小时效果显著。
+     */
     private int[] getTopKIndices(float[] values, int k) {
-        Integer[] indices = new Integer[values.length];
-        for (int i = 0; i < values.length; i++) indices[i] = i;
-        Arrays.sort(indices, (a, b) -> Float.compare(values[b], values[a]));
-        int[] topK = new int[Math.min(k, indices.length)];
-        for (int i = 0; i < topK.length; i++) topK[i] = indices[i];
-        return topK;
+        int actualK = Math.min(k, values.length);
+
+        // 最小堆：堆顶是当前 Top-K 中最小的，方便淘汰
+        PriorityQueue<int[]> minHeap = new PriorityQueue<>(
+                actualK, (a, b) -> Float.compare(values[a[0]], values[b[0]]));
+
+        for (int i = 0; i < values.length; i++) {
+            if (minHeap.size() < actualK) {
+                minHeap.offer(new int[]{i});
+            } else if (values[i] > values[minHeap.peek()[0]]) {
+                minHeap.poll();
+                minHeap.offer(new int[]{i});
+            }
+        }
+
+        int[] topKIndices = new int[minHeap.size()];
+        int idx = topKIndices.length - 1;
+        while (!minHeap.isEmpty()) {
+            topKIndices[idx--] = minHeap.poll()[0];
+        }
+        return topKIndices;
     }
 
     private int sample(float[] probs, Random random) {

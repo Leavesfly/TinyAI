@@ -12,14 +12,14 @@ import java.util.List;
 
 /**
  * GPT-3完整训练演示
- *
+ * <p>
  * 演示GPT-3完整的预训练-微调-推理流程，并展示GPT-3特有技术：
  * - 并行Attention+MLP架构
  * - RoPE旋转位置编码
  * - 稀疏注意力机制
  * - 梯度检查点
  * - KV Cache加速推理
- *
+ * <p>
  * 流程：
  * 1. 准备训练数据集（自动生成AI/ML领域教学文本）
  * 2. 预训练（Causal Language Modeling）
@@ -33,7 +33,7 @@ public class GPT3TrainDemo {
 
     private static GPT3Dataset.SimpleTokenizer sharedTokenizer = new GPT3Dataset.SimpleTokenizer();
 
-    private static final String DATA_DIR       = "./data/gpt3_training";
+    private static final String DATA_DIR = "./data/gpt3_training";
     private static final String CHECKPOINT_DIR = "./checkpoints/gpt3";
 
     public static void main(String[] args) {
@@ -119,17 +119,17 @@ public class GPT3TrainDemo {
         System.out.println("\n生成微调数据集...");
 
         List<String> trainTexts = new ArrayList<>();
-        List<String> valTexts   = new ArrayList<>();
+        List<String> valTexts = new ArrayList<>();
 
         List<String> allInstructions = generateInstructionTexts();
 
         // 80/20划分训练/验证
-        int splitIdx = (int)(allInstructions.size() * 0.8);
+        int splitIdx = (int) (allInstructions.size() * 0.8);
         trainTexts.addAll(allInstructions.subList(0, splitIdx));
         valTexts.addAll(allInstructions.subList(splitIdx, allInstructions.size()));
 
         String trainFile = DATA_DIR + "/finetune_train.txt";
-        String valFile   = DATA_DIR + "/finetune_val.txt";
+        String valFile = DATA_DIR + "/finetune_val.txt";
         writeTextsToFile(trainTexts, trainFile);
         writeTextsToFile(valTexts, valFile);
 
@@ -176,9 +176,12 @@ public class GPT3TrainDemo {
         }
 
         // 配置预训练器
+        // 学习率提高到1e-3（nano模型参数少，需要更大学习率加速收敛）
+        // warmup缩短到5步（数据量小，每epoch仅约6-7个batch，warmup不宜过长）
+        // 增加到50轮以充分训练
         GPT3Pretrain pretrain = new GPT3Pretrain(model, trainDataset)
-                .configure(30, 6e-4f, 25, 1.0f)
-                .setCheckpoint(CHECKPOINT_DIR + "/pretrain", 5);
+                .configure(30, 1e-3f, 5, 1.0f)
+                .setCheckpoint(CHECKPOINT_DIR + "/pretrain", 26);
 
         pretrain.train();
 
@@ -196,12 +199,12 @@ public class GPT3TrainDemo {
 
         GPT3Config config = pretrainedModel.getConfig();
 
-        GPT3Dataset trainDataset = new GPT3Dataset(config.getNPositions(), 2, config.getVocabSize());
-        GPT3Dataset valDataset   = new GPT3Dataset(config.getNPositions(), 2, config.getVocabSize());
+        GPT3Dataset trainDataset = new GPT3Dataset(config.getNPositions(), 3, config.getVocabSize());
+        GPT3Dataset valDataset = new GPT3Dataset(config.getNPositions(), 3, config.getVocabSize());
 
         // 加载微调数据（指令-回答格式）
         String trainFile = DATA_DIR + "/finetune_train.txt";
-        String valFile   = DATA_DIR + "/finetune_val.txt";
+        String valFile = DATA_DIR + "/finetune_val.txt";
 
         sharedTokenizer.freeze();  // 微调时冻结词汇表
 
@@ -218,9 +221,12 @@ public class GPT3TrainDemo {
         }
 
         // 配置微调训练器
+        // 学习率提高到3e-4（nano模型参数少，需要更大学习率驱动收敛）
+        // warmup设为5步（数据量小，每epoch仅约12步，warmup不宜过长）
         GPT3Finetune finetune = new GPT3Finetune(pretrainedModel, trainDataset, valDataset)
-                .configure(10, 6e-5f, 2)
-                .setCheckpoint(CHECKPOINT_DIR + "/finetune", 500);
+                .configure(15, 5e-4f, 4)
+                .setWarmupSteps(5)
+                .setCheckpoint(CHECKPOINT_DIR + "/finetune", 10);
 
         finetune.train();
 
@@ -248,38 +254,34 @@ public class GPT3TrainDemo {
         System.out.println("提示词ID数量: " + prompt.length);
         System.out.println();
 
+        int maxNewTokens = model.getConfig().getNPositions() - prompt.length;
+        if (maxNewTokens <= 0) {
+            System.out.println("⚠️ 提示词已占满最大位置数，无法生成新 Token");
+            return;
+        }
+
         // 1. 贪婪解码
         System.out.println("--- 1. 贪婪解码 (Greedy) ---");
-        int[] greedyResult = inference.generateGreedy(prompt, model.getConfig().getNPositions());
+        int[] greedyResult = inference.generateGreedy(prompt, maxNewTokens);
         System.out.println("生成结果: " + sharedTokenizer.decode(greedyResult));
 
         // 2. 带KV Cache的贪婪解码（GPT-3特有加速）
         System.out.println("\n--- 2. 带KV Cache的贪婪解码（GPT-3特有加速）---");
         long start = System.currentTimeMillis();
-        int[] cacheResult = inference.generateGreedyWithCache(prompt, model.getConfig().getNPositions());
+        int[] cacheResult = inference.generateGreedyWithCache(prompt, maxNewTokens);
         long elapsed = System.currentTimeMillis() - start;
         System.out.println("生成结果: " + sharedTokenizer.decode(cacheResult));
         System.out.println("KV Cache推理耗时: " + elapsed + " ms");
 
         // 3. Temperature采样（temperature=0.8）
         System.out.println("\n--- 3. Temperature采样 (T=0.8) ---");
-        int[] tempResult = inference.generateWithTemperature(prompt, model.getConfig().getNPositions(), 0.8f);
+        int[] tempResult = inference.generateWithTemperature(prompt, maxNewTokens, 0.8f);
         System.out.println("生成结果: " + sharedTokenizer.decode(tempResult));
 
         // 4. Top-K采样（K=10）
         System.out.println("\n--- 4. Top-K采样 (K=10, T=1.0) ---");
-        int[] topKResult = inference.generateTopK(prompt, model.getConfig().getNPositions(), 10, 1.0f);
+        int[] topKResult = inference.generateTopK(prompt, maxNewTokens, 10, 1.0f);
         System.out.println("生成结果: " + sharedTokenizer.decode(topKResult));
-
-        // 5. Top-P采样（p=0.9）
-        System.out.println("\n--- 5. Top-P/Nucleus采样 (P=0.9, T=1.0) ---");
-        int[] topPResult = inference.generateTopP(prompt, model.getConfig().getNPositions(), 0.9f, 1.0f);
-        System.out.println("生成结果: " + sharedTokenizer.decode(topPResult));
-
-        // 6. Beam Search（beam=3）
-        System.out.println("\n--- 6. Beam Search (beamSize=3) ---");
-        int[] beamResult = inference.generateBeamSearch(prompt, model.getConfig().getNPositions(), 3);
-        System.out.println("生成结果: " + sharedTokenizer.decode(beamResult));
 
         System.out.println("\n推理演示完成!");
         System.out.println("GPT-3特色：KV Cache加速推理（O(n) vs 无Cache的O(n²)）已验证");

@@ -1,0 +1,15 @@
+<|im_start|>user What is 15 plus 27<|im_end|><|im_start|>assistant <|begin_of_thought|>Let me think step by step. First I add the ones: 5 plus 7 equals 12, carry 1. Then tens: 1 plus 2 plus 1 equals 4.<|end_of_thought|> 42<|im_end|>
+<|im_start|>user Calculate 8 times 7<|im_end|><|im_start|>assistant <|begin_of_thought|>I know 8 times 7 equals 56 because 8 times 5 is 40 and 8 times 2 is 16, so 40 plus 16 is 56.<|end_of_thought|> 56<|im_end|>
+<|im_start|>user What is half of 48<|im_end|><|im_start|>assistant <|begin_of_thought|>To find half I divide by 2. 48 divided by 2 equals 24.<|end_of_thought|> 24<|im_end|>
+<|im_start|>user If I have 3 groups of 4 apples, how many total<|im_end|><|im_start|>assistant <|begin_of_thought|>3 groups times 4 apples per group equals 3 times 4 which is 12 apples.<|end_of_thought|> 12<|im_end|>
+<|im_start|>user What is 100 minus 37<|im_end|><|im_start|>assistant <|begin_of_thought|>Subtract ones first: 0 minus 7 needs borrowing, so 10 minus 7 is 3. Tens: 9 minus 3 is 6.<|end_of_thought|> 63<|im_end|>
+<|im_start|>user What is 25 times 4<|im_end|><|im_start|>assistant <|begin_of_thought|>25 times 4 equals 100 because 25 is one quarter of 100.<|end_of_thought|> 100<|im_end|>
+<|im_start|>user Calculate 144 divided by 12<|im_end|><|im_start|>assistant <|begin_of_thought|>12 times 12 equals 144, so 144 divided by 12 is 12.<|end_of_thought|> 12<|im_end|>
+<|im_start|>user What is 7 plus 8 plus 9<|im_end|><|im_start|>assistant <|begin_of_thought|>First 7 plus 8 equals 15, then 15 plus 9 equals 24.<|end_of_thought|> 24<|im_end|>
+<|im_start|>user Find 20 percent of 50<|im_end|><|im_start|>assistant <|begin_of_thought|>20 percent is 0.2, and 0.2 times 50 equals 10.<|end_of_thought|> 10<|im_end|>
+<|im_start|>user What is 81 divided by 9<|im_end|><|im_start|>assistant <|begin_of_thought|>9 times 9 equals 81, so the answer is 9.<|end_of_thought|> 9<|im_end|>
+<|im_start|>user Calculate 6 squared<|im_end|><|im_start|>assistant <|begin_of_thought|>6 squared means 6 times 6 which equals 36.<|end_of_thought|> 36<|im_end|>
+<|im_start|>user What is the sum of first 5 natural numbers<|im_end|><|im_start|>assistant <|begin_of_thought|>1 plus 2 plus 3 plus 4 plus 5 equals 15.<|end_of_thought|> 15<|im_end|>
+<|im_start|>user Find 3 cubed<|im_end|><|im_start|>assistant <|begin_of_thought|>3 cubed means 3 times 3 times 3 equals 27.<|end_of_thought|> 27<|im_end|>
+<|im_start|>user What is 45 plus 55<|im_end|><|im_start|>assistant <|begin_of_thought|>Both add up to 100 since 45 plus 55 equals 100.<|end_of_thought|> 100<|im_end|>
+<|im_start|>user Calculate 72 minus 28<|im_end|><|im_start|>assistant <|begin_of_thought|>I can think of it as 72 minus 30 plus 2 equals 44.<|end_of_thought|> 44<|im_end|>

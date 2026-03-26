@@ -41,6 +41,9 @@ import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
  */
 public class GPT3Attention extends Module {
 
+    /** 注意力掩码中用于屏蔽位置的极大负值，softmax 后趋近于 0 */
+    private static final float MASK_NEG_INF = -1e9f;
+
     private final GPT3Config config;
     private final int dModel;
     private final int numHeads;
@@ -263,18 +266,21 @@ public class GPT3Attention extends Module {
      */
     private Variable applyPartialRoPE(Variable qk, int batchSize, int seqLen, int startPos) {
         float[] data = qk.getValue().getArray();
-        float[] output = data.clone();
+        // 避免全量 clone：直接分配新数组，仅写入需要修改的部分，
+        // 未旋转的维度 [rotaryDim, headDim) 通过 System.arraycopy 批量复制
+        int totalElements = data.length;
+        float[] output = new float[totalElements];
 
         int halfRotary = rotaryDim / 2;
+        int unrotatedDims = headDim - rotaryDim;
 
         for (int b = 0; b < batchSize; b++) {
             for (int h = 0; h < numHeads; h++) {
                 for (int s = 0; s < seqLen; s++) {
                     int pos = startPos + s;
-                    // baseOffset: 该 (b, h, s) 位置的 headDim 向量起始索引
                     int baseOffset = ((b * numHeads + h) * seqLen + s) * headDim;
 
-                    // 对前 rotaryDim 个维度（halfRotary 对）做旋转
+                    // 对前 rotaryDim 个维度做旋转
                     for (int i = 0; i < halfRotary; i++) {
                         float x0 = data[baseOffset + 2 * i];
                         float x1 = data[baseOffset + 2 * i + 1];
@@ -283,7 +289,12 @@ public class GPT3Attention extends Module {
 
                         output[baseOffset + 2 * i]     = x0 * cos - x1 * sin;
                         output[baseOffset + 2 * i + 1] = x0 * sin + x1 * cos;
-                        // [rotaryDim, headDim) 范围的维度保持不变（由 clone() 保证）
+                    }
+
+                    // 批量复制未旋转的维度 [rotaryDim, headDim)
+                    if (unrotatedDims > 0) {
+                        System.arraycopy(data, baseOffset + rotaryDim,
+                                output, baseOffset + rotaryDim, unrotatedDims);
                     }
                 }
             }
@@ -310,7 +321,7 @@ public class GPT3Attention extends Module {
                     for (int j = 0; j < kvSeqLen; j++) {
                         if (j > qPos) {
                             int idx = ((b * numHeads + h) * seqLen + i) * kvSeqLen + j;
-                            maskData[idx] = -1e9f;
+                            maskData[idx] = MASK_NEG_INF;
                         }
                     }
                 }
@@ -343,7 +354,7 @@ public class GPT3Attention extends Module {
         // 初始化为全部屏蔽（-1e9）
         float[] maskData = new float[batchSize * numHeads * seqLen * kvSeqLen];
         for (int idx = 0; idx < maskData.length; idx++) {
-            maskData[idx] = -1e9f;
+            maskData[idx] = MASK_NEG_INF;
         }
 
         for (int b = 0; b < batchSize; b++) {

@@ -158,7 +158,7 @@ public class DeepSeekR1TrainDemo {
         System.out.println("\n📝 配置预训练器...");
         DeepSeekR1Pretrain trainer = new DeepSeekR1Pretrain(model, dataset);
         trainer.configure(
-            3,          // maxEpochs（10→3，快速演示）
+            20,          // maxEpochs（10→3，快速演示）
             5e-2f,      // learningRate
             5,          // warmupSteps
             1.0f        // maxGradNorm
@@ -238,7 +238,7 @@ public class DeepSeekR1TrainDemo {
         );
         
         posttrain.configure(
-            3,          // maxEpochs
+            10,          // maxEpochs
             1e-3f,      // learningRate
             2           // patience
         );
@@ -306,13 +306,13 @@ public class DeepSeekR1TrainDemo {
         );
         
         rlhfTrainer.configure(
-            2,          // maxEpochs
+            10,          // maxEpochs
             5e-4f,      // learningRate
             1.0f,       // rewardWeight
             0.5f        // qualityWeight
         );
         
-        System.out.println("  ✓ 最大轮次: 2");
+        System.out.println("  ✓ 最大轮次: 10");
         System.out.println("  ✓ 学习率: 5e-4");
         System.out.println("  ✓ 算法: Reward-weighted Regression");
         
@@ -372,7 +372,7 @@ public class DeepSeekR1TrainDemo {
         
         rlvrTrainer.configure(
             20,         // maxEpochs (增加训练轮次以充分学习)
-            0.05f,      // learningRate (降低学习率提高稳定性)
+            0.005f,      // learningRate (降低学习率提高稳定性)
             4,          // groupSize G (GRPO每个问题采样数)
             0.2f,       // clipEps   (PPO clip范围)
             1.0f        // temperature (采样温度)

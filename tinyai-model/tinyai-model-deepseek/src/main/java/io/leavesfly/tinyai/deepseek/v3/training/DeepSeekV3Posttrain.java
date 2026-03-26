@@ -142,19 +142,19 @@ public class DeepSeekV3Posttrain {
             
             System.out.printf("Epoch %d 验证损失: %.4f%n", currentEpoch + 1, valLoss);
             
-            // 早停检查
-            if (valLoss < bestValLoss) {
-                bestValLoss = valLoss;
-                stepsWithoutImprovement = 0;
-                saveCheckpoint("best");
-                System.out.println("新的最佳模型已保存!");
-            } else {
-                stepsWithoutImprovement++;
-                if (stepsWithoutImprovement >= patience) {
-                    System.out.println("触发早停,训练结束");
-                    break;
-                }
-            }
+//            // 早停检查
+//            if (valLoss < bestValLoss) {
+//                bestValLoss = valLoss;
+//                stepsWithoutImprovement = 0;
+//                saveCheckpoint("best");
+//                System.out.println("新的最佳模型已保存!");
+//            } else {
+//                stepsWithoutImprovement++;
+//                if (stepsWithoutImprovement >= patience) {
+//                    System.out.println("触发早停,训练结束");
+//                    break;
+//                }
+//            }
         }
         
         // 保存最终模型

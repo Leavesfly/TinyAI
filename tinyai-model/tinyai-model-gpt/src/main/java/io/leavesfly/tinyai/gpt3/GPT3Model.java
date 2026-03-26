@@ -41,7 +41,10 @@ public class GPT3Model extends Model {
         super(name, new GPT3MainBlock(name + "_main", config));
         this.config = config;
         this.gpt3Block = (GPT3MainBlock) getModule();
-        
+
+        // 校验配置合法性
+        config.validate();
+
         // 设置模型描述
         setDescription(buildDescription());
     }
@@ -224,6 +227,16 @@ public class GPT3Model extends Model {
         int batchSize = promptIds.getShape().getDimension(0);
         int promptLen = promptIds.getShape().getDimension(1);
 
+        // 限制生成长度不超过位置编码上限
+        int maxPositions = config.getNPositions();
+        int maxAllowed = maxPositions - promptLen;
+        if (maxAllowed <= 0) {
+            return promptIds;
+        }
+        if (maxNewTokens > maxAllowed) {
+            maxNewTokens = maxAllowed;
+        }
+
         // 为每层 Transformer 块创建独立的 KV Cache
         List<GPT3KVCache> kvCaches = new ArrayList<>();
         for (int i = 0; i < config.getNLayer(); i++) {
@@ -231,7 +244,8 @@ public class GPT3Model extends Model {
                     batchSize,
                     config.getNHead(),
                     config.getNEmbd() / config.getNHead(),
-                    config.getNPositions()
+                    config.getNPositions(),
+                    config.isUseRotaryEmbedding()
             ));
         }
 
@@ -254,8 +268,24 @@ public class GPT3Model extends Model {
         }
 
         // 阶段2：增量生成（每步只输入1个 Token，利用 KV Cache）
+        int eosTokenId = config.getVocabSize() - 1;
+        int actualGenLen = maxNewTokens;
+
         for (int step = 1; step < maxNewTokens; step++) {
             int currentPos = promptLen + step - 1;
+
+            // 检查上一步是否所有 batch 都已生成 EOS
+            boolean allEos = true;
+            for (int b = 0; b < batchSize; b++) {
+                if ((int) generatedSeq[b][currentPos] != eosTokenId) {
+                    allEos = false;
+                    break;
+                }
+            }
+            if (allEos) {
+                actualGenLen = step;
+                break;
+            }
 
             // 取上一步生成的 Token 作为输入（shape: batch_size × 1）
             float[][] singleToken = new float[batchSize][1];
@@ -274,13 +304,25 @@ public class GPT3Model extends Model {
             }
         }
 
-        return NdArray.of(generatedSeq);
+        // 截断到实际生成长度
+        int finalLen = promptLen + actualGenLen;
+        float[][] trimmedSeq = new float[batchSize][finalLen];
+        for (int b = 0; b < batchSize; b++) {
+            System.arraycopy(generatedSeq[b], 0, trimmedSeq[b], 0, finalLen);
+        }
+        return NdArray.of(trimmedSeq);
     }
     
     /**
-     * 找到指定位置的最大值索引（简化实现）
+     * 找到 logits 张量中指定 batch 和序列位置上概率最大的 token 索引。
+     * 此方法为静态公共方法，供 GPT3Inference 等外部类复用，避免重复定义。
+     *
+     * @param logits   logits 张量，Shape: (batch, seqLen, vocabSize)
+     * @param batchIdx 批次索引
+     * @param seqIdx   序列位置索引
+     * @return 概率最大的 token 索引
      */
-    private int argmax(NdArray logits, int batchIdx, int seqIdx) {
+    public static int argmax(NdArray logits, int batchIdx, int seqIdx) {
         int vocabSize = logits.getShape().getDimension(2);
         int maxIdx = 0;
         float maxVal = logits.get(batchIdx, seqIdx, 0);

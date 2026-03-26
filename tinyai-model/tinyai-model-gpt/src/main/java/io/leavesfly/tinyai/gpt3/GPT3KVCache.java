@@ -33,6 +33,16 @@ public class GPT3KVCache {
     private final int maxCacheLen;
 
     /**
+     * 是否使用 RoPE 位置编码。
+     * 当启用 RoPE 时，K 向量中已嵌入绝对位置信息，滑动窗口截断会破坏位置关系，
+     * 因此启用 RoPE 时禁用滑动窗口截断。
+     */
+    private final boolean useRoPE;
+
+    /** 滑动窗口截断警告是否已输出（避免重复打印） */
+    private boolean slidingWindowWarned = false;
+
+    /**
      * 创建KV缓存
      *
      * @param batchSize   批次大小
@@ -41,10 +51,24 @@ public class GPT3KVCache {
      * @param maxCacheLen 最大缓存序列长度（通常等于 nPositions）
      */
     public GPT3KVCache(int batchSize, int numHeads, int headDim, int maxCacheLen) {
+        this(batchSize, numHeads, headDim, maxCacheLen, false);
+    }
+
+    /**
+     * 创建KV缓存（支持 RoPE 安全模式）
+     *
+     * @param batchSize   批次大小
+     * @param numHeads    注意力头数
+     * @param headDim     每个头的维度
+     * @param maxCacheLen 最大缓存序列长度（通常等于 nPositions）
+     * @param useRoPE     是否使用 RoPE 位置编码（启用时禁止滑动窗口截断）
+     */
+    public GPT3KVCache(int batchSize, int numHeads, int headDim, int maxCacheLen, boolean useRoPE) {
         this.batchSize = batchSize;
         this.numHeads = numHeads;
         this.headDim = headDim;
         this.maxCacheLen = maxCacheLen;
+        this.useRoPE = useRoPE;
         this.currentSeqLen = 0;
         this.cachedK = null;
         this.cachedV = null;
@@ -69,12 +93,26 @@ public class GPT3KVCache {
             cachedV = concatenateOnSeqDim(cachedV, newV);
             currentSeqLen += newK.getShape().getDimension(2);
 
-            // 超出最大长度时，丢弃最早的Token（滑动窗口）
+            // 超出最大长度时的处理
             if (currentSeqLen > maxCacheLen) {
-                int excess = currentSeqLen - maxCacheLen;
-                cachedK = sliceOnSeqDim(cachedK, excess, currentSeqLen);
-                cachedV = sliceOnSeqDim(cachedV, excess, currentSeqLen);
-                currentSeqLen = maxCacheLen;
+                if (useRoPE) {
+                    // RoPE 模式下禁止滑动窗口截断：K 向量中已嵌入绝对位置信息，
+                    // 截断后剩余 K 的位置编码与实际索引不一致，会导致注意力计算错误。
+                    // 此处仅输出警告，保留完整缓存以保证正确性。
+                    if (!slidingWindowWarned) {
+                        System.err.println("[GPT3KVCache] 警告: 缓存长度(" + currentSeqLen
+                                + ")超过最大限制(" + maxCacheLen
+                                + ")，但因启用 RoPE 无法安全截断，将保留完整缓存。"
+                                + "建议增大 nPositions 或缩短生成长度。");
+                        slidingWindowWarned = true;
+                    }
+                } else {
+                    // 非 RoPE 模式：安全执行滑动窗口截断
+                    int excess = currentSeqLen - maxCacheLen;
+                    cachedK = sliceOnSeqDim(cachedK, excess, currentSeqLen);
+                    cachedV = sliceOnSeqDim(cachedV, excess, currentSeqLen);
+                    currentSeqLen = maxCacheLen;
+                }
             }
         }
         return new NdArray[]{cachedK, cachedV};
@@ -100,22 +138,15 @@ public class GPT3KVCache {
 
         for (int b = 0; b < batch; b++) {
             for (int h = 0; h < heads; h++) {
-                // 复制历史缓存
-                for (int s = 0; s < oldSeq; s++) {
-                    for (int d = 0; d < dim; d++) {
-                        int src = ((b * heads + h) * oldSeq + s) * dim + d;
-                        int dst = ((b * heads + h) * totalSeq + s) * dim + d;
-                        result[dst] = cData[src];
-                    }
-                }
-                // 追加新Token的K/V
-                for (int s = 0; s < newSeq; s++) {
-                    for (int d = 0; d < dim; d++) {
-                        int src = ((b * heads + h) * newSeq + s) * dim + d;
-                        int dst = ((b * heads + h) * totalSeq + (oldSeq + s)) * dim + d;
-                        result[dst] = nData[src];
-                    }
-                }
+                int headIndex = b * heads + h;
+                // 批量复制历史缓存（用 System.arraycopy 替代逐元素循环）
+                int cachedSrcOffset = headIndex * oldSeq * dim;
+                int resultDstOffset = headIndex * totalSeq * dim;
+                System.arraycopy(cData, cachedSrcOffset, result, resultDstOffset, oldSeq * dim);
+                // 批量追加新Token的K/V
+                int newSrcOffset = headIndex * newSeq * dim;
+                int newDstOffset = resultDstOffset + oldSeq * dim;
+                System.arraycopy(nData, newSrcOffset, result, newDstOffset, newSeq * dim);
             }
         }
         return NdArray.of(result, Shape.of(batch, heads, totalSeq, dim));
@@ -130,17 +161,14 @@ public class GPT3KVCache {
         int newSeq = end - start;
 
         float[] result = new float[batch * heads * newSeq * dim];
-        float[] src = data.getArray();
+        float[] srcArray = data.getArray();
 
         for (int b = 0; b < batch; b++) {
             for (int h = 0; h < heads; h++) {
-                for (int t = start; t < end; t++) {
-                    for (int d = 0; d < dim; d++) {
-                        int srcIdx = ((b * heads + h) * seqLen + t) * dim + d;
-                        int dstIdx = ((b * heads + h) * newSeq + (t - start)) * dim + d;
-                        result[dstIdx] = src[srcIdx];
-                    }
-                }
+                int headIndex = b * heads + h;
+                int srcOffset = (headIndex * seqLen + start) * dim;
+                int dstOffset = headIndex * newSeq * dim;
+                System.arraycopy(srcArray, srcOffset, result, dstOffset, newSeq * dim);
             }
         }
         return NdArray.of(result, Shape.of(batch, heads, newSeq, dim));

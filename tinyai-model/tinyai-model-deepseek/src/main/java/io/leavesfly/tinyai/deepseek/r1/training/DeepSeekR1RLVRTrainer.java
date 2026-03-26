@@ -73,6 +73,7 @@ public class DeepSeekR1RLVRTrainer {
     // 训练统计
     private List<Float> correctnessHistory;
     private List<Float> qualityHistory;
+    private List<Float> lossHistory;
     
     // ========== GRPO参数 ==========
     /** 组采样大小G：每个问题采样的输出数量（论文默认16，教学简化为4） */
@@ -121,6 +122,7 @@ public class DeepSeekR1RLVRTrainer {
         this.globalStep = 0;
         this.correctnessHistory = new ArrayList<>();
         this.qualityHistory = new ArrayList<>();
+        this.lossHistory = new ArrayList<>();
     }
     
     /**
@@ -186,6 +188,7 @@ public class DeepSeekR1RLVRTrainer {
         dataset.prepare(true);
     
         double epochAvgReward = 0.0;
+        double epochAvgLoss   = 0.0;
         int count = 0;
         int epochGrpoTotal = 0;
         int epochFallbackTotal = 0;
@@ -206,6 +209,7 @@ public class DeepSeekR1RLVRTrainer {
     
             // 对batch求平均 + 反向传播更新
             Variable avgLoss = br.totalLoss.mul(new Variable(NdArray.of(1.0f / br.validSamples)));
+            float batchLossValue = avgLoss.getValue().getNumber().floatValue();
             float batchAvgReward = br.totalReward / br.validSamples;
     
             model.clearGrads();
@@ -216,15 +220,17 @@ public class DeepSeekR1RLVRTrainer {
             // 记录统计
             correctnessHistory.add(batchAvgReward);
             qualityHistory.add((float) result.moeLoss);
-    
+            lossHistory.add(batchLossValue);
+            
             epochAvgReward += batchAvgReward;
+            epochAvgLoss   += batchLossValue;
             count++;
             globalStep++;
     
             if (globalStep % logInterval == 0) {
                 System.out.printf(
-                    "Epoch %d | Step %d | GRPO: %d | Fallback: %d | Reward: %.4f%n",
-                    currentEpoch + 1, globalStep, br.grpoSamples, br.fallbackSamples, batchAvgReward
+                    "Epoch %d | Step %d | Loss: %.4f | GRPO: %d | Fallback: %d | Reward: %.4f%n",
+                    currentEpoch + 1, globalStep, batchLossValue, br.grpoSamples, br.fallbackSamples, batchAvgReward
                 );
             }
             epochGrpoTotal += br.grpoSamples;
@@ -232,8 +238,10 @@ public class DeepSeekR1RLVRTrainer {
         }
     
         System.out.printf(
-            "Epoch %d 完成 | GRPO样本: %d | Fallback样本: %d | 平均奖励: %.4f%n",
-            currentEpoch + 1, epochGrpoTotal, epochFallbackTotal, count > 0 ? epochAvgReward / count : 0.0
+            "Epoch %d 完成 | GRPO样本: %d | Fallback样本: %d | 平均Loss: %.4f | 平均奖励: %.4f%n",
+            currentEpoch + 1, epochGrpoTotal, epochFallbackTotal,
+            count > 0 ? epochAvgLoss / count : 0.0,
+            count > 0 ? epochAvgReward / count : 0.0
         );
     
         dataset.reset();

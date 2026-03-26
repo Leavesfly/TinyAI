@@ -144,7 +144,7 @@ public class GPT3MainBlock extends Module {
         validateInput(tokenIds);
 
         // 1. Token 嵌入（位置编码基于 startPos 偏移）
-        Variable x = tokenEmbedding.forward(tokenIds);
+        Variable x = tokenEmbedding.forwardWithStartPos(tokenIds, startPos);
 
         // 2. 逐层通过 Transformer 块（每层使用各自的 KV Cache）
         for (int i = 0; i < transformerBlocks.size(); i++) {
@@ -192,35 +192,156 @@ public class GPT3MainBlock extends Module {
     }
     
     /**
-     * 打印模型架构信息
+     * 打印模型网络架构信息（树形层次结构）
      */
     public void printArchitecture() {
-        System.out.println("=".repeat(60));
-        System.out.println("GPT-3 主体块架构");
-        System.out.println("=".repeat(60));
-        System.out.printf("配置: %s\n", config);
-        System.out.println("-".repeat(60));
-        System.out.printf("Token嵌入层: %s\n", tokenEmbedding.getClass().getSimpleName());
-        System.out.printf("  - 词汇表大小: %,d\n", config.getVocabSize());
-        System.out.printf("  - 嵌入维度: %d\n", config.getNEmbd());
-        System.out.printf("  - 最大序列长度: %d\n", config.getNPositions());
-        System.out.printf("  - 基于: V2 Module (完全独立实现)\n");
-        System.out.println("-".repeat(60));
-        System.out.printf("Transformer块数量: %d\n", transformerBlocks.size());
-        if (!transformerBlocks.isEmpty()) {
-            System.out.printf("  - 每块配置: %s\n", transformerBlocks.get(0));
-            System.out.printf("  - 架构模式: %s\n", 
-                config.isParallelAttention() ? "并行注意力+MLP" : "串行（GPT-2风格）");
+        String sep  = "=".repeat(70);
+        String dash = "-".repeat(70);
+        String attnMode = config.isParallelAttention() ? "Parallel" : "Sequential(GPT-2 style)";
+        String attnFeatures = buildAttnFeatures();
+
+        System.out.println(sep);
+        System.out.println(" GPT-3 网络架构");
+        System.out.println(sep);
+
+        // ── 全局超参 ──────────────────────────────────────────────────────────
+        System.out.println("[超参配置]");
+        System.out.printf("  %-20s %d\n",  "词汇表大小 (vocab):",   config.getVocabSize());
+        System.out.printf("  %-20s %d\n",  "最大序列长度 (ctx):",   config.getNPositions());
+        System.out.printf("  %-20s %d\n",  "嵌入维度 (d_model):",   config.getNEmbd());
+        System.out.printf("  %-20s %d\n",  "注意力头数 (n_head):",  config.getNHead());
+        System.out.printf("  %-20s %d\n",  "每头维度 (d_head):",    config.getNEmbd() / config.getNHead());
+        System.out.printf("  %-20s %d\n",  "FFN维度 (d_ff):",       config.getNInner());
+        System.out.printf("  %-20s %d\n",  "Transformer层数:",      config.getNLayer());
+        System.out.printf("  %-20s %s\n",  "注意力模式:",            attnMode);
+        System.out.printf("  %-20s %s\n",  "注意力特性:",            attnFeatures);
+        System.out.printf("  %-20s %.2f / %.2f / %.2f\n",
+                "Dropout(embd/attn/resid):",
+                config.getEmbdPdrop(), config.getAttnPdrop(), config.getResidPdrop());
+        System.out.printf("  %-20s %.1e\n", "LayerNorm epsilon:",   config.getLayerNormEpsilon());
+        System.out.println();
+
+        // ── 网络层次 ──────────────────────────────────────────────────────────
+        System.out.println("[网络架构]");
+        System.out.printf("GPT3MainBlock ('%s')\n", name);
+
+        // 1. Token Embedding
+        System.out.println("├─ [1] TokenEmbedding");
+        System.out.printf("│    ├─ token_embedding  : Embedding(%d, %d)\n",
+                config.getVocabSize(), config.getNEmbd());
+        System.out.printf("│    ├─ position_embedding: Embedding(%d, %d)  [可学习位置编码]\n",
+                config.getNPositions(), config.getNEmbd());
+        System.out.printf("│    └─ dropout           : Dropout(p=%.3f)\n",
+                config.getEmbdPdrop());
+
+        // 2. Transformer Blocks（只展开第 0 块作为代表）
+        int nLayer = config.getNLayer();
+        System.out.printf("├─ [2] TransformerBlocks  x%d\n", nLayer);
+        printTransformerBlockDetail("│    ", 0, nLayer);
+        if (nLayer > 1) {
+            System.out.printf("│    ├─ transformer_1  ... transformer_%d  (结构同上)\n", nLayer - 1);
         }
-        System.out.println("-".repeat(60));
-        System.out.printf("最终LayerNorm: 维度=%d, epsilon=%.1e\n", 
-            config.getNEmbd(), config.getLayerNormEpsilon());
-        System.out.println("-".repeat(60));
-        System.out.printf("输出投影层: %d -> %d\n", 
-            config.getNEmbd(), config.getVocabSize());
-        System.out.println("-".repeat(60));
-        System.out.printf("估算参数数量: %s\n", formatParamCount(getParameterCount()));
-        System.out.println("=".repeat(60));
+
+        // 3. Final LayerNorm
+        System.out.printf("├─ [3] final_ln          : LayerNorm(%d, eps=%.1e)\n",
+                config.getNEmbd(), config.getLayerNormEpsilon());
+
+        // 4. Output Projection
+        System.out.printf("└─ [4] output_proj       : Linear(%d → %d, bias=false)\n",
+                config.getNEmbd(), config.getVocabSize());
+
+        // ── 数据流 ────────────────────────────────────────────────────────────
+        System.out.println();
+        System.out.println("[数据流]");
+        System.out.println("  TokenIDs (batch, seq)");
+        System.out.println("    │");
+        System.out.printf("    ├─ TokenEmbedding  → (batch, seq, %d)\n", config.getNEmbd());
+        System.out.printf("    ├─ TransformerBlock x%d\n", nLayer);
+        if (config.isParallelAttention()) {
+            System.out.println("    │    ├─ [parallel] LayerNorm → Attention(RoPE+Sparse)");
+            System.out.println("    │    ├─ [parallel] LayerNorm → FFN(Linear→GELU→Linear)");
+            System.out.println("    │    └─ x = x + attn_out + mlp_out");
+        } else {
+            System.out.println("    │    ├─ LayerNorm → Attention → x = x + attn_out");
+            System.out.println("    │    └─ LayerNorm → FFN → x = x + mlp_out");
+        }
+        System.out.printf("    ├─ FinalLayerNorm  → (batch, seq, %d)\n", config.getNEmbd());
+        System.out.printf("    └─ OutputProjection→ (batch, seq, %d) [logits]\n", config.getVocabSize());
+
+        // ── 参数统计 ──────────────────────────────────────────────────────────
+        System.out.println();
+        System.out.println(dash);
+        System.out.printf(" 估算总参数量: %s\n", formatParamCount(getParameterCount()));
+        System.out.println(sep);
+    }
+
+    /**
+     * 展开一个 TransformerBlock 的内部结构（用于 printArchitecture 树形输出）
+     *
+     * @param prefix 缩进前缀
+     * @param idx    展开块的索引
+     * @param total  总块数
+     */
+    private void printTransformerBlockDetail(String prefix, int idx, int total) {
+        String blockTag = total > 1
+                ? String.format("transformer_%d  (代表，共 %d 块)", idx, total)
+                : String.format("transformer_%d", idx);
+        System.out.printf("%s├─ %s\n", prefix, blockTag);
+
+        String inner = prefix + "│    ";
+        if (config.isParallelAttention()) {
+            // 并行注意力分支
+            System.out.printf("%s├─ [attn branch]\n", inner);
+            System.out.printf("%s│    ├─ ln1        : LayerNorm(%d)\n", inner, config.getNEmbd());
+            System.out.printf("%s│    ├─ attention  : GPT3Attention(%s)\n", inner, buildAttnFeatures());
+            System.out.printf("%s│    └─ dropout    : Dropout(p=%.3f)\n", inner, config.getResidPdrop());
+            // 并行 MLP 分支
+            System.out.printf("%s├─ [mlp branch]\n", inner);
+            System.out.printf("%s│    ├─ ln2        : LayerNorm(%d)\n", inner, config.getNEmbd());
+            System.out.printf("%s│    ├─ ffn_fc1    : Linear(%d → %d, bias=true)\n",
+                    inner, config.getNEmbd(), config.getNInner());
+            System.out.printf("%s│    ├─ gelu       : GELU\n", inner);
+            System.out.printf("%s│    ├─ ffn_fc2    : Linear(%d → %d, bias=true)\n",
+                    inner, config.getNInner(), config.getNEmbd());
+            System.out.printf("%s│    └─ dropout    : Dropout(p=%.3f)\n", inner, config.getResidPdrop());
+            System.out.printf("%s└─ residual merge : x = x + attn_out + mlp_out\n", inner);
+        } else {
+            // 串行：先注意力再 MLP
+            System.out.printf("%s├─ [sub-layer 1: attention]\n", inner);
+            System.out.printf("%s│    ├─ ln1        : LayerNorm(%d)\n", inner, config.getNEmbd());
+            System.out.printf("%s│    ├─ attention  : GPT3Attention(%s)\n", inner, buildAttnFeatures());
+            System.out.printf("%s│    ├─ dropout    : Dropout(p=%.3f)\n", inner, config.getResidPdrop());
+            System.out.printf("%s│    └─ residual   : x = x + attn_out\n", inner);
+            System.out.printf("%s└─ [sub-layer 2: ffn]\n", inner);
+            System.out.printf("%s     ├─ ln2        : LayerNorm(%d)\n", inner, config.getNEmbd());
+            System.out.printf("%s     ├─ ffn_fc1    : Linear(%d → %d, bias=true)\n",
+                    inner, config.getNEmbd(), config.getNInner());
+            System.out.printf("%s     ├─ gelu       : GELU\n", inner);
+            System.out.printf("%s     ├─ ffn_fc2    : Linear(%d → %d, bias=true)\n",
+                    inner, config.getNInner(), config.getNEmbd());
+            System.out.printf("%s     ├─ dropout    : Dropout(p=%.3f)\n", inner, config.getResidPdrop());
+            System.out.printf("%s     └─ residual   : x = x + mlp_out\n", inner);
+        }
+    }
+
+    /**
+     * 构建注意力特性描述字符串
+     *
+     * @return 注意力特性字符串，如 "RoPE+SparseAttn" 或 "Standard"
+     */
+    private String buildAttnFeatures() {
+        StringBuilder sb = new StringBuilder();
+        if (config.isUseRotaryEmbedding()) {
+            sb.append("RoPE");
+        }
+        if (config.isSparseAttention()) {
+            if (sb.length() > 0) sb.append("+");
+            sb.append("SparseAttn(window=").append(config.getSparseLocalWindow()).append(")");
+        }
+        if (sb.length() == 0) {
+            sb.append("Standard");
+        }
+        return sb.toString();
     }
     
     /**

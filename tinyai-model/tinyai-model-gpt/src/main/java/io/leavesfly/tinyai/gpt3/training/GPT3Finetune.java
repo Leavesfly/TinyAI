@@ -20,7 +20,7 @@ import java.util.Map;
 
 /**
  * GPT-3微调训练器（Posttrain/SFT Finetune）
- *
+ * <p>
  * 在预训练模型基础上进行任务特定的有监督微调（Supervised Fine-Tuning），
  * 对应GPT-3论文中的few-shot/fine-tune策略：
  * - 较小的学习率（相比预训练缩小10倍）
@@ -47,6 +47,7 @@ public class GPT3Finetune {
     private float maxGradNorm;
     private int logInterval;
     private int evalInterval;
+    private int saveInterval;
     private int patience;
     private String checkpointDir;
 
@@ -59,7 +60,7 @@ public class GPT3Finetune {
     private int globalStep;
     private List<Float> trainLossHistory;
     private List<Float> valLossHistory;
-    private float bestValLoss;
+
     private int stepsWithoutImprovement;
 
     /**
@@ -85,6 +86,7 @@ public class GPT3Finetune {
         this.maxGradNorm = 1.0f;
         this.logInterval = 50;
         this.evalInterval = 100;
+        this.saveInterval = 1;
         this.patience = 3;
         this.checkpointDir = "./checkpoints/gpt3/finetune";
 
@@ -95,7 +97,7 @@ public class GPT3Finetune {
         this.globalStep = 0;
         this.trainLossHistory = new ArrayList<>();
         this.valLossHistory = new ArrayList<>();
-        this.bestValLoss = Float.MAX_VALUE;
+
         this.stepsWithoutImprovement = 0;
     }
 
@@ -131,12 +133,12 @@ public class GPT3Finetune {
      * 设置检查点配置
      *
      * @param checkpointDir 检查点目录
-     * @param evalInterval  验证评估间隔（step数）
+     * @param saveInterval  保存间隔（Epoch数），与GPT3Pretrain保持一致
      * @return this
      */
-    public GPT3Finetune setCheckpoint(String checkpointDir, int evalInterval) {
+    public GPT3Finetune setCheckpoint(String checkpointDir, int saveInterval) {
         this.checkpointDir = checkpointDir;
-        this.evalInterval = evalInterval;
+        this.saveInterval = saveInterval;
         return this;
     }
 
@@ -149,7 +151,6 @@ public class GPT3Finetune {
         System.out.println("=".repeat(60));
         System.out.println("模型配置:");
         System.out.println("  - 模型: " + model.getName());
-        System.out.println("  - 参数量: " + model.getAllParams().size());
         System.out.println("微调配置:");
         System.out.println("  - 训练样本: " + trainDataset.getSampleCount());
         System.out.println("  - 验证样本: " + valDataset.getSampleCount());
@@ -171,24 +172,18 @@ public class GPT3Finetune {
 
             System.out.printf("Epoch %d 验证损失: %.4f%n", currentEpoch + 1, valLoss);
 
-            if (valLoss < bestValLoss) {
-                bestValLoss = valLoss;
-                stepsWithoutImprovement = 0;
-                saveCheckpoint("best");
-                System.out.println("✓ 保存最佳模型 (val_loss: " + String.format("%.4f", bestValLoss) + ")");
-            } else {
-                stepsWithoutImprovement++;
-                System.out.println("连续 " + stepsWithoutImprovement + " 个epoch未改善");
-
-                if (stepsWithoutImprovement >= patience) {
-                    System.out.println("触发早停机制，训练结束");
-                    break;
-                }
+            // 按Epoch间隔保存检查点（与GPT3Pretrain一致）
+            if ((currentEpoch + 1) % saveInterval == 0) {
+                saveCheckpoint("epoch_" + (currentEpoch + 1));
             }
+
         }
 
+        // 训练结束后保存最终检查点（与GPT3Pretrain一致）
+        saveCheckpoint("final");
+
         System.out.println("\n微调完成!");
-        System.out.println("最佳验证损失: " + bestValLoss);
+
     }
 
     /**
@@ -235,7 +230,7 @@ public class GPT3Finetune {
 
     /**
      * 训练单步
-     *
+     * <p>
      * 支持Masked Loss：当batch包含lossMask时，只在mask=1的位置计算loss（Response部分），
      * mask=0的位置（Instruction和padding）不参与loss计算和梯度更新。
      *
@@ -246,19 +241,19 @@ public class GPT3Finetune {
         // 更新学习率（支持Warmup）
         updateLearningRate();
 
-        NdArray inputIds  = batch.getInputIds();
+        NdArray inputIds = batch.getInputIds();
         NdArray targetIds = batch.getTargetIds();
-        NdArray lossMask  = batch.getLossMask();
+        NdArray lossMask = batch.getLossMask();
 
         Variable inputVar = new Variable(inputIds);
-        Variable logits   = model.predict(inputVar);
+        Variable logits = model.predict(inputVar);
 
-        int[] shape    = logits.getValue().getShape().getShapeDims();
-        int batchSize  = shape[0];
-        int seqLen     = shape[1];
-        int vocabSize  = shape[2];
+        int[] shape = logits.getValue().getShape().getShapeDims();
+        int batchSize = shape[0];
+        int seqLen = shape[1];
+        int vocabSize = shape[2];
 
-        Variable logits2D  = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
+        Variable logits2D = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
         Variable targetVar = new Variable(targetIds.reshape(Shape.of(batchSize * seqLen, 1)));
 
         Variable loss = buildLoss(logits2D, targetVar, lossMask, batchSize, seqLen);
@@ -288,19 +283,19 @@ public class GPT3Finetune {
         while (valDataset.hasNext()) {
             GPT3Dataset.Batch batch = valDataset.nextBatch();
 
-            NdArray inputIds  = batch.getInputIds();
+            NdArray inputIds = batch.getInputIds();
             NdArray targetIds = batch.getTargetIds();
-            NdArray lossMask  = batch.getLossMask();
+            NdArray lossMask = batch.getLossMask();
 
             Variable inputVar = new Variable(inputIds);
-            Variable logits   = model.predict(inputVar);
+            Variable logits = model.predict(inputVar);
 
-            int[] shape    = logits.getValue().getShape().getShapeDims();
-            int batchSize  = shape[0];
-            int seqLen     = shape[1];
-            int vocabSize  = shape[2];
+            int[] shape = logits.getValue().getShape().getShapeDims();
+            int batchSize = shape[0];
+            int seqLen = shape[1];
+            int vocabSize = shape[2];
 
-            Variable logits2D  = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
+            Variable logits2D = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
             Variable targetVar = new Variable(targetIds.reshape(Shape.of(batchSize * seqLen, 1)));
 
             Variable loss = buildLoss(logits2D, targetVar, lossMask, batchSize, seqLen);
@@ -316,7 +311,7 @@ public class GPT3Finetune {
      * 构建损失：有lossMask时做masked loss，否则全序列loss
      */
     private Variable buildLoss(Variable logits2D, Variable targetVar,
-                                NdArray lossMask, int batchSize, int seqLen) {
+                               NdArray lossMask, int batchSize, int seqLen) {
         if (lossMask != null) {
             Variable perTokenLoss = perTokenLossFunction.loss(targetVar, logits2D);
             NdArray mask1D = lossMask.reshape(Shape.of(batchSize * seqLen, 1));
@@ -360,7 +355,7 @@ public class GPT3Finetune {
 
     /**
      * 更新学习率（支持线性Warmup）
-     *
+     * <p>
      * 在训练初期，学习率从0线性增加到目标学习率，
      * 避免初期梯度不稳定导致的震荡。
      */
@@ -424,7 +419,6 @@ public class GPT3Finetune {
                 globalStep,
                 trainLossHistory.isEmpty() ? 0.0f : trainLossHistory.get(trainLossHistory.size() - 1),
                 valLossHistory.isEmpty() ? 0.0f : valLossHistory.get(valLossHistory.size() - 1),
-                bestValLoss,
                 stepsWithoutImprovement
         );
     }
@@ -437,24 +431,22 @@ public class GPT3Finetune {
         public final int step;
         public final float trainLoss;
         public final float valLoss;
-        public final float bestValLoss;
         public final int patienceCount;
 
         public FinetuneStats(int epoch, int step, float trainLoss,
-                             float valLoss, float bestValLoss, int patienceCount) {
+                             float valLoss, int patienceCount) {
             this.epoch = epoch;
             this.step = step;
             this.trainLoss = trainLoss;
             this.valLoss = valLoss;
-            this.bestValLoss = bestValLoss;
             this.patienceCount = patienceCount;
         }
 
         @Override
         public String toString() {
             return String.format(
-                    "FinetuneStats{epoch=%d, step=%d, trainLoss=%.4f, valLoss=%.4f, bestValLoss=%.4f, patience=%d}",
-                    epoch, step, trainLoss, valLoss, bestValLoss, patienceCount);
+                    "FinetuneStats{epoch=%d, step=%d, trainLoss=%.4f, valLoss=%.4f, patience=%d}",
+                    epoch, step, trainLoss, valLoss, patienceCount);
         }
     }
 }

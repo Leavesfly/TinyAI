@@ -719,8 +719,8 @@ public class DeepSeekV3TrainDemo {
         DeepSeekV3Pretrain trainer = new DeepSeekV3Pretrain(model, dataset);
         // 修复：增加训练轮次，减少warmupSteps以适应小数据集
         trainer.configure(
-            10,         // maxEpochs (增加到10轮，小数据集需要更多轮次)
-            5e-4f,      // learningRate (提高学习率)
+            30,         // maxEpochs (增加到10轮，小数据集需要更多轮次)
+            2e-3f,      // learningRate (提高学习率)
             10,         // warmupSteps (减少warmup步数，数据少时需快速进入正常训练)
             1.0f        // maxGradNorm
         ).setCheckpoint(CHECKPOINT_DIR + "/pretrain", 500);
@@ -772,7 +772,7 @@ public class DeepSeekV3TrainDemo {
         DeepSeekV3Dataset trainDataset = createDatasetFromTexts(
             trainTexts,
             config.getNPositions(),
-            2,  // batch size
+            4,  // batch size
             config.getVocabSize(),
             true  // 使用任务标签 + ChatML 格式 + loss mask
         );
@@ -800,8 +800,8 @@ public class DeepSeekV3TrainDemo {
         
         // 修复：增加训练轮次以适应小数据集
         posttrain.configure(
-            5,          // maxEpochs (增加轮次)
-            5e-5f,      // learningRate (适当提高)
+            10,          // maxEpochs (增加轮次)
+            3e-4f,      // learningRate (适当提高)
             3           // patience (增加耐心值)
         );
         
@@ -860,7 +860,7 @@ public class DeepSeekV3TrainDemo {
         DeepSeekV3Dataset codeTrainDataset = createDatasetFromTexts(
             codeTrainTexts,
             config.getNPositions(),
-            2,  // batch size
+            4,  // batch size
             config.getVocabSize(),
             true  // 使用任务标签（全是CODING）
         );
@@ -888,8 +888,8 @@ public class DeepSeekV3TrainDemo {
         
         // 代码任务使用更小的学习率和更多的轮次
         codePosttrain.configure(
-            6,          // maxEpochs (代码任务需要更多轮次)
-            2e-5f,      // learningRate (适当调整)
+            20,          // maxEpochs (代码任务需要更多轮次)
+            2e-4f,      // learningRate (适当调整)
             3           // patience
         );
         
@@ -944,7 +944,7 @@ public class DeepSeekV3TrainDemo {
         DeepSeekV3Dataset rlhfDataset = createRLHFDatasetFromTexts(
             rlhfTexts,
             config.getNPositions(),
-            2,  // batch size
+            4,  // batch size
             config.getVocabSize()
         );
         
@@ -960,7 +960,7 @@ public class DeepSeekV3TrainDemo {
         );
         
         rlhfTrainer.configure(
-            2,          // maxEpochs
+            20,          // maxEpochs
             5e-4f,      // learningRate
             1.0f,       // rewardWeight
             0.5f        // moeQualityWeight

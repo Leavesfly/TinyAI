@@ -380,7 +380,6 @@ public class Variable implements Serializable {
      *   <li>TensorFlow: {@code tape.gradient(loss, variables)}</li>
      * </ul>
      *
-     * @see #zeroGrad()
      * @see #getGrad()
      * @see #setRequireGrad(boolean)
      */

@@ -126,8 +126,11 @@ public class MathFunctions {
      */
     public static NdArrayCpu log(NdArrayCpu array) {
         return unaryOperation(array, x -> {
+            if (Float.isNaN(x)) {
+                throw new ArithmeticException("对数的输入不能为NaN");
+            }
             if (x <= 0f) {
-                throw new ArithmeticException("对数的输入必须大于0");
+                throw new ArithmeticException("对数的输入必须大于0，当前值: " + x);
             }
             return (float) Math.log(x);
         });

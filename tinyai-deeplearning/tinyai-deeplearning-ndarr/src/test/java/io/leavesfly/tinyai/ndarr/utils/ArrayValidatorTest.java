@@ -55,7 +55,7 @@ public class ArrayValidatorTest {
 
     @Test(expected = IllegalArgumentException.class)
     public void testValidateAxisNegative() {
-        ArrayValidator.validateAxis(-1, 3);
+        ArrayValidator.validateAxis(-4, 3);
     }
 
     @Test(expected = IllegalArgumentException.class)

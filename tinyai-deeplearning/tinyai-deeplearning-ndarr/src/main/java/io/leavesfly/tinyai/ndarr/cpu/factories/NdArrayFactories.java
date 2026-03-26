@@ -19,7 +19,10 @@ public class NdArrayFactories {
      * @return 全零数组
      */
     public static NdArrayCpu zeros(Shape shape) {
-        return new NdArrayCpu(shape); // 默认就是全零
+        if (shape == null) {
+            throw new IllegalArgumentException("shape不能为null");
+        }
+        return new NdArrayCpu(shape);
     }
 
     /**
@@ -29,6 +32,9 @@ public class NdArrayFactories {
      * @return 全一数组
      */
     public static NdArrayCpu ones(Shape shape) {
+        if (shape == null) {
+            throw new IllegalArgumentException("shape不能为null");
+        }
         NdArrayCpu result = new NdArrayCpu(shape);
         fillAll(result, 1.0f);
         return result;
@@ -42,7 +48,9 @@ public class NdArrayFactories {
      * @throws IllegalArgumentException 当形状不是矩阵或不是方形矩阵时抛出
      */
     public static NdArrayCpu eye(Shape shape) {
-        // 对于多维数组，我们只支持最后两个维度的单位矩阵
+        if (shape == null) {
+            throw new IllegalArgumentException("shape不能为null");
+        }
         if (shape.getDimNum() >= 2) {
             NdArrayCpu result = new NdArrayCpu(shape);
             int lastDimSize = shape.getDimension(shape.getDimNum() - 1);
@@ -73,6 +81,9 @@ public class NdArrayFactories {
      * @return 指定值填充的数组
      */
     public static NdArrayCpu like(Shape shape, Number value) {
+        if (shape == null) {
+            throw new IllegalArgumentException("shape不能为null");
+        }
         NdArrayCpu result = new NdArrayCpu(shape);
         fillAll(result, value.floatValue());
         return result;

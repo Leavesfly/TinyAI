@@ -396,14 +396,14 @@ public class NdArrayCpu implements NdArray, Serializable {
     }
 
     /**
-     * 矩阵全元素大于比较，判断当前数组是否所有元素都大于另一个数组对应元素
+     * 全元素大于比较，判断当前数组是否所有元素都严格大于另一个数组对应元素
      *
-     * @param _other 另一个操作数数组
-     * @return 比较结果，true表示所有元素都大于，false表示存在不大于的元素
+     * @param other 另一个操作数数组
+     * @return true 表示所有元素都大于，false 表示存在不大于的元素
      * @throws IllegalArgumentException 当两个数组形状不一致时抛出
      */
-    public boolean isLar(NdArray _other) {
-        return LogicalOperations.isLar(this, (NdArrayCpu) _other);
+    public boolean isAllGreaterThan(NdArray other) {
+        return LogicalOperations.isAllGreaterThan(this, (NdArrayCpu) other);
     }
 
     // =============================================================================
@@ -648,12 +648,12 @@ public class NdArrayCpu implements NdArray, Serializable {
      *
      * 将当前数组按指定形状进行压缩，超出目标形状的部分会累加到对应位置
      *
-     * @param _shape 目标形状
+     * @param targetShape 目标形状
      * @return 压缩累加结果数组
      * @throws IllegalArgumentException 当形状不合法时抛出
      */
-    public NdArrayCpu sumTo(Shape _shape) {
-        return TransformationOperations.sumTo(this, _shape);
+    public NdArrayCpu sumTo(Shape targetShape) {
+        return TransformationOperations.sumTo(this, targetShape);
     }
 
     /**
@@ -673,12 +673,12 @@ public class NdArrayCpu implements NdArray, Serializable {
      *
      * 广播机制允许小数组与大数组进行运算，小数组会重复填充以匹配大数组的形状
      *
-     * @param _shape 目标广播形状
+     * @param targetShape 目标广播形状
      * @return 广播结果数组
      * @throws IllegalArgumentException 当形状不合法时抛出
      */
-    public NdArrayCpu broadcastTo(Shape _shape) {
-        return TransformationOperations.broadcastTo(this, _shape);
+    public NdArrayCpu broadcastTo(Shape targetShape) {
+        return TransformationOperations.broadcastTo(this, targetShape);
     }
 
     /**
@@ -696,37 +696,37 @@ public class NdArrayCpu implements NdArray, Serializable {
      * 矩阵内积运算（矩阵乘法）。
      * 执行标准矩阵乘法，要求第一个矩阵的列数等于第二个矩阵的行数。
      *
-     * @param _other 另一个矩阵
+     * @param other 另一个矩阵
      * @return 矩阵乘法结果
      * @throws IllegalArgumentException 当数组不是矩阵或维度不匹配时抛出
      */
-    public NdArrayCpu dot(NdArray _other) {
-        return MatrixOperations.dot(this, (NdArrayCpu) _other);
+    public NdArrayCpu dot(NdArray other) {
+        return MatrixOperations.dot(this, (NdArrayCpu) other);
     }
 
     /**
      * 获取数组的子集（切片操作）
      *
-     * @param _rowSlices 行索引数组，null表示选择所有行
-     * @param _colSlices 列索引数组，null表示选择所有列
+     * @param rowSlices 行索引数组，null表示选择所有行
+     * @param colSlices 列索引数组，null表示选择所有列
      * @return 切片结果数组
      * @throws IllegalArgumentException 当数组不是矩阵或参数不合法时抛出
      */
-    public NdArrayCpu getItem(int[] _rowSlices, int[] _colSlices) {
-        return MatrixOperations.getItem(this, _rowSlices, _colSlices);
+    public NdArrayCpu getItem(int[] rowSlices, int[] colSlices) {
+        return MatrixOperations.getItem(this, rowSlices, colSlices);
     }
 
     /**
      * 设置数组的子集（切片赋值操作）
      *
-     * @param _rowSlices 行索引数组，null表示选择所有行
-     * @param _colSlices 列索引数组，null表示选择所有列
+     * @param rowSlices 行索引数组，null表示选择所有行
+     * @param colSlices 列索引数组，null表示选择所有列
      * @param data       要设置的数据
      * @return 当前数组实例
      * @throws IllegalArgumentException 当数组不是矩阵或参数不合法时抛出
      */
-    public NdArrayCpu setItem(int[] _rowSlices, int[] _colSlices, float[] data) {
-        return MatrixOperations.setItem(this, _rowSlices, _colSlices, data);
+    public NdArrayCpu setItem(int[] rowSlices, int[] colSlices, float[] data) {
+        return MatrixOperations.setItem(this, rowSlices, colSlices, data);
     }
 
     /**

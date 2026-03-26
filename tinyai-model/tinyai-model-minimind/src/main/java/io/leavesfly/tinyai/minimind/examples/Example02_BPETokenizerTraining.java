@@ -61,7 +61,7 @@ public class Example02_BPETokenizerTraining {
         
         // 4. 保存Tokenizer
         System.out.println("4. 保存Tokenizer");
-        String savePath = "./tokenizer_model";
+        String savePath = "./checkpoints/minimind/tokenizer_model";
         tokenizer.save(savePath);
         System.out.println("已保存到: " + savePath);
         

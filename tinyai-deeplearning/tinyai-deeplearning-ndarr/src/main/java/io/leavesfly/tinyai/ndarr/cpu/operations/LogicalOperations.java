@@ -110,14 +110,14 @@ public class LogicalOperations {
     }
 
     /**
-     * 矩阵全元素大于比较，判断左数组是否所有元素都大于右数组对应元素
+     * 全元素大于比较，判断左数组是否所有元素都严格大于右数组对应元素
      *
      * @param left  左操作数数组
      * @param right 右操作数数组
-     * @return 比较结果，true表示所有元素都大于，false表示存在不大于的元素
+     * @return true 表示所有元素都大于，false 表示存在不大于的元素
      * @throws IllegalArgumentException 当两个数组形状不一致时抛出
      */
-    public static boolean isLar(NdArrayCpu left, NdArrayCpu right) {
+    public static boolean isAllGreaterThan(NdArrayCpu left, NdArrayCpu right) {
         ArrayValidator.validateShapeCompatibility(left.shape, right.shape, "全元素比较");
         for (int i = 0; i < left.buffer.length; i++) {
             if (left.buffer[i] <= right.buffer[i]) {

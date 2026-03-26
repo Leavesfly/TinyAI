@@ -429,13 +429,13 @@ public interface NdArray {
     NdArray lt(NdArray other);
 
     /**
-     * 矩阵全元素大于比较，判断当前数组是否所有元素都大于另一个数组对应元素
+     * 全元素大于比较，判断当前数组是否所有元素都严格大于另一个数组对应元素
      *
      * @param other 另一个操作数数组
-     * @return 比较结果，true表示所有元素都大于，false表示存在不大于的元素
+     * @return true 表示所有元素都大于，false 表示存在不大于的元素
      * @throws IllegalArgumentException 当两个数组形状不一致时抛出
      */
-    boolean isLar(NdArray other);
+    boolean isAllGreaterThan(NdArray other);
 
     // =============================================================================
     // 5,基本数学函数

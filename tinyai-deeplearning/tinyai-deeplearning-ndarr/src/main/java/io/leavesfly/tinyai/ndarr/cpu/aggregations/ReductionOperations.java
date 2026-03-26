@@ -47,10 +47,14 @@ public class ReductionOperations {
     public static NdArrayCpu var(NdArrayCpu array, int axis) {
         ArrayValidator.validateAxis(axis, array.shape.getDimNum());
         
+        int axisSize = array.shape.getDimension(axis);
+        if (axisSize <= 0) {
+            throw new IllegalArgumentException("方差计算要求轴维度大于0，当前轴" + axis + "的维度为: " + axisSize);
+        }
+        
         ShapeCpu newShape = computeReducedShape(array.shape, axis);
         NdArrayCpu result = new NdArrayCpu(newShape);
         
-        int axisSize = array.shape.getDimension(axis);
         int[] indices = new int[array.shape.getDimNum()];
         int[] resultIndices = new int[newShape.getDimNum()];
         
@@ -58,13 +62,10 @@ public class ReductionOperations {
         ShapeCpu shape = array.shape;
         
         for (int i = 0; i < newShape.size(); i++) {
-            // 将结果索引转换为多维索引
             IndexConverter.flatToMultiIndex(i, resultIndices, newShape);
-            
-            // 构建完整的索引数组（排除axis维度）
             buildIndicesExcludingAxis(indices, resultIndices, axis, shape.getDimNum());
             
-            // 计算均值和方差（单次遍历）
+            // 计算均值
             float sum = 0f;
             for (int j = 0; j < axisSize; j++) {
                 indices[axis] = j;
@@ -126,8 +127,11 @@ public class ReductionOperations {
      * @return 数组中的最大值
      */
     public static float max(NdArrayCpu array) {
-        float max = Float.NEGATIVE_INFINITY;
         float[] buffer = array.buffer;
+        if (buffer.length == 0) {
+            throw new IllegalArgumentException("无法对空数组求最大值");
+        }
+        float max = Float.NEGATIVE_INFINITY;
         for (int i = 0; i < buffer.length; i++) {
             if (buffer[i] > max) {
                 max = buffer[i];

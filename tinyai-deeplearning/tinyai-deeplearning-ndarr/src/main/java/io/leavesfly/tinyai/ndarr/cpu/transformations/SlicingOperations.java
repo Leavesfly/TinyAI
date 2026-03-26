@@ -25,10 +25,16 @@ public class SlicingOperations {
             int lastDimSize = array.shape.getDimension(array.shape.getDimNum() - 1);
             int secondLastDimSize = array.shape.getDimension(array.shape.getDimNum() - 2);
 
-            // 确保索引在有效范围内
-            startRow = Math.max(0, startRow);
+            // 边界校验：越界时报错而非静默修正，避免掩盖调用者的逻辑错误
+            if (startRow < 0 || startCol < 0) {
+                throw new IllegalArgumentException(
+                        String.format("起始索引不能为负数: startRow=%d, startCol=%d", startRow, startCol));
+            }
+            if (startRow >= endRow || startCol >= endCol) {
+                throw new IllegalArgumentException(
+                        String.format("起始索引必须小于结束索引: rows=[%d,%d), cols=[%d,%d)", startRow, endRow, startCol, endCol));
+            }
             endRow = Math.min(secondLastDimSize, endRow);
-            startCol = Math.max(0, startCol);
             endCol = Math.min(lastDimSize, endCol);
 
             NdArrayCpu result = new NdArrayCpu(ShapeCpu.of(endRow - startRow, endCol - startCol));

@@ -8,7 +8,11 @@ import io.leavesfly.tinyai.ndarr.cpu.utils.ArrayValidator;
  */
 public class ArithmeticOperations {
 
-    private static final float EPSILON = 1e-12f;
+    /**
+     * 除零检测阈值：使用 Float.MIN_NORMAL（约 1.17e-38）作为安全下界，
+     * 避免固定阈值对合法小数值（如学习率 1e-8）的误判
+     */
+    private static final float DIVISION_ZERO_THRESHOLD = Float.MIN_NORMAL;
 
     @FunctionalInterface
     private interface FloatBinaryOp {
@@ -109,8 +113,8 @@ public class ArithmeticOperations {
      */
     public static NdArrayCpu div(NdArrayCpu left, NdArrayCpu right) {
         return binaryOperation(left, right, (a, b) -> {
-            if (Math.abs(b) < EPSILON) {
-                throw new ArithmeticException("除数接近0");
+            if (Math.abs(b) < DIVISION_ZERO_THRESHOLD) {
+                throw new ArithmeticException("除数接近0，值为: " + b);
             }
             return a / b;
         }, "除法");
@@ -126,8 +130,8 @@ public class ArithmeticOperations {
      */
     public static NdArrayCpu divNum(NdArrayCpu array, Number number) {
         float value = number.floatValue();
-        if (Math.abs(value) < EPSILON) {
-            throw new ArithmeticException("除数不能为0");
+        if (Math.abs(value) < DIVISION_ZERO_THRESHOLD) {
+            throw new ArithmeticException("除数不能为0，值为: " + value);
         }
         return scalarOperation(array, number, (a, b) -> a / b);
     }

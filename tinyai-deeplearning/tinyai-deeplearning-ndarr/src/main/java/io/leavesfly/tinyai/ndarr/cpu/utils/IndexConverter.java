@@ -26,19 +26,15 @@ public class IndexConverter {
     }
 
     /**
-     * 将一维线性索引转换为指定Shape的多维索引
+     * 将一维线性索引转换为指定Shape的多维索引。
+     * 功能与 {@link #convertToMultiIndex} 相同，保留此方法以兼容已有调用。
      *
      * @param linearIndex 一维索引
      * @param indices     多维索引输出
      * @param targetShape 目标形状
      */
     public static void flatToMultiIndex(int linearIndex, int[] indices, ShapeCpu targetShape) {
-        int remaining = linearIndex;
-        for (int i = 0; i < targetShape.dimension.length; i++) {
-            int stride = targetShape.multipliers[i];
-            indices[i] = stride == 0 ? 0 : remaining / stride;
-            remaining = stride == 0 ? remaining : remaining % stride;
-        }
+        convertToMultiIndex(linearIndex, indices, targetShape);
     }
 }
 

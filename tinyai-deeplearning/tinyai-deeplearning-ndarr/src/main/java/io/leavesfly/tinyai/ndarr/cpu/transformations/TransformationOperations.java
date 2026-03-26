@@ -65,19 +65,16 @@ public class TransformationOperations {
         NdArrayCpu result = new NdArrayCpu(ShapeCpu.of(newDimensions));
 
         int[] indices = new int[array.shape.dimension.length];
+        int[] transposedIndices = new int[order.length];
         int totalElements = array.shape.size();
 
         for (int i = 0; i < totalElements; i++) {
-            // 将一维索引转换为多维索引
             IndexConverter.convertToMultiIndex(i, indices, array.shape);
 
-            // 计算转置后的索引
-            int[] transposedIndices = new int[order.length];
             for (int j = 0; j < order.length; j++) {
                 transposedIndices[j] = indices[order[j]];
             }
 
-            // 复制数据
             result.set(array.buffer[i], transposedIndices);
         }
         return result;
@@ -141,32 +138,31 @@ public class TransformationOperations {
 
         NdArrayCpu result = new NdArrayCpu((ShapeCpu) targetShape);
 
-        // 执行广播
-        for (int i = 0; i < targetShape.size(); i++) {
-            // 计算目标索引对应源索引
-            int[] dstIndices = new int[targetShape.getDimNum()];
+        // 预分配索引数组，避免循环内重复分配
+        int[] dstIndices = new int[targetShape.getDimNum()];
+        int[] srcIndices = new int[array.shape.getDimNum()];
+        int totalElements = targetShape.size();
+
+        for (int i = 0; i < totalElements; i++) {
+            // 计算目标索引（复用预分配数组）
             int temp = i;
             for (int dim = targetShape.getDimNum() - 1; dim >= 0; dim--) {
                 dstIndices[dim] = temp % targetShape.getDimension(dim);
                 temp /= targetShape.getDimension(dim);
             }
 
-            // 计算源索引
-            int[] srcIndices = new int[array.shape.getDimNum()];
+            // 计算源索引（复用预分配数组）
             for (int dim = 0; dim < array.shape.getDimNum(); dim++) {
                 int srcDimIndex = array.shape.getDimNum() - 1 - dim;
                 int dstDimIndex = targetShape.getDimNum() - 1 - dim;
 
                 if (array.shape.getDimension(srcDimIndex) == 1) {
-                    // 如果源维度为1，则索引始终为0
                     srcIndices[srcDimIndex] = 0;
                 } else {
-                    // 否则使用目标索引
                     srcIndices[srcDimIndex] = dstIndices[dstDimIndex];
                 }
             }
 
-            // 获取源值并设置到目标位置
             result.buffer[i] = array.buffer[array.shape.getIndex(srcIndices)];
         }
 
@@ -204,40 +200,37 @@ public class TransformationOperations {
 
         NdArrayCpu result = new NdArrayCpu((ShapeCpu) targetShape);
 
-        // 执行sumTo
-        for (int i = 0; i < array.shape.size(); i++) {
-            // 计算源索引
-            int[] srcIndices = new int[array.shape.getDimNum()];
+        // 预分配索引数组，避免循环内重复分配
+        int[] srcIndices = new int[array.shape.getDimNum()];
+        int[] dstIndices = new int[targetShape.getDimNum()];
+        int totalElements = array.shape.size();
+
+        for (int i = 0; i < totalElements; i++) {
+            // 计算源索引（复用预分配数组）
             int temp = i;
             for (int dim = array.shape.getDimNum() - 1; dim >= 0; dim--) {
                 srcIndices[dim] = temp % array.shape.getDimension(dim);
                 temp /= array.shape.getDimension(dim);
             }
 
-            // 计算目标索引
-            int[] dstIndices = new int[targetShape.getDimNum()];
+            // 计算目标索引（复用预分配数组）
             boolean valid = true;
-
             for (int dim = 0; dim < targetShape.getDimNum(); dim++) {
                 int dstDimIndex = targetShape.getDimNum() - 1 - dim;
                 int srcDimIndex = array.shape.getDimNum() - 1 - dim;
 
                 if (targetShape.getDimension(dstDimIndex) == 1) {
-                    // 如果目标维度为1，则索引始终为0
                     dstIndices[dstDimIndex] = 0;
                 } else {
-                    // 否则使用源索引
                     dstIndices[dstDimIndex] = srcIndices[srcDimIndex];
                 }
 
-                // 检查索引是否有效
                 if (dstIndices[dstDimIndex] >= targetShape.getDimension(dstDimIndex)) {
                     valid = false;
                     break;
                 }
             }
 
-            // 如果索引有效，累加到目标位置
             if (valid) {
                 int dstIndex = result.shape.getIndex(dstIndices);
                 result.buffer[dstIndex] += array.buffer[i];

@@ -479,8 +479,8 @@ public class NdArrayTest {
         assertArrayEquals(expectedEq, eq.getMatrix());
 
         // 测试大于
-        assertTrue(a.isLar(NdArray.of(new float[][]{{0, 1}, {2, 3}})));
-        assertFalse(a.isLar(NdArray.of(new float[][]{{2, 3}, {4, 5}})));
+        assertTrue(a.isAllGreaterThan(NdArray.of(new float[][]{{0, 1}, {2, 3}})));
+        assertFalse(a.isAllGreaterThan(NdArray.of(new float[][]{{2, 3}, {4, 5}})));
     }
 
     @Test

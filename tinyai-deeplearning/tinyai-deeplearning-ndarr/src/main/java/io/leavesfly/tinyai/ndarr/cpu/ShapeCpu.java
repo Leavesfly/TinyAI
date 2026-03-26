@@ -23,6 +23,10 @@ public class ShapeCpu implements Serializable, Shape {
      * multipliers[i]表示第i维的一个单位在展开后的一维数组中占据的位置数
      */
     public final int[] multipliers;
+    /**
+     * 缓存的元素总数，避免每次调用 size() 时重复计算
+     */
+    private final int sizeCache;
 
     /**
      * 缓存的hashCode值，避免重复计算
@@ -34,32 +38,32 @@ public class ShapeCpu implements Serializable, Shape {
      */
     private transient boolean hashCodeComputed = false;
 
-
     /**
      * 构造N维形状
      *
-     * @param _dimension 各维度的大小数组
+     * @param dimensions 各维度的大小数组
+     * @throws IllegalArgumentException 当维度数组为null或维度为负数时抛出
      */
-    public ShapeCpu(int... _dimension) {
-        // 验证输入参数
-        if (_dimension == null) {
+    public ShapeCpu(int... dimensions) {
+        if (dimensions == null) {
             throw new IllegalArgumentException("维度数组不能为null");
         }
 
-        // 复制维度数组以确保不可变性
-        this.dimension = _dimension.clone();
+        this.dimension = dimensions.clone();
 
-        // 计算乘数数组
-        this.multipliers = new int[_dimension.length];
-        int accumulator = 1;
-        for (int i = _dimension.length - 1; i >= 0; i--) {
-            // 检查维度是否为非负数
-            if (_dimension[i] < 0) {
-                throw new IllegalArgumentException("维度大小不能为负数: " + _dimension[i]);
+        this.multipliers = new int[dimensions.length];
+        long accumulator = 1L;
+        for (int i = dimensions.length - 1; i >= 0; i--) {
+            if (dimensions[i] < 0) {
+                throw new IllegalArgumentException("维度大小不能为负数，但第" + i + "维为: " + dimensions[i]);
             }
-            multipliers[i] = accumulator;
-            accumulator *= _dimension[i];
+            multipliers[i] = (int) accumulator;
+            accumulator *= dimensions[i];
+            if (accumulator > Integer.MAX_VALUE) {
+                throw new IllegalArgumentException("形状总大小超出整数范围，维度: " + java.util.Arrays.toString(dimensions));
+            }
         }
+        this.sizeCache = (int) accumulator;
     }
 
     /**
@@ -121,11 +125,7 @@ public class ShapeCpu implements Serializable, Shape {
      * @return 元素总数
      */
     public int size() {
-        int size = 1;
-        for (int dim : dimension) {
-            size *= dim;
-        }
-        return size;
+        return sizeCache;
     }
 
     /**
@@ -194,8 +194,8 @@ public class ShapeCpu implements Serializable, Shape {
         return hashCodeCache;
     }
 
-    public static ShapeCpu of(int... _dimension) {
-        return new ShapeCpu(_dimension);
+    public static ShapeCpu of(int... dimensions) {
+        return new ShapeCpu(dimensions);
     }
 
     @Override

@@ -71,7 +71,7 @@ public class NdArrayTpu implements NdArray {
     }
 
     @Override
-    public boolean isLar(NdArray other) {
+    public boolean isAllGreaterThan(NdArray other) {
         return false;
     }
 

@@ -426,8 +426,8 @@ public class NdArrayMathFunctionTest {
         NdArray a = NdArray.of(new float[][]{{2f, 3f}, {4f, 5f}});
         NdArray b = NdArray.of(new float[][]{{1f, 2f}, {3f, 4f}});
         
-        assertTrue(a.isLar(b));
-        assertFalse(b.isLar(a));
+        assertTrue(a.isAllGreaterThan(b));
+        assertFalse(b.isAllGreaterThan(a));
     }
 
     @Test
@@ -436,6 +436,6 @@ public class NdArrayMathFunctionTest {
         NdArray a = NdArray.of(new float[][]{{2f, 3f}, {4f, 5f}});
         NdArray b = NdArray.of(new float[][]{{1f, 3f}, {3f, 4f}});
         
-        assertFalse(a.isLar(b));
+        assertFalse(a.isAllGreaterThan(b));
     }
 }

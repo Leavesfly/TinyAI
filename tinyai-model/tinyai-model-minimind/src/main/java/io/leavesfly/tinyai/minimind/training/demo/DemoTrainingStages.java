@@ -101,7 +101,7 @@ public class DemoTrainingStages {
 
         PretrainTrainer trainer = new PretrainTrainer(model, dataset);
         trainer.configure(30, 1e-2f, 0, 1.0f);
-        trainer.setCheckpoint(CHECKPOINT_DIR + "/pretrain", 100);
+        trainer.setCheckpoint(CHECKPOINT_DIR + "/pretrain", 1000);
         trainer.setLogInterval(10);
         trainer.train();
 
@@ -129,7 +129,7 @@ public class DemoTrainingStages {
         // 2. 准备数据集（直接使用 SFTDataset 的 JSONL 加载能力）
         System.out.println("\n📝 准备监督微调数据集...");
         MiniMindConfig config = pretrainedModel.getConfig();
-        int batchSize = 2;
+        int batchSize = 4;
 
         SFTDataset dataset = new SFTDataset(getSharedTokenizer(), config.getMaxSeqLen(), batchSize);
         dataset.loadFromJsonl(trainPath);
@@ -307,7 +307,7 @@ public class DemoTrainingStages {
      * 在 LoRA 微调前执行推理测试，用于与微调后效果对比
      * 直接使用内存中的模型进行推理，无需从文件加载
      *
-     * @param model     当前模型（LoRA微调前）
+     * @param model      当前模型（LoRA微调前）
      * @param stageLabel 阶段标签，用于输出区分
      */
     public static void runInferenceForComparison(MiniMindModel model, String stageLabel) {

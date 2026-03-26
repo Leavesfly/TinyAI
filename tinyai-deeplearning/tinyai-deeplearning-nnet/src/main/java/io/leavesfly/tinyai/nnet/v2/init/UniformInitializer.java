@@ -1,11 +1,10 @@
 package io.leavesfly.tinyai.nnet.v2.init;
 
 import io.leavesfly.tinyai.ndarr.NdArray;
-import java.util.Random;
 
 /**
  * 均匀分布初始化器
- * <p>
+ * &lt;p&gt;
  * 从均匀分布 U(a, b) 中采样初始化张量
  *
  * @author leavesfly
@@ -15,7 +14,6 @@ public class UniformInitializer implements Initializer {
 
     private final float a;
     private final float b;
-    private final Random random;
 
     /**
      * 构造函数
@@ -26,7 +24,6 @@ public class UniformInitializer implements Initializer {
     public UniformInitializer(float a, float b) {
         this.a = a;
         this.b = b;
-        this.random = new Random();
     }
 
     @Override
@@ -34,7 +31,7 @@ public class UniformInitializer implements Initializer {
         float[] data = tensor.getArray();
         float range = b - a;
         for (int i = 0; i < data.length; i++) {
-            data[i] = a + random.nextFloat() * range;
+            data[i] = a + Initializers.getSharedRandom().nextFloat() * range;
         }
     }
 }

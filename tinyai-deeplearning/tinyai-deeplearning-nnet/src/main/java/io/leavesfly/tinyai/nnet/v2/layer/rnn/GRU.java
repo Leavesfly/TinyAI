@@ -137,7 +137,7 @@ public class GRU extends Module {
      * @param batchSize 批次大小
      */
     private void initializeStateIfNeeded(int batchSize) {
-        if (hiddenState == null) {
+        if (hiddenState == null || hiddenState.getShape().getDimension(0) != batchSize) {
             hiddenState = NdArray.zeros(Shape.of(batchSize, hiddenSize));
             _buffers.put("hidden_state", hiddenState);
         }
@@ -175,10 +175,8 @@ public class GRU extends Module {
         n_t = n_t.tanh();
 
         // 新隐藏状态: h_t = (1 - z_t) * n_t + z_t * h_{t-1}
-        // 计算 (1 - z_t)
-        Variable one = new Variable(1.0);
-        Variable one_minus_z = one.sub(z_t);
-        Variable h_new = one_minus_z.mul(n_t).add(z_t.mul(h));
+        Variable oneMinusZ = new Variable(1.0f).sub(z_t);
+        Variable h_new = oneMinusZ.mul(n_t).add(z_t.mul(h));
 
         // 更新缓冲区状态
         hiddenState = h_new.getValue();

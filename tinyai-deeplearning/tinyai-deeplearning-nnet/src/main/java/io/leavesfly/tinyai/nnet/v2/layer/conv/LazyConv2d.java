@@ -266,7 +266,7 @@ public class LazyConv2d extends LazyModule {
                 ", stride=" + stride +
                 ", padding=" + padding +
                 ", useBias=" + useBias +
-                ", initialized=" + !_hasUnInitializedParams +
+                ", initialized=" + _initialized +
                 '}';
     }
 }

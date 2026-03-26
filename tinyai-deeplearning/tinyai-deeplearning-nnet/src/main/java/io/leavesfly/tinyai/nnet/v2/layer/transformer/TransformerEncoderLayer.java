@@ -113,16 +113,14 @@ public class TransformerEncoderLayer extends Module {
     @Override
     public Variable forward(Variable... inputs) {
         Variable x = inputs[0];
+        Variable srcMask = inputs.length > 1 ? inputs[1] : null;
+        Variable srcKeyPaddingMask = inputs.length > 2 ? inputs[2] : null;
 
         if (preLayerNorm) {
-            // Pre-LayerNorm
-            x = forwardPreNorm(x);
+            return forwardPreNorm(x, srcMask, srcKeyPaddingMask);
         } else {
-            // Post-LayerNorm
-            x = forwardPostNorm(x);
+            return forwardPostNorm(x, srcMask, srcKeyPaddingMask);
         }
-
-        return x;
     }
 
     /**
@@ -130,21 +128,21 @@ public class TransformerEncoderLayer extends Module {
      * <p>
      * x -> LayerNorm -> Attention -> Add(x) -> LayerNorm -> FFN -> Add(x)
      *
-     * @param x 输入
+     * @param x                  输入
+     * @param srcMask            源序列掩码（可选）
+     * @param srcKeyPaddingMask  源序列padding掩码（可选）
      * @return 输出
      */
-    private Variable forwardPreNorm(Variable x) {
+    private Variable forwardPreNorm(Variable x, Variable srcMask, Variable srcKeyPaddingMask) {
         // 自注意力子层（Pre-LN）
-        Variable norm_x = norm1.forward(x);
-        Variable attn_out = selfAttention.forward(norm_x, norm_x, norm_x);
-        Variable residual1 = x.add(attn_out);
+        Variable normX = norm1.forward(x);
+        Variable attnOut = selfAttention.forward(normX, normX, normX, srcMask, srcKeyPaddingMask);
+        Variable residual1 = x.add(attnOut);
 
         // 前馈网络子层（Pre-LN）
-        Variable norm_residual1 = norm2.forward(residual1);
-        Variable ffn_out = forwardFFN(norm_residual1);
-        Variable output = residual1.add(ffn_out);
-
-        return output;
+        Variable normResidual1 = norm2.forward(residual1);
+        Variable ffnOut = forwardFFN(normResidual1);
+        return residual1.add(ffnOut);
     }
 
     /**
@@ -152,21 +150,21 @@ public class TransformerEncoderLayer extends Module {
      * <p>
      * x -> Attention -> Add(x) -> LayerNorm -> FFN -> Add(x) -> LayerNorm
      *
-     * @param x 输入
+     * @param x                  输入
+     * @param srcMask            源序列掩码（可选）
+     * @param srcKeyPaddingMask  源序列padding掩码（可选）
      * @return 输出
      */
-    private Variable forwardPostNorm(Variable x) {
+    private Variable forwardPostNorm(Variable x, Variable srcMask, Variable srcKeyPaddingMask) {
         // 自注意力子层（Post-LN）
-        Variable attn_out = selfAttention.forward(x, x, x);
-        Variable residual1 = x.add(attn_out);
-        Variable norm1_out = norm1.forward(residual1);
+        Variable attnOut = selfAttention.forward(x, x, x, srcMask, srcKeyPaddingMask);
+        Variable residual1 = x.add(attnOut);
+        Variable norm1Out = norm1.forward(residual1);
 
         // 前馈网络子层（Post-LN）
-        Variable ffn_out = forwardFFN(norm1_out);
-        Variable residual2 = norm1_out.add(ffn_out);
-        Variable output = norm2.forward(residual2);
-
-        return output;
+        Variable ffnOut = forwardFFN(norm1Out);
+        Variable residual2 = norm1Out.add(ffnOut);
+        return norm2.forward(residual2);
     }
 
     /**

@@ -151,7 +151,7 @@ public class LazyLinear extends LazyModule {
                 ", inFeatures=" + (inFeatures != null ? inFeatures : "uninitialized") +
                 ", outFeatures=" + outFeatures +
                 ", useBias=" + useBias +
-                ", initialized=" + !_hasUnInitializedParams +
+                ", initialized=" + _initialized +
                 '}';
     }
 }

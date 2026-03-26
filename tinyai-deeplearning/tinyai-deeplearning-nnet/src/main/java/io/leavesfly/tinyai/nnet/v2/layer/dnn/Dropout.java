@@ -23,6 +23,8 @@ public class Dropout extends Module {
 
     private final float p;
     private final Random random;
+    /** 缓存的 inverted dropout 缩放因子，避免每次 forward 都创建新对象 */
+    private final Variable cachedScaleVar;
 
     /**
      * 构造函数
@@ -37,6 +39,11 @@ public class Dropout extends Module {
         }
         this.p = p;
         this.random = new Random();
+
+        // 预计算并缓存 scale 常量
+        float scale = 1.0f / (1 - p);
+        this.cachedScaleVar = new Variable(scale);
+        this.cachedScaleVar.setRequireGrad(false);
     }
 
     /**
@@ -73,13 +80,8 @@ public class Dropout extends Module {
         Variable mask = generateMask(x);
 
         // 应用mask并缩放（inverted dropout）
-        // 完全停留在Variable层面
         Variable masked = x.mul(mask);
-        
-        float scale = 1.0f / (1 - p);
-        Variable scaleVar = new Variable(scale);
-        scaleVar.setRequireGrad(false);
-        return masked.mul(scaleVar);
+        return masked.mul(cachedScaleVar);
     }
 
     /**
@@ -92,7 +94,7 @@ public class Dropout extends Module {
      */
     private Variable generateMask(Variable input) {
         // 使用Variable的形状属性，不需要getValue()
-        int totalElements = input.numel();
+        int totalElements = input.getElementCount();
         float[] maskData = new float[totalElements];
         for (int i = 0; i < maskData.length; i++) {
             maskData[i] = random.nextFloat() > p ? 1.0f : 0.0f;

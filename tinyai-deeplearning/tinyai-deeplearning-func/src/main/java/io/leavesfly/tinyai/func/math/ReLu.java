@@ -1,6 +1,5 @@
 package io.leavesfly.tinyai.func.math;
 
-
 import io.leavesfly.tinyai.func.Function;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
@@ -12,7 +11,7 @@ import java.util.List;
  * 
  * ReLU (Rectified Linear Unit) 激活函数，用于神经网络中。
  */
-public class ReLu extends Function {
+public class ReLU extends Function {
     
     /**
      * 前向传播计算ReLU

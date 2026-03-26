@@ -37,6 +37,9 @@ public class BatchNorm1d extends Module {
     private final boolean affine;      // 是否使用可学习参数
     private final boolean trackRunningStats;  // 是否跟踪统计量
 
+    /** 缓存的 eps 常量 Variable，避免每次 forward 都创建新对象，且不参与梯度计算 */
+    private transient Variable cachedEpsVar;
+
     /**
      * 构造函数
      *
@@ -81,6 +84,10 @@ public class BatchNorm1d extends Module {
             // 记录处理的批次数（可选）
             registerBuffer("num_batches_tracked", NdArray.of(new float[]{0}, Shape.of(1)));
         }
+
+        // 初始化 eps 常量缓存（使用 1D shape 以兼容广播）
+        this.cachedEpsVar = new Variable(NdArray.of(new float[]{eps}, Shape.of(1)));
+        this.cachedEpsVar.setRequireGrad(false);
 
         // 初始化参数
         init();
@@ -220,10 +227,7 @@ public class BatchNorm1d extends Module {
     private Variable normalize(Variable x, Variable mean, Variable var) {
         // normalized = (x - mean) / sqrt(var + eps)
         Variable centered = x.sub(mean);
-        // 使用Variable的算子添加eps并开方
-        Variable epsVar = new Variable(eps);
-        epsVar.setRequireGrad(false);
-        Variable std = var.add(epsVar).sqrt();
+        Variable std = var.add(cachedEpsVar).sqrt();
         return centered.div(std);
     }
 

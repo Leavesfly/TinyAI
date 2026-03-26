@@ -766,14 +766,38 @@ public abstract class Module extends Function implements Serializable {
      * @return 参数总数
      */
     public long numParameters(boolean onlyTrainable) {
+        return countParameters(this, "", onlyTrainable);
+    }
+
+    /**
+     * 递归统计参数数量（优化版本，避免创建中间Map）
+     *
+     * @param module         当前模块
+     * @param prefix         路径前缀
+     * @param onlyTrainable  是否只统计可训练参数
+     * @return 参数总数
+     */
+    private long countParameters(Module module, String prefix, boolean onlyTrainable) {
         long count = 0;
-        for (Parameter param : namedParameters().values()) {
+
+        // 统计当前模块的参数
+        for (Parameter param : module._parameters.values()) {
             if (param != null && param.data() != null) {
                 if (!onlyTrainable || param.requiresGrad()) {
                     count += param.data().getShape().size();
                 }
             }
         }
+
+        // 递归统计子模块的参数
+        for (Map.Entry<String, Module> entry : module._modules.entrySet()) {
+            if (entry.getValue() != null) {
+                count += countParameters(entry.getValue(), 
+                    prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey(), 
+                    onlyTrainable);
+            }
+        }
+
         return count;
     }
 
@@ -799,9 +823,18 @@ public abstract class Module extends Function implements Serializable {
         sb.append(String.format("%-40s %15s\n", "Layer (type)", "Param #"));
         sb.append("=".repeat(60)).append("\n");
 
-        for (Map.Entry<String, Parameter> entry : namedParameters().entrySet()) {
+        // 缓存 namedParameters() 结果，在一次遍历中同时统计 total 和 trainable 数量
+        Map<String, Parameter> params = namedParameters();
+        long totalParams = 0;
+        long trainableParams = 0;
+
+        for (Map.Entry<String, Parameter> entry : params.entrySet()) {
             if (entry.getValue() != null && entry.getValue().data() != null) {
                 long paramCount = entry.getValue().data().getShape().size();
+                totalParams += paramCount;
+                if (entry.getValue().requiresGrad()) {
+                    trainableParams += paramCount;
+                }
                 String trainable = entry.getValue().requiresGrad() ? "" : " (frozen)";
                 sb.append(String.format("%-40s %,15d%s\n", 
                         entry.getKey(), paramCount, trainable));
@@ -809,10 +842,10 @@ public abstract class Module extends Function implements Serializable {
         }
 
         sb.append("=".repeat(60)).append("\n");
-        sb.append(String.format("Total params: %,d\n", numParameters(false)));
-        sb.append(String.format("Trainable params: %,d\n", numParameters(true)));
+        sb.append(String.format("Total params: %,d\n", totalParams));
+        sb.append(String.format("Trainable params: %,d\n", trainableParams));
         sb.append(String.format("Non-trainable params: %,d\n", 
-                numParameters(false) - numParameters(true)));
+                totalParams - trainableParams));
         sb.append("=".repeat(60)).append("\n");
 
         return sb.toString();
@@ -822,23 +855,13 @@ public abstract class Module extends Function implements Serializable {
      * 复制模型（深拷贝）
      * <p>
      * 创建模型的深拷贝，包括所有参数和缓冲区。
-     * 注意：这是一个简化实现，可能不适用于所有情况。
+     * 注意：stateDict() 已经对每个参数做了深拷贝，直接返回即可。
      *
      * @return 模型的深拷贝
      */
     public Map<String, NdArray> copyStateDict() {
-        Map<String, NdArray> stateCopy = new LinkedHashMap<>();
-        Map<String, NdArray> state = stateDict();
-
-        for (Map.Entry<String, NdArray> entry : state.entrySet()) {
-            NdArray original = entry.getValue();
-            NdArray copy = original.getShape().isMatrix() ?
-                    NdArray.of(original.getMatrix()) :
-                    NdArray.of(original.getArray(), original.getShape());
-            stateCopy.put(entry.getKey(), copy);
-        }
-
-        return stateCopy;
+        // stateDict() 已经对每个参数做了深拷贝，直接返回即可，避免双重拷贝
+        return stateDict();
     }
 
     /**
@@ -877,15 +900,23 @@ public abstract class Module extends Function implements Serializable {
      */
     public Iterable<Module> modules() {
         List<Module> allModules = new ArrayList<>();
-        allModules.add(this);
-        for (Module child : _modules.values()) {
+        collectModules(this, allModules);
+        return allModules;
+    }
+
+    /**
+     * 递归收集所有模块（优化版本，使用共享List避免每层创建新ArrayList）
+     *
+     * @param module       当前模块
+     * @param moduleList   共享的模块列表
+     */
+    private void collectModules(Module module, List<Module> moduleList) {
+        moduleList.add(module);
+        for (Module child : module._modules.values()) {
             if (child != null) {
-                for (Module m : child.modules()) {
-                    allModules.add(m);
-                }
+                collectModules(child, moduleList);
             }
         }
-        return allModules;
     }
 
     /**

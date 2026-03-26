@@ -1,8 +1,8 @@
 package io.leavesfly.tinyai.minimind.model.transformer;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.minimind.model.attention.KVCache;
-import io.leavesfly.tinyai.minimind.model.attention.MultiHeadAttention;
+import io.leavesfly.tinyai.minimind.model.transformer.attention.KVCache;
+import io.leavesfly.tinyai.minimind.model.transformer.attention.MultiHeadAttention;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.layer.activation.ReLU;
 import io.leavesfly.tinyai.nnet.v2.layer.activation.SiLU;

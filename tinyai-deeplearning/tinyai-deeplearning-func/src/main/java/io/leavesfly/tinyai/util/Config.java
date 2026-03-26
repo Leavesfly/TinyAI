@@ -12,9 +12,10 @@ public class Config {
 
     /**
      * 训练模式开关
-     * true表示处于训练模式，false表示处于推理模式
+     * true表示处于训练模式，false表示处于推理模式。
+     * 使用 volatile 保证多线程环境下的可见性。
      */
-    public static Boolean train = true;
+    public static volatile boolean train = true;
 
     /**
      * 激活函数类型枚举

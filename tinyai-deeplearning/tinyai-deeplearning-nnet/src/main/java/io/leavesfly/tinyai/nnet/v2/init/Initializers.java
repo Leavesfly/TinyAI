@@ -2,10 +2,11 @@ package io.leavesfly.tinyai.nnet.v2.init;
 
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
+import java.util.Random;
 
 /**
  * 参数初始化工具类
- * <p>
+ * &lt;p&gt;
  * 提供静态方法实现常用的参数初始化策略，
  * 包括零初始化、常量初始化、均匀分布、正态分布、Xavier初始化、Kaiming初始化等。
  *
@@ -15,8 +16,24 @@ import io.leavesfly.tinyai.ndarr.Shape;
 public class Initializers {
 
     /**
+     * 共享的 Random 实例
+     * 使用静态实例避免每次初始化都创建新的 Random 对象
+     * 提高性能和可重复性
+     */
+    private static final Random SHARED_RANDOM = new Random();
+
+    /**
+     * 获取共享的 Random 实例
+     *
+     * @return 共享的 Random 实例
+     */
+    public static Random getSharedRandom() {
+        return SHARED_RANDOM;
+    }
+
+    /**
      * 零初始化
-     * <p>
+     * &lt;p&gt;
      * 将张量所有元素设置为0
      *
      * @param tensor 需要初始化的张量
@@ -27,7 +44,7 @@ public class Initializers {
 
     /**
      * 全一初始化
-     * <p>
+     * &lt;p&gt;
      * 将张量所有元素设置为1
      *
      * @param tensor 需要初始化的张量
@@ -38,7 +55,7 @@ public class Initializers {
 
     /**
      * 常量初始化
-     * <p>
+     * &lt;p&gt;
      * 将张量所有元素设置为指定常量
      *
      * @param tensor 需要初始化的张量
@@ -50,7 +67,7 @@ public class Initializers {
 
     /**
      * 均匀分布初始化
-     * <p>
+     * &lt;p&gt;
      * 从均匀分布 U(a, b) 中采样初始化张量
      *
      * @param tensor 需要初始化的张量
@@ -63,7 +80,7 @@ public class Initializers {
 
     /**
      * 正态分布初始化
-     * <p>
+     * &lt;p&gt;
      * 从正态分布 N(mean, std²) 中采样初始化张量
      *
      * @param tensor 需要初始化的张量
@@ -76,9 +93,9 @@ public class Initializers {
 
     /**
      * Xavier均匀初始化（Glorot均匀初始化）
-     * <p>
+     * &lt;p&gt;
      * 适用于Sigmoid、Tanh等激活函数
-     * <p>
+     * &lt;p&gt;
      * 从均匀分布 U(-a, a) 中采样，其中：
      * a = gain * sqrt(6 / (fan_in + fan_out))
      *
@@ -100,9 +117,9 @@ public class Initializers {
 
     /**
      * Xavier正态初始化（Glorot正态初始化）
-     * <p>
+     * &lt;p&gt;
      * 适用于Sigmoid、Tanh等激活函数
-     * <p>
+     * &lt;p&gt;
      * 从正态分布 N(0, std²) 中采样，其中：
      * std = gain * sqrt(2 / (fan_in + fan_out))
      *
@@ -124,12 +141,12 @@ public class Initializers {
 
     /**
      * Kaiming均匀初始化（He均匀初始化）
-     * <p>
+     * &lt;p&gt;
      * 适用于ReLU及其变体激活函数
-     * <p>
+     * &lt;p&gt;
      * 从均匀分布 U(-bound, bound) 中采样，其中：
      * bound = sqrt(6 / ((1 + a²) * fan))
-     * <p>
+     * &lt;p&gt;
      * fan根据mode选择fan_in或fan_out
      *
      * @param tensor      需要初始化的张量
@@ -152,12 +169,12 @@ public class Initializers {
 
     /**
      * Kaiming正态初始化（He正态初始化）
-     * <p>
+     * &lt;p&gt;
      * 适用于ReLU及其变体激活函数
-     * <p>
+     * &lt;p&gt;
      * 从正态分布 N(0, std²) 中采样，其中：
      * std = sqrt(2 / ((1 + a²) * fan))
-     * <p>
+     * &lt;p&gt;
      * fan根据mode选择fan_in或fan_out
      *
      * @param tensor      需要初始化的张量
@@ -180,9 +197,9 @@ public class Initializers {
 
     /**
      * 正交初始化
-     * <p>
+     * &lt;p&gt;
      * 生成正交矩阵，常用于RNN的权重初始化
-     * <p>
+     * &lt;p&gt;
      * 注意：当前实现为简化版本，使用Xavier初始化代替
      *
      * @param tensor 需要初始化的张量
@@ -205,14 +222,14 @@ public class Initializers {
 
     /**
      * 计算fan_in和fan_out
-     * <p>
+     * &lt;p&gt;
      * fan_in：输入单元数
      * fan_out：输出单元数
-     * <p>
+     * &lt;p&gt;
      * 对于2D张量（权重矩阵）：
      * - fan_in = 列数（输入维度）
      * - fan_out = 行数（输出维度）
-     * <p>
+     * &lt;p&gt;
      * 对于4D张量（卷积核）：
      * - fan_in = kernel_size * kernel_size * in_channels
      * - fan_out = kernel_size * kernel_size * out_channels

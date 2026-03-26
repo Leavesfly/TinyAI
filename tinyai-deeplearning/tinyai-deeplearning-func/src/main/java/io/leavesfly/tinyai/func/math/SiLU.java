@@ -26,6 +26,11 @@ import java.util.List;
 public class SiLU extends Function {
 
     /**
+     * 缓存前向传播的 sigmoid 结果，避免反向传播时重复计算
+     */
+    private NdArray cachedSigmoid;
+
+    /**
      * 前向传播计算SiLU
      * <p>
      * 计算公式：SiLU(x) = x * sigmoid(x)
@@ -37,12 +42,11 @@ public class SiLU extends Function {
     public NdArray forward(NdArray... inputs) {
         NdArray x = inputs[0];
 
-        // sigmoid(x) = 1 / (1 + exp(-x))
-        NdArray denominator = x.neg().exp().add(NdArray.ones(x.getShape()));
-        NdArray sigmoid = NdArray.ones(x.getShape()).div(denominator);
+        // sigmoid(x) = 1 / (1 + exp(-x))，缓存供 backward 使用
+        cachedSigmoid = x.sigmoid();
 
         // SiLU(x) = x * sigmoid(x)
-        return x.mul(sigmoid);
+        return x.mul(cachedSigmoid);
     }
 
     /**
@@ -50,7 +54,7 @@ public class SiLU extends Function {
      * <p>
      * SiLU'(x) = sigmoid(x) + x * sigmoid(x) * (1 - sigmoid(x))
      *          = sigmoid(x) * (1 + x * (1 - sigmoid(x)))
-     *          = sigmoid(x) * (1 + x - x * sigmoid(x))
+     * 复用前向传播缓存的 sigmoid 结果。
      *
      * @param yGrad 输出变量的梯度
      * @return 输入变量的梯度列表
@@ -59,21 +63,15 @@ public class SiLU extends Function {
     public List<NdArray> backward(NdArray yGrad) {
         NdArray x = inputs[0].getValue();
 
-        // sigmoid(x)
-        NdArray denominator = x.neg().exp().add(NdArray.ones(x.getShape()));
-        NdArray sigmoid = NdArray.ones(x.getShape()).div(denominator);
-
+        // 复用缓存的 sigmoid 结果
         // 1 - sigmoid(x)
-        NdArray oneMinusSigmoid = NdArray.ones(x.getShape()).sub(sigmoid);
-
-        // x * (1 - sigmoid(x))
-        NdArray xTimesOneMinusSigmoid = x.mul(oneMinusSigmoid);
+        NdArray oneMinusSigmoid = cachedSigmoid.like(1f).sub(cachedSigmoid);
 
         // 1 + x * (1 - sigmoid(x))
-        NdArray onePlusXTimes = NdArray.ones(x.getShape()).add(xTimesOneMinusSigmoid);
+        NdArray onePlusXTimes = cachedSigmoid.like(1f).add(x.mul(oneMinusSigmoid));
 
         // sigmoid(x) * (1 + x * (1 - sigmoid(x)))
-        NdArray grad = sigmoid.mul(onePlusXTimes);
+        NdArray grad = cachedSigmoid.mul(onePlusXTimes);
 
         return Collections.singletonList(yGrad.mul(grad));
     }

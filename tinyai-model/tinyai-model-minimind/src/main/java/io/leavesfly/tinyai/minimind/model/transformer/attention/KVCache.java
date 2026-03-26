@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.minimind.model.attention;
+package io.leavesfly.tinyai.minimind.model.transformer.attention;
 
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;

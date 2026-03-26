@@ -145,12 +145,11 @@ public class TransformerEncoder extends Module {
         Variable srcMask = inputs.length > 1 ? inputs[1] : null;
         Variable srcKeyPaddingMask = inputs.length > 2 ? inputs[2] : null;
 
-        // 逐层处理
+        // 逐层处理，将掩码传递给每个 EncoderLayer
         for (int i = 0; i < numLayers; i++) {
             Module layer = layers.get(i);
-            if (layer instanceof TransformerEncoderLayer) {
-                // 传递掩码（如果EncoderLayer支持）
-                output = layer.forward(output);
+            if (layer instanceof TransformerEncoderLayer encoderLayer) {
+                output = encoderLayer.forward(output, srcMask, srcKeyPaddingMask);
             } else {
                 output = layer.forward(output);
             }

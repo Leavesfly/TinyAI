@@ -345,8 +345,12 @@ public final class Functional {
             scaledScores = scaledScores.add(attnMask);
         }
 
-        // Softmax
-        Variable attnWeights = scaledScores.softMax();
+        // Softmax（添加数值稳定性处理：先减去最大值）
+        // 注意：Max 算子不支持负数轴，需要转换为正数轴
+        int lastAxis = scaledScores.getShape().getDimNum() - 1;
+        Variable maxScores = scaledScores.max(lastAxis, true);
+        Variable stableScores = scaledScores.sub(maxScores);
+        Variable attnWeights = stableScores.softMax();
 
         // Dropout
         if (training && dropout > 0) {
@@ -495,4 +499,3 @@ public final class Functional {
         return new Variable(NdArray.of(new float[]{sum / arr.length}, Shape.of(1)));
     }
 }
-

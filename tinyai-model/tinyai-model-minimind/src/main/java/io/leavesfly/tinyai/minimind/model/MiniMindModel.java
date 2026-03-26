@@ -2,8 +2,8 @@ package io.leavesfly.tinyai.minimind.model;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.model.Model;
-import io.leavesfly.tinyai.minimind.model.attention.KVCache;
-import io.leavesfly.tinyai.minimind.model.attention.MultiHeadAttention;
+import io.leavesfly.tinyai.minimind.model.transformer.attention.KVCache;
+import io.leavesfly.tinyai.minimind.model.transformer.attention.MultiHeadAttention;
 import io.leavesfly.tinyai.minimind.model.sampling.TextSampler;
 import io.leavesfly.tinyai.minimind.model.transformer.MiniMindTransformerLayer;
 import io.leavesfly.tinyai.minimind.training.lora.LoRAConfig;

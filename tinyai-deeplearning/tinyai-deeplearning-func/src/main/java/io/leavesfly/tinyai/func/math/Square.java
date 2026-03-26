@@ -1,6 +1,5 @@
 package io.leavesfly.tinyai.func.math;
 
-
 import io.leavesfly.tinyai.func.Function;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
@@ -12,7 +11,7 @@ import java.util.List;
  * <p>
  * 计算输入值的平方。
  */
-public class Squ extends Function {
+public class Square extends Function {
 
     /**
      * 前向传播计算平方

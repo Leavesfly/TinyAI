@@ -153,10 +153,13 @@ public class TransformerDecoder extends Module {
         Variable tgtKeyPaddingMask = inputs.length > 4 ? inputs[4] : null;
         Variable memoryKeyPaddingMask = inputs.length > 5 ? inputs[5] : null;
 
-        // 逐层处理
+        // 逐层处理，将掩码传递给每个 DecoderLayer
         for (int i = 0; i < numLayers; i++) {
             Module layer = layers.get(i);
-            if (memory != null) {
+            if (layer instanceof TransformerDecoderLayer decoderLayer) {
+                output = decoderLayer.forward(output, memory, tgtMask, memoryMask,
+                        tgtKeyPaddingMask, memoryKeyPaddingMask);
+            } else if (memory != null) {
                 output = layer.forward(output, memory);
             } else {
                 output = layer.forward(output);

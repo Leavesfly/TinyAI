@@ -233,8 +233,13 @@ public class MultiHeadAttention extends Module {
             scaledScores = scaledScores.add(paddingMask);
         }
 
-        // 5. Softmax（在最后一维）
-        Variable attentionWeights = scaledScores.softMax();
+        // 5. Softmax（在最后一维）— 使用数值稳定的实现
+        // 先减去最大值防止 exp() 溢出：softmax(x) = softmax(x - max(x))
+        // 注意：Max 算子不支持负数轴，需要转换为正数轴
+        int lastAxis = scaledScores.getShape().getDimNum() - 1;
+        Variable maxScores = scaledScores.max(lastAxis, true);
+        Variable stableScores = scaledScores.sub(maxScores);
+        Variable attentionWeights = stableScores.softMax();
 
         // 6. 应用dropout（训练模式）
         if (isTraining() && dropout > 0) {

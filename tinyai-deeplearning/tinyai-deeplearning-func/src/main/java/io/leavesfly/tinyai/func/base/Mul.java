@@ -1,6 +1,7 @@
 package io.leavesfly.tinyai.func.base;
 
 import io.leavesfly.tinyai.func.Function;
+import io.leavesfly.tinyai.func.util.BroadcastUtils;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 
@@ -46,9 +47,9 @@ public class Mul extends Function {
             }
             
             // 非标量的广播
-            if (isScalarOrBroadcastable(shape1, shape0)) {
+            if (BroadcastUtils.isBroadcastable(shape1, shape0)) {
                 return input0.mul(input1.broadcastTo(shape0));
-            } else if (isScalarOrBroadcastable(shape0, shape1)) {
+            } else if (BroadcastUtils.isBroadcastable(shape0, shape1)) {
                 return input0.broadcastTo(shape1).mul(input1);
             } else {
                 throw new IllegalArgumentException(
@@ -58,42 +59,7 @@ public class Mul extends Function {
         }
     }
     
-    /**
-     * 判断一个形状是否可以广播到另一个形状
-     * @param smallShape 小的形状
-     * @param largeShape 大的形状
-     * @return 是否可以广播
-     */
-    private boolean isScalarOrBroadcastable(Shape smallShape, Shape largeShape) {
-        // 简单的广播判断：支持标量广播
-        if (smallShape.size() == 1) {
-            return true;
-        }
-        
-        // 支持多维数组的广播判断
-        // 从后往前检查维度是否兼容
-        if (smallShape.getDimNum() <= largeShape.getDimNum()) {
-            boolean compatible = true;
-            for (int i = 0; i < smallShape.getDimNum(); i++) {
-                int srcDimIndex = smallShape.getDimNum() - 1 - i;
-                int dstDimIndex = largeShape.getDimNum() - 1 - i;
-                
-                int srcDim = smallShape.getDimension(srcDimIndex);
-                int dstDim = largeShape.getDimension(dstDimIndex);
-                
-                // 广播规则：维度相等，或者源维度为1
-                if (srcDim != dstDim && srcDim != 1) {
-                    compatible = false;
-                    break;
-                }
-            }
-            if (compatible) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
+
 
     /**
      * 反向传播计算梯度
@@ -126,7 +92,7 @@ public class Mul extends Function {
             grad0 = yGrad.mul(ndArray1.broadcastTo(yGradShape));
         }
         if (!shape0.equals(yGradShape)) {
-            grad0 = sumToShape(grad0, shape0, yGradShape);
+            grad0 = BroadcastUtils.sumToShape(grad0, shape0, yGradShape);
         }
         
         // 计算 dy = yGrad * x
@@ -139,45 +105,13 @@ public class Mul extends Function {
             grad1 = yGrad.mul(ndArray0.broadcastTo(yGradShape));
         }
         if (!shape1.equals(yGradShape)) {
-            grad1 = sumToShape(grad1, shape1, yGradShape);
+            grad1 = BroadcastUtils.sumToShape(grad1, shape1, yGradShape);
         }
         
         return Arrays.asList(grad0, grad1);
     }
     
-    /**
-     * 将梯度 sumTo 回目标形状，支持维度数不同的情况
-     */
-    private NdArray sumToShape(NdArray grad, Shape targetShape, Shape gradShape) {
-        int targetNdim = targetShape.getDimNum();
-        int gradNdim = gradShape.getDimNum();
-        
-        // 目标是标量（size==1），直接对所有元素求和
-        if (targetShape.size() == 1) {
-            return NdArray.of(grad.sum().getNumber().floatValue());
-        }
-        
-        if (targetNdim < gradNdim) {
-            // 目标维度数较小，需要先扩展目标形状
-            int[] targetDims = targetShape.getShapeDims();
-            int[] expandedDims = new int[gradNdim];
-            int offset = gradNdim - targetNdim;
-            // 前面补1
-            for (int i = 0; i < offset; i++) {
-                expandedDims[i] = 1;
-            }
-            // 后面复制原始维度
-            for (int i = 0; i < targetNdim; i++) {
-                expandedDims[offset + i] = targetDims[i];
-            }
-            Shape expandedShape = Shape.of(expandedDims);
-            NdArray result = grad.sumTo(expandedShape);
-            // 再 reshape 回原始形状
-            return result.reshape(targetShape);
-        } else {
-            return grad.sumTo(targetShape);
-        }
-    }
+
 
     /**
      * 获取所需输入参数个数

@@ -38,7 +38,7 @@ public class ActivationFunctionsTest {
     
     @Test
     public void testReLUForward() {
-        ReLu relu = new ReLu();
+        ReLU relu = new ReLU();
         NdArray input = NdArray.of(new float[][]{{-2, -1, 0, 1, 2}});
         NdArray output = relu.forward(input);
         
@@ -48,7 +48,7 @@ public class ActivationFunctionsTest {
     
     @Test
     public void testReLUBackward() {
-        ReLu relu = new ReLu();
+        ReLU relu = new ReLU();
         Variable x = new Variable(NdArray.of(new float[][]{{-2, -1, 0, 1, 2}}), "x");
         Variable y = relu.call(x);
         y.backward();
@@ -166,7 +166,7 @@ public class ActivationFunctionsTest {
     @Test
     public void testActivationWithLargeValues() {
         // 测试大值的稳定性
-        ReLu relu = new ReLu();
+        ReLU relu = new ReLU();
         NdArray input = NdArray.of(new float[][]{{1000f, -1000f}});
         NdArray output = relu.forward(input);
         
@@ -179,7 +179,7 @@ public class ActivationFunctionsTest {
         // 测试梯度流动
         Variable x = new Variable(NdArray.of(new float[][]{{1f, 2f, 3f}}), "x");
         
-        ReLu relu = new ReLu();
+        ReLU relu = new ReLU();
         Variable y = relu.call(x);
         y.backward();
         
@@ -193,7 +193,7 @@ public class ActivationFunctionsTest {
         // 测试激活函数链式调用
         Variable x = new Variable(NdArray.of(new float[][]{{1f}}), "x");
         
-        ReLu relu = new ReLu();
+        ReLU relu = new ReLU();
         Tanh tanh = new Tanh();
         
         Variable y1 = relu.call(x);
@@ -202,5 +202,88 @@ public class ActivationFunctionsTest {
         y2.backward();
         
         assertNotNull(x.getGrad());
+    }
+    
+    // =============================================================================
+    // GELU backward 测试
+    // =============================================================================
+    
+    @Test
+    public void testGELUBackward() {
+        GELU gelu = new GELU();
+        Variable x = new Variable(NdArray.of(new float[][]{{-1f, 0f, 1f, 2f}}), "x");
+        Variable y = gelu.call(x);
+        y.backward();
+        
+        assertNotNull("GELU backward 梯度不应为 null", x.getGrad());
+        assertEquals(x.getValue().getShape(), x.getGrad().getShape());
+        
+        // GELU'(0) ≈ 0.5
+        assertEquals(0.5f, x.getGrad().get(0, 1), 0.01f);
+        
+        // 梯度不应包含 NaN 或 Infinity
+        for (float val : x.getGrad().getArray()) {
+            assertFalse("GELU backward 梯度包含 NaN", Float.isNaN(val));
+            assertFalse("GELU backward 梯度包含 Infinity", Float.isInfinite(val));
+        }
+    }
+    
+    @Test
+    public void testGELUForwardBackwardConsistency() {
+        // 验证缓存优化后 forward+backward 的一致性
+        GELU gelu = new GELU();
+        Variable x = new Variable(NdArray.of(new float[][]{{0.5f}}), "x");
+        Variable y = gelu.call(x);
+        
+        // GELU(0.5) ≈ 0.5 * 0.5 * (1 + tanh(...)) ≈ 0.3457
+        assertTrue(y.getValue().get(0, 0) > 0.3f && y.getValue().get(0, 0) < 0.4f);
+        
+        y.backward();
+        
+        // 梯度应为正值且有限
+        assertTrue("GELU'(0.5) 应为正值", x.getGrad().get(0, 0) > 0);
+        assertTrue("GELU'(0.5) 应小于2", x.getGrad().get(0, 0) < 2f);
+    }
+    
+    // =============================================================================
+    // SiLU backward 测试
+    // =============================================================================
+    
+    @Test
+    public void testSiLUBackward() {
+        SiLU silu = new SiLU();
+        Variable x = new Variable(NdArray.of(new float[][]{{-2f, -1f, 0f, 1f, 2f}}), "x");
+        Variable y = silu.call(x);
+        y.backward();
+        
+        assertNotNull("SiLU backward 梯度不应为 null", x.getGrad());
+        assertEquals(x.getValue().getShape(), x.getGrad().getShape());
+        
+        // SiLU'(0) = sigmoid(0) * (1 + 0 * (1 - sigmoid(0))) = 0.5
+        assertEquals(0.5f, x.getGrad().get(0, 2), 0.01f);
+        
+        // 梯度不应包含 NaN 或 Infinity
+        for (float val : x.getGrad().getArray()) {
+            assertFalse("SiLU backward 梯度包含 NaN", Float.isNaN(val));
+            assertFalse("SiLU backward 梯度包含 Infinity", Float.isInfinite(val));
+        }
+    }
+    
+    @Test
+    public void testSiLUForwardBackwardConsistency() {
+        // 验证缓存优化后 forward+backward 的一致性
+        SiLU silu = new SiLU();
+        Variable x = new Variable(NdArray.of(new float[][]{{1f}}), "x");
+        Variable y = silu.call(x);
+        
+        // SiLU(1) = 1 * sigmoid(1) ≈ 0.7311
+        float sigmoidOne = 1f / (1f + (float) Math.exp(-1f));
+        assertEquals(sigmoidOne, y.getValue().get(0, 0), 0.01f);
+        
+        y.backward();
+        
+        // SiLU'(1) = sigmoid(1) * (1 + 1 * (1 - sigmoid(1)))
+        float expectedGrad = sigmoidOne * (1f + 1f * (1f - sigmoidOne));
+        assertEquals(expectedGrad, x.getGrad().get(0, 0), 0.01f);
     }
 }

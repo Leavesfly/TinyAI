@@ -15,6 +15,11 @@ import java.util.List;
 public class Sigmoid extends Function {
 
     /**
+     * 缓存前向传播的 sigmoid 输出，避免反向传播时重复计算
+     */
+    private NdArray cachedSigmoid;
+
+    /**
      * 前向传播计算Sigmoid
      * <p>
      * 计算Sigmoid函数值：1 / (1 + e^(-x))
@@ -24,7 +29,8 @@ public class Sigmoid extends Function {
      */
     @Override
     public NdArray forward(NdArray... inputs) {
-        return inputs[0].sigmoid();
+        cachedSigmoid = inputs[0].sigmoid();
+        return cachedSigmoid;
     }
 
     /**
@@ -32,18 +38,19 @@ public class Sigmoid extends Function {
      * <p>
      * 对于Sigmoid函数，梯度计算公式为：
      * ∂sigmoid(x)/∂x = sigmoid(x) * (1 - sigmoid(x))
+     * 复用前向传播缓存的 sigmoid 结果，避免重复计算。
      *
      * @param yGrad 输出变量的梯度
      * @return 输入变量的梯度列表
      */
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        if (inputs == null || inputs.length == 0) {
-            throw new RuntimeException("Sigmoid backward called without proper forward initialization. This usually happens when using new Sigmoid().backward() instead of reusing a forward-passed instance.");
+        if (cachedSigmoid == null) {
+            throw new RuntimeException("Sigmoid backward called without proper forward initialization.");
         }
-        NdArray x = inputs[0].getValue();
-        NdArray sigmoidX = x.sigmoid();
-        return Collections.singletonList(yGrad.mul(sigmoidX).mul(NdArray.ones(sigmoidX.getShape()).sub(sigmoidX)));
+        // 复用缓存的 sigmoid 结果：grad = yGrad * sigmoid * (1 - sigmoid)
+        NdArray oneMinusSigmoid = cachedSigmoid.like(1f).sub(cachedSigmoid);
+        return Collections.singletonList(yGrad.mul(cachedSigmoid).mul(oneMinusSigmoid));
     }
 
     /**

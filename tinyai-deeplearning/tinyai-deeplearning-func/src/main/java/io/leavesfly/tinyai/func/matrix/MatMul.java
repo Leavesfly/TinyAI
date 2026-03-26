@@ -2,6 +2,7 @@ package io.leavesfly.tinyai.func.matrix;
 
 
 import io.leavesfly.tinyai.func.Function;
+import io.leavesfly.tinyai.func.util.BroadcastUtils;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 
@@ -56,45 +57,16 @@ public class MatMul extends Function {
         // xGrad = yGrad * w^T
         NdArray xGrad = yGrad.dot(w.transpose());
         if (!xGrad.getShape().equals(xShape)) {
-            xGrad = sumToShape(xGrad, xShape);
+            xGrad = BroadcastUtils.sumToShape(xGrad, xShape);
         }
         
         // wGrad = x^T * yGrad
         NdArray wGrad = x.transpose().dot(yGrad);
         if (!wGrad.getShape().equals(wShape)) {
-            wGrad = sumToShape(wGrad, wShape);
+            wGrad = BroadcastUtils.sumToShape(wGrad, wShape);
         }
         
         return Arrays.asList(xGrad, wGrad);
-    }
-    
-    /**
-     * 将梯度 sumTo 回目标形状，支持维度数不同的情况
-     */
-    private NdArray sumToShape(NdArray grad, Shape targetShape) {
-        int targetNdim = targetShape.getDimNum();
-        int gradNdim = grad.getShape().getDimNum();
-        
-        if (targetNdim < gradNdim) {
-            // 目标维度数较小，需要先扩展目标形状
-            int[] targetDims = targetShape.getShapeDims();
-            int[] expandedDims = new int[gradNdim];
-            int offset = gradNdim - targetNdim;
-            // 前面补1
-            for (int i = 0; i < offset; i++) {
-                expandedDims[i] = 1;
-            }
-            // 后面复制原始维度
-            for (int i = 0; i < targetNdim; i++) {
-                expandedDims[offset + i] = targetDims[i];
-            }
-            Shape expandedShape = Shape.of(expandedDims);
-            NdArray result = grad.sumTo(expandedShape);
-            // 再 reshape 回原始形状
-            return result.reshape(targetShape);
-        } else {
-            return grad.sumTo(targetShape);
-        }
     }
 
     /**

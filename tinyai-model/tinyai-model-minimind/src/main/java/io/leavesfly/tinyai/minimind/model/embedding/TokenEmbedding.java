@@ -60,11 +60,6 @@ public class TokenEmbedding extends Module {
         }
 
         Variable tokenIds = inputs[0];
-        
-        // tokenIds shape: [batch_size, seq_len] 或 [batch_size, seq_len, 1]
-        int[] shape = tokenIds.getShape().getShapeDims();
-        int batchSize = shape[0];
-        int seqLen = shape.length > 1 ? shape[1] : 1;
 
         // Token ID 边界检查
         float[] tokenIdsData = tokenIds.getValue().getArray();
@@ -78,17 +73,9 @@ public class TokenEmbedding extends Module {
             }
         }
 
-        // 使用 Variable 层面的 indexSelect 进行嵌入查找
-        // 将 tokenIds reshape 为一维: [batch_size * seq_len]
-        Variable flattenedIds = tokenIds.reshape(Shape.of(batchSize * seqLen));
-        
-        // 使用 indexSelect 从嵌入矩阵中选择对应行
-        // weight.data() shape: [vocabSize, embeddingDim]
-        Variable weightVar = new Variable(weight.data());
-        Variable embedded = weightVar.indexSelect(0, flattenedIds);
-        
-        // reshape 回原始形状: [batch_size, seq_len, embeddingDim]
-        Variable output = embedded.reshape(Shape.of(batchSize, seqLen, embeddingDim));
+        // 使用 Gather 操作保持计算图连通性，支持自动微分
+        // Gather: weight[tokenIds] -> output，反向传播通过 scatter add 回传梯度
+        Variable output = weight.gather(tokenIds);
 
         return output;
     }

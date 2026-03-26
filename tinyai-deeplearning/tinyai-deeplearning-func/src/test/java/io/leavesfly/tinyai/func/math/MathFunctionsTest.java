@@ -130,7 +130,7 @@ public class MathFunctionsTest {
 
     @Test
     public void testSqu() {
-        Squ squFunc = new Squ();
+        Square squFunc = new Square();
 
         // 测试平方函数的前向传播
         NdArray input = NdArray.of(new float[][]{{-2, -1}, {0, 1}, {2, 3}});
@@ -180,7 +180,7 @@ public class MathFunctionsTest {
 
     @Test
     public void testReLU() {
-        ReLu reluFunc = new ReLu();
+        ReLU reluFunc = new ReLU();
 
         // 测试ReLU函数的前向传播
         NdArray input = NdArray.of(new float[][]{{-2, -1}, {0, 1}, {2, 3}});
@@ -348,9 +348,9 @@ public class MathFunctionsTest {
         assertEquals(1, new Cos().requireInputNum());
         assertEquals(1, new Exp().requireInputNum());
         assertEquals(1, new Log().requireInputNum());
-        assertEquals(1, new Squ().requireInputNum());
+        assertEquals(1, new Square().requireInputNum());
         assertEquals(1, new Pow(2f).requireInputNum());
-        assertEquals(1, new ReLu().requireInputNum());
+        assertEquals(1, new ReLU().requireInputNum());
         assertEquals(1, new Sigmoid().requireInputNum());
         assertEquals(1, new Tanh().requireInputNum());
         assertEquals(1, new Clip(-1f, 1f).requireInputNum());
@@ -439,7 +439,7 @@ public class MathFunctionsTest {
         assertTrue(logResult.getMatrix()[0][1] < logResult.getMatrix()[0][0]); // log(0.01) < log(0.1)
 
         // 测试ReLU的零输入
-        ReLu reluFunc = new ReLu();
+        ReLU reluFunc = new ReLU();
         NdArray zeroInput = NdArray.of(new float[]{0f});
         NdArray reluResult = reluFunc.forward(zeroInput);
         assertEquals(0f, reluResult.getNumber().floatValue(), 1e-6);

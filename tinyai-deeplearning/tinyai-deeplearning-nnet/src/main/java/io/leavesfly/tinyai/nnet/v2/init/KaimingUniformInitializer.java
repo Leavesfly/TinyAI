@@ -1,18 +1,17 @@
 package io.leavesfly.tinyai.nnet.v2.init;
 
 import io.leavesfly.tinyai.ndarr.NdArray;
-import java.util.Random;
 
 /**
  * Kaiming均匀初始化器（He均匀初始化）
- * <p>
+ * &lt;p&gt;
  * 适用于ReLU及其变体激活函数
- * <p>
+ * &lt;p&gt;
  * 从均匀分布 U(-bound, bound) 中采样，其中：
  * bound = sqrt(6 / ((1 + a²) * fan))
- * <p>
+ * &lt;p&gt;
  * fan根据mode选择fan_in或fan_out
- * <p>
+ * &lt;p&gt;
  * 参考论文：
  * Delving Deep into Rectifiers: Surpassing Human-Level Performance on ImageNet Classification
  * by Kaiming He et al. (2015)
@@ -25,7 +24,6 @@ public class KaimingUniformInitializer implements Initializer {
     private final float a;
     private final String mode;
     private final String nonlinearity;
-    private final Random random;
 
     /**
      * 构造函数
@@ -38,7 +36,6 @@ public class KaimingUniformInitializer implements Initializer {
         this.a = a;
         this.mode = mode;
         this.nonlinearity = nonlinearity;
-        this.random = new Random();
     }
 
     /**
@@ -60,7 +57,7 @@ public class KaimingUniformInitializer implements Initializer {
 
         float[] data = tensor.getArray();
         for (int i = 0; i < data.length; i++) {
-            data[i] = -bound + random.nextFloat() * (2 * bound);
+            data[i] = -bound + Initializers.getSharedRandom().nextFloat() * (2 * bound);
         }
     }
 }

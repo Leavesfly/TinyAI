@@ -161,6 +161,12 @@ public class LSTM extends Module {
             cellState = NdArray.zeros(Shape.of(batchSize, hiddenSize));
             _buffers.put("hidden_state", hiddenState);
             _buffers.put("cell_state", cellState);
+        } else if (hiddenState.getShape().getDimension(0) != batchSize) {
+            // batchSize 变化时重新初始化状态
+            hiddenState = NdArray.zeros(Shape.of(batchSize, hiddenSize));
+            cellState = NdArray.zeros(Shape.of(batchSize, hiddenSize));
+            _buffers.put("hidden_state", hiddenState);
+            _buffers.put("cell_state", cellState);
         }
     }
 

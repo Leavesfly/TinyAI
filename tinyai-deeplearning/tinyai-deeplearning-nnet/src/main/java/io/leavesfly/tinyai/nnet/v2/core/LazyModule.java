@@ -20,9 +20,9 @@ import io.leavesfly.tinyai.ndarr.Shape;
 public abstract class LazyModule extends Module {
 
     /**
-     * 是否存在未初始化的参数
+     * 初始化锁，保证多线程环境下延迟初始化的线程安全
      */
-    protected boolean _hasUnInitializedParams = true;
+    private final Object initLock = new Object();
 
     /**
      * 构造函数
@@ -31,7 +31,6 @@ public abstract class LazyModule extends Module {
      */
     public LazyModule(String name) {
         super(name);
-        // 延迟初始化，不在构造函数中创建参数
     }
 
     /**
@@ -39,7 +38,6 @@ public abstract class LazyModule extends Module {
      */
     public LazyModule() {
         super();
-        _hasUnInitializedParams = true;
     }
 
     /**
@@ -52,43 +50,53 @@ public abstract class LazyModule extends Module {
     protected abstract void initialize(Shape... inputShapes);
 
     /**
-     * 检查并触发延迟初始化
+     * 检查并触发延迟初始化（线程安全）
      * <p>
-     * 在forward方法开头调用，如果参数未初始化则触发初始化
+     * 在forward方法开头调用，如果参数未初始化则触发初始化。
+     * 使用双重检查锁定保证多线程环境下只初始化一次。
      *
      * @param inputs 输入变量数组
      */
     protected void checkLazyInitialization(Variable... inputs) {
-        if (!_hasUnInitializedParams) {
-            return;  // 已初始化，直接返回
+        if (_initialized) {
+            return;  // 快速路径：已初始化，直接返回
         }
 
-        // 提取输入形状
-        Shape[] inputShapes = new Shape[inputs.length];
-        for (int i = 0; i < inputs.length; i++) {
-            inputShapes[i] = inputs[i].getShape();
-        }
+        synchronized (initLock) {
+            if (_initialized) {
+                return;  // 双重检查：另一个线程可能已完成初始化
+            }
 
-        // 调用子类实现的initialize方法
-        try {
-            initialize(inputShapes);
-            _hasUnInitializedParams = false;
-            _initialized = true;
+            // 提取输入形状并校验
+            Shape[] inputShapes = new Shape[inputs.length];
+            for (int i = 0; i < inputs.length; i++) {
+                if (inputs[i] == null) {
+                    throw new IllegalArgumentException(
+                            "Input at index " + i + " is null during lazy initialization of module: " + name);
+                }
+                inputShapes[i] = inputs[i].getShape();
+            }
 
-            // 调用resetParameters初始化参数值
-            resetParameters();
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to initialize lazy module: " + name, e);
+            // 调用子类实现的initialize方法
+            try {
+                initialize(inputShapes);
+                _initialized = true;
+
+                // 调用resetParameters初始化参数值
+                resetParameters();
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to initialize lazy module: " + name, e);
+            }
         }
     }
 
     /**
-     * 判断是否存在未初始化的参数
+     * 判断是否已完成初始化
      *
-     * @return true表示存在未初始化的参数
+     * @return true表示尚未初始化
      */
     public boolean hasUnInitializedParams() {
-        return _hasUnInitializedParams;
+        return !_initialized;
     }
 
     /**

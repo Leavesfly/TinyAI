@@ -21,9 +21,16 @@ public class Log extends Function {
      * @param inputs 输入的NdArray数组，长度为1
      * @return 对数值的NdArray
      */
+    /**
+     * 数值稳定性的最小值，防止 log(0) 和除零
+     */
+    private static final float EPSILON = 1e-12f;
+
     @Override
     public NdArray forward(NdArray... inputs) {
-        return inputs[0].log();
+        // 对输入添加下限保护，防止 log(0) 产生 -Infinity
+        NdArray clampedInput = inputs[0].clip(EPSILON, Float.MAX_VALUE);
+        return clampedInput.log();
     }
 
     /**
@@ -31,13 +38,17 @@ public class Log extends Function {
      * <p>
      * 对于对数函数，梯度计算公式为：
      * ∂ln(x)/∂x = 1/x
+     * 对输入添加下限保护，防止除零产生 Infinity。
      *
      * @param yGrad 输出变量的梯度
      * @return 输入变量的梯度列表
      */
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        return Collections.singletonList(yGrad.div(inputs[0].getValue()));
+        NdArray x = inputs[0].getValue();
+        // 对 x 添加下限保护，防止 1/0 产生 Infinity
+        NdArray safeX = x.clip(EPSILON, Float.MAX_VALUE);
+        return Collections.singletonList(yGrad.div(safeX));
     }
 
     /**

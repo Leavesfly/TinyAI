@@ -39,6 +39,7 @@ public class ModuleDict extends Module implements Iterable<Module> {
         if (old == null) {
             registerModule(key, module);
         } else {
+            old.setParent(null);  // 清理旧模块的 parent 引用
             _modules.put(key, module);
             module.setParent(this);
         }
@@ -56,7 +57,11 @@ public class ModuleDict extends Module implements Iterable<Module> {
      * 删除并返回对应键的子模块。
      */
     public Module remove(String key) {
-        return _modules.remove(key);
+        Module removed = _modules.remove(key);
+        if (removed != null) {
+            removed.setParent(null);  // 清理被移除模块的 parent 引用
+        }
+        return removed;
     }
 
     public boolean containsKey(String key) {

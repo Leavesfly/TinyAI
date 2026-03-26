@@ -1,16 +1,15 @@
 package io.leavesfly.tinyai.nnet.v2.init;
 
 import io.leavesfly.tinyai.ndarr.NdArray;
-import java.util.Random;
 
 /**
  * Xavier正态初始化器（Glorot正态初始化）
- * <p>
+ * &lt;p&gt;
  * 适用于Sigmoid、Tanh等激活函数
- * <p>
+ * &lt;p&gt;
  * 从正态分布 N(0, std²) 中采样，其中：
  * std = gain * sqrt(2 / (fan_in + fan_out))
- * <p>
+ * &lt;p&gt;
  * 参考论文：
  * Understanding the difficulty of training deep feedforward neural networks
  * by Xavier Glorot and Yoshua Bengio (2010)
@@ -21,7 +20,6 @@ import java.util.Random;
 public class XavierNormalInitializer implements Initializer {
 
     private final float gain;
-    private final Random random;
 
     /**
      * 构造函数
@@ -30,7 +28,6 @@ public class XavierNormalInitializer implements Initializer {
      */
     public XavierNormalInitializer(float gain) {
         this.gain = gain;
-        this.random = new Random();
     }
 
     /**
@@ -51,7 +48,7 @@ public class XavierNormalInitializer implements Initializer {
 
         float[] data = tensor.getArray();
         for (int i = 0; i < data.length; i++) {
-            data[i] = (float) (random.nextGaussian() * std);
+            data[i] = (float) (Initializers.getSharedRandom().nextGaussian() * std);
         }
     }
 }

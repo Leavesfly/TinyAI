@@ -100,6 +100,11 @@ public class ModuleList extends Module implements Iterable<Module> {
 
         Module oldModule = moduleList.set(index, module);
 
+        // 清理旧模块的 parent 引用
+        if (oldModule != null) {
+            oldModule.setParent(null);
+        }
+
         // 更新注册
         String moduleName = String.valueOf(index);
         _modules.put(moduleName, module);

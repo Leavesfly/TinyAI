@@ -302,6 +302,68 @@ public class BaseOperationsTest {
     }
     
     @Test
+    public void testMulScalarBackward() {
+        // 测试矩阵 × 标量的反向传播
+        Variable matrix = new Variable(NdArray.of(new float[][]{{1, 2}, {3, 4}}), "matrix");
+        Variable scalar = new Variable(NdArray.of(2.0f), "scalar");
+
+        Mul mulFunc = new Mul();
+        Variable result = mulFunc.call(matrix, scalar);
+        result.backward();
+
+        // matrix 的梯度 = scalar = 2
+        float[][] expectedMatrixGrad = {{2, 2}, {2, 2}};
+        assertArrayEquals(expectedMatrixGrad, matrix.getGrad().getMatrix());
+
+        // scalar 的梯度 = sum(matrix) = 1+2+3+4 = 10
+        assertEquals(10f, scalar.getGrad().getNumber().floatValue(), 1e-5f);
+    }
+
+    @Test
+    public void testMul1DWith2DBackward() {
+        // 测试 1D shape(1,) 与 2D shape(n,1) 相乘的广播反向传播
+        Variable weight1d = new Variable(NdArray.of(new float[]{3.0f}, io.leavesfly.tinyai.ndarr.Shape.of(1)), "w");
+        Variable input2d = new Variable(NdArray.of(new float[][]{{1}, {2}, {3}}), "x");
+
+        Mul mulFunc = new Mul();
+        Variable result = mulFunc.call(input2d, weight1d);
+
+        Variable loss = result.sum();
+        loss.backward();
+
+        // weight1d 的梯度 shape 应为 (1,)，值为 sum(input2d) = 6
+        assertNotNull(weight1d.getGrad());
+        assertEquals(io.leavesfly.tinyai.ndarr.Shape.of(1), weight1d.getGrad().getShape());
+        assertEquals(6f, weight1d.getGrad().getArray()[0], 1e-5f);
+
+        // input2d 的梯度 shape 应为 (3,1)，值全为 3
+        assertNotNull(input2d.getGrad());
+        assertEquals(io.leavesfly.tinyai.ndarr.Shape.of(3, 1), input2d.getGrad().getShape());
+        assertEquals(3f, input2d.getGrad().get(0, 0), 1e-5f);
+        assertEquals(3f, input2d.getGrad().get(1, 0), 1e-5f);
+        assertEquals(3f, input2d.getGrad().get(2, 0), 1e-5f);
+    }
+
+    @Test
+    public void testMulRowVectorBroadcastBackward() {
+        // 测试行向量 × 矩阵的广播反向传播
+        Variable row = new Variable(NdArray.of(new float[][]{{2, 3}}), "row");
+        Variable matrix = new Variable(NdArray.of(new float[][]{{1, 1}, {1, 1}, {1, 1}}), "matrix");
+
+        Mul mulFunc = new Mul();
+        Variable result = mulFunc.call(matrix, row);
+
+        Variable loss = result.sum();
+        loss.backward();
+
+        // row 的梯度 shape 应为 (1,2)，值为按列求和 matrix = [3, 3]
+        assertNotNull(row.getGrad());
+        assertEquals(io.leavesfly.tinyai.ndarr.Shape.of(1, 2), row.getGrad().getShape());
+        assertEquals(3f, row.getGrad().get(0, 0), 1e-5f);
+        assertEquals(3f, row.getGrad().get(0, 1), 1e-5f);
+    }
+
+    @Test
     public void testBroadcastOperations() {
         // 测试各种广播情况
         Variable matrix = new Variable(NdArray.of(new float[][]{{1, 2, 3}, {4, 5, 6}}), "matrix");
@@ -365,5 +427,57 @@ public class BaseOperationsTest {
         
         // 但不应该有创建者（计算图）
         assertNull(result.getCreator());
+    }
+    
+    @Test
+    public void testDivByZeroProtection() {
+        // 测试除零保护：除数接近零时不应产生 Infinity 或 NaN
+        Div divFunc = new Div();
+        NdArray a = NdArray.of(new float[][]{{1f, 2f, 3f}});
+        NdArray b = NdArray.of(new float[][]{{0f, 0f, 0f}});
+        
+        NdArray result = divFunc.forward(a, b);
+        
+        // 结果不应包含 Infinity 或 NaN
+        for (float val : result.getArray()) {
+            assertFalse("除零保护失败：结果包含 Infinity", Float.isInfinite(val));
+            assertFalse("除零保护失败：结果包含 NaN", Float.isNaN(val));
+        }
+    }
+    
+    @Test
+    public void testDivByZeroBackwardProtection() {
+        // 测试除零保护的反向传播
+        Variable x = new Variable(NdArray.of(new float[][]{{1f, 2f}}), "x");
+        Variable y = new Variable(NdArray.of(new float[][]{{0f, 0f}}), "y");
+        
+        Div divFunc = new Div();
+        Variable z = divFunc.call(x, y);
+        z.backward();
+        
+        // 梯度不应包含 Infinity 或 NaN
+        for (float val : x.getGrad().getArray()) {
+            assertFalse("除零保护失败：x梯度包含 Infinity", Float.isInfinite(val));
+            assertFalse("除零保护失败：x梯度包含 NaN", Float.isNaN(val));
+        }
+        for (float val : y.getGrad().getArray()) {
+            assertFalse("除零保护失败：y梯度包含 Infinity", Float.isInfinite(val));
+            assertFalse("除零保护失败：y梯度包含 NaN", Float.isNaN(val));
+        }
+    }
+    
+    @Test
+    public void testDivBySmallValueProtection() {
+        // 测试极小除数的保护
+        Div divFunc = new Div();
+        NdArray a = NdArray.of(new float[][]{{1f}});
+        NdArray b = NdArray.of(new float[][]{{1e-20f}});
+        
+        NdArray result = divFunc.forward(a, b);
+        
+        for (float val : result.getArray()) {
+            assertFalse("极小除数保护失败：结果包含 Infinity", Float.isInfinite(val));
+            assertFalse("极小除数保护失败：结果包含 NaN", Float.isNaN(val));
+        }
     }
 }

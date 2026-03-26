@@ -115,75 +115,102 @@ public class TransformerDecoderLayer extends Module {
         // 子模块的参数由其自己初始化
     }
 
+    /**
+     * 前向传播
+     * <p>
+     * 输入参数：
+     * - inputs[0]: x - 解码器输入
+     * - inputs[1]: memory - 编码器输出（可选）
+     * - inputs[2]: tgtMask - 目标序列掩码（可选，因果掩码）
+     * - inputs[3]: memoryMask - 编码器输出掩码（可选）
+     * - inputs[4]: tgtKeyPaddingMask - 目标序列padding掩码（可选）
+     * - inputs[5]: memoryKeyPaddingMask - 编码器输出padding掩码（可选）
+     */
     @Override
     public Variable forward(Variable... inputs) {
-        // inputs[0]: 解码器输入 x
-        // inputs[1]: 编码器输出 memory
         Variable x = inputs[0];
         Variable memory = inputs.length > 1 ? inputs[1] : null;
+        Variable tgtMask = inputs.length > 2 ? inputs[2] : null;
+        Variable memoryMask = inputs.length > 3 ? inputs[3] : null;
+        Variable tgtKeyPaddingMask = inputs.length > 4 ? inputs[4] : null;
+        Variable memoryKeyPaddingMask = inputs.length > 5 ? inputs[5] : null;
 
         if (preLayerNorm) {
-            return forwardPreNorm(x, memory);
+            return forwardPreNorm(x, memory, tgtMask, memoryMask,
+                    tgtKeyPaddingMask, memoryKeyPaddingMask);
         } else {
-            return forwardPostNorm(x, memory);
+            return forwardPostNorm(x, memory, tgtMask, memoryMask,
+                    tgtKeyPaddingMask, memoryKeyPaddingMask);
         }
     }
 
     /**
      * Pre-LayerNorm前向传播
      *
-     * @param x      解码器输入
-     * @param memory 编码器输出
+     * @param x                     解码器输入
+     * @param memory                编码器输出
+     * @param tgtMask               目标序列掩码（因果掩码）
+     * @param memoryMask            编码器输出掩码
+     * @param tgtKeyPaddingMask     目标序列padding掩码
+     * @param memoryKeyPaddingMask  编码器输出padding掩码
      * @return 输出
      */
-    private Variable forwardPreNorm(Variable x, Variable memory) {
+    private Variable forwardPreNorm(Variable x, Variable memory,
+                                     Variable tgtMask, Variable memoryMask,
+                                     Variable tgtKeyPaddingMask, Variable memoryKeyPaddingMask) {
         // 1. 掩码自注意力子层（Pre-LN）
-        Variable norm_x = norm1.forward(x);
-        Variable self_attn_out = selfAttention.forward(norm_x, norm_x, norm_x);
-        Variable residual1 = x.add(self_attn_out);
+        Variable normX = norm1.forward(x);
+        Variable selfAttnOut = selfAttention.forward(normX, normX, normX,
+                tgtMask, tgtKeyPaddingMask);
+        Variable residual1 = x.add(selfAttnOut);
 
-        // 2. 编码器-解码器注意力子层（Pre-LN）
+        // 2. 编码器-解码器交叉注意力子层（Pre-LN）
         if (memory != null) {
-            Variable norm_residual1 = norm2.forward(residual1);
-            Variable cross_attn_out = crossAttention.forward(norm_residual1, memory, memory);
-            residual1 = residual1.add(cross_attn_out);
+            Variable normResidual1 = norm2.forward(residual1);
+            Variable crossAttnOut = crossAttention.forward(normResidual1, memory, memory,
+                    memoryMask, memoryKeyPaddingMask);
+            residual1 = residual1.add(crossAttnOut);
         }
 
         // 3. 前馈网络子层（Pre-LN）
-        Variable norm_residual2 = norm3.forward(residual1);
-        Variable ffn_out = forwardFFN(norm_residual2);
-        Variable output = residual1.add(ffn_out);
-
-        return output;
+        Variable normResidual2 = norm3.forward(residual1);
+        Variable ffnOut = forwardFFN(normResidual2);
+        return residual1.add(ffnOut);
     }
 
     /**
      * Post-LayerNorm前向传播
      *
-     * @param x      解码器输入
-     * @param memory 编码器输出
+     * @param x                     解码器输入
+     * @param memory                编码器输出
+     * @param tgtMask               目标序列掩码（因果掩码）
+     * @param memoryMask            编码器输出掩码
+     * @param tgtKeyPaddingMask     目标序列padding掩码
+     * @param memoryKeyPaddingMask  编码器输出padding掩码
      * @return 输出
      */
-    private Variable forwardPostNorm(Variable x, Variable memory) {
+    private Variable forwardPostNorm(Variable x, Variable memory,
+                                      Variable tgtMask, Variable memoryMask,
+                                      Variable tgtKeyPaddingMask, Variable memoryKeyPaddingMask) {
         // 1. 掩码自注意力子层（Post-LN）
-        Variable self_attn_out = selfAttention.forward(x, x, x);
-        Variable residual1 = x.add(self_attn_out);
-        Variable norm1_out = norm1.forward(residual1);
+        Variable selfAttnOut = selfAttention.forward(x, x, x,
+                tgtMask, tgtKeyPaddingMask);
+        Variable residual1 = x.add(selfAttnOut);
+        Variable norm1Out = norm1.forward(residual1);
 
-        // 2. 编码器-解码器注意力子层（Post-LN）
-        Variable current = norm1_out;
+        // 2. 编码器-解码器交叉注意力子层（Post-LN）
+        Variable current = norm1Out;
         if (memory != null) {
-            Variable cross_attn_out = crossAttention.forward(current, memory, memory);
-            Variable residual2 = current.add(cross_attn_out);
+            Variable crossAttnOut = crossAttention.forward(current, memory, memory,
+                    memoryMask, memoryKeyPaddingMask);
+            Variable residual2 = current.add(crossAttnOut);
             current = norm2.forward(residual2);
         }
 
         // 3. 前馈网络子层（Post-LN）
-        Variable ffn_out = forwardFFN(current);
-        Variable residual3 = current.add(ffn_out);
-        Variable output = norm3.forward(residual3);
-
-        return output;
+        Variable ffnOut = forwardFFN(current);
+        Variable residual3 = current.add(ffnOut);
+        return norm3.forward(residual3);
     }
 
     /**

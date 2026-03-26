@@ -417,4 +417,39 @@ public class VariableTest {
     }
 
     // 辅助方法 - 删除了isRequireGrad方法，因为Variable类没有这个方法
+
+    @Test
+    public void testConcurrentBackward() throws Exception {
+        // 测试多线程并发 backward 不会互相干扰
+        int threadCount = 4;
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(threadCount);
+        java.util.concurrent.atomic.AtomicInteger errorCount = new java.util.concurrent.atomic.AtomicInteger(0);
+        
+        for (int t = 0; t < threadCount; t++) {
+            final float value = (t + 1) * 2f;
+            new Thread(() -> {
+                try {
+                    // 每个线程独立构建计算图并 backward
+                    Variable a = new Variable(NdArray.of(new float[][]{{value}}), "a");
+                    Variable b = new Variable(NdArray.of(new float[][]{{3f}}), "b");
+                    Variable c = a.mul(b).add(a.squ());
+                    c.backward();
+                    
+                    // 验证梯度：d/da(a*b + a^2) = b + 2a
+                    float expectedGrad = 3f + 2f * value;
+                    float actualGrad = a.getGrad().get(0, 0);
+                    if (Math.abs(expectedGrad - actualGrad) > 0.01f) {
+                        errorCount.incrementAndGet();
+                    }
+                } catch (Exception e) {
+                    errorCount.incrementAndGet();
+                } finally {
+                    latch.countDown();
+                }
+            }).start();
+        }
+        
+        latch.await(10, java.util.concurrent.TimeUnit.SECONDS);
+        assertEquals("多线程 backward 出现错误", 0, errorCount.get());
+    }
 }

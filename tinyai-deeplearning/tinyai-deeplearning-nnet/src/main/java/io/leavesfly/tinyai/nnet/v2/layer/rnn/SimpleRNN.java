@@ -122,7 +122,7 @@ public class SimpleRNN extends Module {
      * @param batchSize 批次大小
      */
     private void initializeStateIfNeeded(int batchSize) {
-        if (hiddenState == null) {
+        if (hiddenState == null || hiddenState.getShape().getDimension(0) != batchSize) {
             hiddenState = NdArray.zeros(Shape.of(batchSize, hiddenSize));
             _buffers.put("hidden_state", hiddenState);
         }

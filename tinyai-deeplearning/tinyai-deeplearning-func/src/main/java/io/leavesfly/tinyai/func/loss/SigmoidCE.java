@@ -12,7 +12,7 @@ import java.util.List;
 /**
  * Sigmoid交叉熵损失函数
  * <p>
- * 用于多分类问题的损失函数，结合了Sigmoid激活函数和交叉熵损失。
+ * 用于二分类问题的损失函数，结合了Sigmoid激活函数和交叉熵损失。
  */
 public class SigmoidCE extends Function {
 

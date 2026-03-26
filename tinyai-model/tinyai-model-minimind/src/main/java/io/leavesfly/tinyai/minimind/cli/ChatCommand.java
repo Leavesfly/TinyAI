@@ -18,6 +18,9 @@ import java.util.Scanner;
  */
 public class ChatCommand implements Command {
     
+    /** 对话历史最大长度 */
+    private static final int MAX_HISTORY_SIZE = 20;
+    
     @Override
     public void execute(String[] args) throws Exception {
         ArgParser parser = new ArgParser(args);
@@ -79,6 +82,11 @@ public class ChatCommand implements Command {
             // 添加到对话历史
             conversationHistory.add("用户: " + input);
             
+            // 限制对话历史长度，防止内存泄漏
+            while (conversationHistory.size() > MAX_HISTORY_SIZE) {
+                conversationHistory.remove(0);
+            }
+            
             try {
                 // 构建对话上下文（保留最近5轮对话）
                 StringBuilder context = new StringBuilder();
@@ -122,13 +130,19 @@ public class ChatCommand implements Command {
                 // 添加到对话历史
                 conversationHistory.add("助手: " + response);
                 
+                // 再次限制对话历史长度
+                while (conversationHistory.size() > MAX_HISTORY_SIZE) {
+                    conversationHistory.remove(0);
+                }
+                
             } catch (Exception e) {
                 System.err.println("生成回复失败: " + e.getMessage());
                 System.out.println("助手: [模型生成失败,请重试]\n");
             }
         }
         
-        scanner.close();
+        // 不关闭Scanner，因为它包装了System.in
+        // scanner.close();
     }
     
     @Override

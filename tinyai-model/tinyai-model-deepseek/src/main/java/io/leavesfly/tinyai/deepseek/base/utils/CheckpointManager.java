@@ -235,13 +235,21 @@ public class CheckpointManager {
         // 删除超出数量的检查点
         for (int i = maxCheckpoints; i < files.length; i++) {
             String filename = files[i].getName();
-            files[i].delete();
+            boolean deleted = files[i].delete();
+            if (!deleted) {
+                System.err.println("⚠️ 删除检查点失败: " + filename);
+            }
             
             // 同时删除元数据文件
             String metaFilename = filename.replace(".model", ".meta");
-            new File(dir, metaFilename).delete();
+            File metaFile = new File(dir, metaFilename);
+            if (metaFile.exists() && !metaFile.delete()) {
+                System.err.println("⚠️ 删除元数据文件失败: " + metaFilename);
+            }
             
-            System.out.println("🗑️ 已清理旧检查点: " + filename);
+            if (deleted) {
+                System.out.println("🗑️ 已清理旧检查点: " + filename);
+            }
         }
     }
     

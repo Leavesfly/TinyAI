@@ -33,6 +33,9 @@ import java.util.*;
  */
 public class ChatCompletionHandler implements HttpHandler {
     
+    /** 最大对话轮数 */
+    private static final int MAX_CONVERSATION_ROUNDS = 10;
+    
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         // 处理OPTIONS预检请求
@@ -128,8 +131,8 @@ public class ChatCompletionHandler implements HttpHandler {
             // 1. 构建对话上下文
             StringBuilder context = new StringBuilder();
             
-            // 保留最近10轮对话
-            int startIdx = Math.max(0, messages.size() - 10);
+            // 保留最近MAX_CONVERSATION_ROUNDS轮对话
+            int startIdx = Math.max(0, messages.size() - MAX_CONVERSATION_ROUNDS);
             for (int i = startIdx; i < messages.size(); i++) {
                 ChatMessage msg = messages.get(i);
                 if ("system".equals(msg.role)) {
@@ -142,8 +145,11 @@ public class ChatCompletionHandler implements HttpHandler {
             }
             context.append("助手: ");
             
+            // 保存prompt的长度，用于后续提取响应
+            String promptText = context.toString();
+            
             // 2. 编码输入
-            List<Integer> promptIds = SharedModelHolder.getTokenizer().encode(context.toString(), false, false);
+            List<Integer> promptIds = SharedModelHolder.getTokenizer().encode(promptText, false, false);
             int[] promptArray = promptIds.stream().mapToInt(i -> i).toArray();
             
             // 3. 调用模型生成
@@ -162,19 +168,18 @@ public class ChatCompletionHandler implements HttpHandler {
             }
             String fullResponse = SharedModelHolder.getTokenizer().decode(genIds, true);
             
-            // 5. 提取助手回复部分
+            // 5. 提取助手回复部分（更鲁棒的方式：移除prompt部分）
             String response = fullResponse;
-            if (fullResponse.contains("助手: ")) {
-                int assistantIdx = fullResponse.lastIndexOf("助手: ");
-                response = fullResponse.substring(assistantIdx + 4).trim();
-                
-                // 移除可能的其他角色标签
-                if (response.contains("\n用户: ")) {
-                    response = response.substring(0, response.indexOf("\n用户: ")).trim();
-                }
-                if (response.contains("\n系统: ")) {
-                    response = response.substring(0, response.indexOf("\n系统: ")).trim();
-                }
+            if (fullResponse.length() > promptText.length()) {
+                response = fullResponse.substring(promptText.length()).trim();
+            }
+            
+            // 移除可能的其他角色标签
+            if (response.contains("\n用户: ")) {
+                response = response.substring(0, response.indexOf("\n用户: ")).trim();
+            }
+            if (response.contains("\n系统: ")) {
+                response = response.substring(0, response.indexOf("\n系统: ")).trim();
             }
             
             return response;

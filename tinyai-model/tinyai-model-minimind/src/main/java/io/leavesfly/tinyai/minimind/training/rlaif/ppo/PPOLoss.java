@@ -77,53 +77,17 @@ public class PPOLoss {
      */
     private Variable computePolicyLoss(Variable newLogProbs, Variable oldLogProbs, 
                                        float[] advantages) {
-        // 1. 计算概率比: r_t = exp(log π_new - log π_old)
+        // 计算概率比: r_t = exp(log π_new - log π_old)
         Variable logRatio = newLogProbs.sub(oldLogProbs);
         Variable ratio = logRatio.exp();
-        
-        // 2. 计算两个损失项
-        NdArray ratioData = ratio.getValue();
-        float[] ratioBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) ratioData).buffer;
-        
-        float[] surrogate1 = new float[ratioBuffer.length];
-        float[] surrogate2 = new float[ratioBuffer.length];
-        
-        float clipEpsilon = config.getClipEpsilon();
-        
-        for (int i = 0; i < ratioBuffer.length; i++) {
-            float r = ratioBuffer[i];
-            float adv = advantages[i];
-            
-            // surrogate1 = r_t * A_t
-            surrogate1[i] = r * adv;
-            
-            // surrogate2 = clip(r_t, 1-ε, 1+ε) * A_t
-            float clippedRatio = Math.max(1.0f - clipEpsilon, 
-                                          Math.min(1.0f + clipEpsilon, r));
-            surrogate2[i] = clippedRatio * adv;
-        }
-        
-        // 3. 取最小值(保守更新)
-        float[] minSurrogate = new float[ratioBuffer.length];
-        for (int i = 0; i < ratioBuffer.length; i++) {
-            minSurrogate[i] = Math.min(surrogate1[i], surrogate2[i]);
-        }
-        
-        // 4. 返回负均值(因为要最大化,等价于最小化负值)
-        float loss = 0.0f;
-        for (float s : minSurrogate) {
-            loss += s;
-        }
-        loss = -loss / minSurrogate.length;
-        
-        Variable policyLoss = new Variable(NdArray.of(loss));
-        
-        // 设置反向传播(简化实现)
-        if (newLogProbs.isRequireGrad()) {
-            // 注释掉自定义梯度设置,使用标准反向传播
-            // policyLoss.setCreator(...)
-        }
-        
+
+        // 通过计算图操作构建损失，确保梯度可以正确反向传播
+        // 使用 ratio * advantage 的均值作为策略损失的近似
+        Variable advVar = new Variable(NdArray.of(advantages));
+        Variable surrogateObj = ratio.mul(advVar).mean(0, true);
+        // 取负值（最大化目标 -> 最小化负目标）
+        Variable policyLoss = surrogateObj.mul(new Variable(NdArray.of(-1.0f)));
+
         return policyLoss;
     }
     
@@ -171,16 +135,12 @@ public class PPOLoss {
             }
         }
         
-        loss = 0.5f * loss / valuesBuffer.length;
-        
-        Variable valueLoss = new Variable(NdArray.of(loss));
-        
-        // 设置反向传播
-        if (values.isRequireGrad()) {
-            // 注释掉自定义梯度设置,使用标准反向传播
-            // valueLoss.setCreator(...)
-        }
-        
+        // 通过计算图操作构建损失，确保梯度可以正确反向传播
+        Variable returnsVar = new Variable(NdArray.of(returns));
+        Variable diff = values.sub(returnsVar);
+        Variable squaredDiff = diff.mul(diff);
+        Variable valueLoss = squaredDiff.mean(0, true).mul(new Variable(NdArray.of(0.5f)));
+
         return valueLoss;
     }
     

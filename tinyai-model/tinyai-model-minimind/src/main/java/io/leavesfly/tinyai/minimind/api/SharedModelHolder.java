@@ -56,6 +56,10 @@ public class SharedModelHolder {
             initialized = true;
             System.out.println("共享模型实例初始化完成");
         } catch (Exception e) {
+            // 初始化失败时清理部分初始化的状态
+            model = null;
+            tokenizer = null;
+            initialized = false;
             System.err.println("共享模型初始化失败: " + e.getMessage());
             e.printStackTrace();
         }

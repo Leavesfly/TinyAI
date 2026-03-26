@@ -25,6 +25,9 @@ public class CodeVerifier implements Verifier {
         Pattern.DOTALL
     );
     
+    // 匹配变量名的正则表达式
+    private static final Pattern VARIABLE_PATTERN = Pattern.compile("\\b[a-zA-Z_][a-zA-Z0-9_]*\\b");
+    
     @Override
     public String getVerifierType() {
         return "code";
@@ -178,9 +181,8 @@ public class CodeVerifier implements Verifier {
         }
         
         // 特征2: 包含相同的变量名（简化版）
-        Pattern varPattern = Pattern.compile("\\b[a-zA-Z_][a-zA-Z0-9_]*\\b");
-        Matcher extractedMatcher = varPattern.matcher(extracted);
-        Matcher expectedMatcher = varPattern.matcher(expected);
+        Matcher extractedMatcher = VARIABLE_PATTERN.matcher(extracted);
+        Matcher expectedMatcher = VARIABLE_PATTERN.matcher(expected);
         
         int extractedVarCount = 0;
         int expectedVarCount = 0;

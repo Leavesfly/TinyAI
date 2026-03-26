@@ -36,6 +36,9 @@ public class LogicVerifier implements Verifier {
         Pattern.CASE_INSENSITIVE
     );
     
+    // 匹配单词的正则表达式
+    private static final Pattern WORD_PATTERN = Pattern.compile("\\b[a-zA-Z]+\\b");
+    
     @Override
     public String getVerifierType() {
         return "logic";

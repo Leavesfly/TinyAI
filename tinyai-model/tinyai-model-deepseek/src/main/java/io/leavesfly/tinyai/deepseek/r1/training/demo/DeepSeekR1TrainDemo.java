@@ -239,7 +239,7 @@ public class DeepSeekR1TrainDemo {
         
         posttrain.configure(
             10,          // maxEpochs
-            1e-3f,      // learningRate
+            4e-4f,      // learningRate
             2           // patience
         );
         
@@ -372,7 +372,7 @@ public class DeepSeekR1TrainDemo {
         
         rlvrTrainer.configure(
             20,         // maxEpochs (增加训练轮次以充分学习)
-            0.005f,      // learningRate (降低学习率提高稳定性)
+            0.001f,      // learningRate (降低学习率提高稳定性)
             4,          // groupSize G (GRPO每个问题采样数)
             0.2f,       // clipEps   (PPO clip范围)
             1.0f        // temperature (采样温度)

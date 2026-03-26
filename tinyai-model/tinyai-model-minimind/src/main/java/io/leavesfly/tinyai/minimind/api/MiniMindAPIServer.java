@@ -4,14 +4,18 @@ import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpExchange;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * MiniMind API服务器
@@ -42,11 +46,12 @@ public class MiniMindAPIServer {
     /** 每个IP的请求计数器 */
     private static final ConcurrentHashMap<String, AtomicInteger> requestCounters = new ConcurrentHashMap<>();
     
-    /** 计数器重置时间戳 */
-    private static volatile long counterResetTime = System.currentTimeMillis();
+    /** 计数器重置时间戳（使用AtomicLong保证原子性） */
+    private static final AtomicLong counterResetTime = new AtomicLong(System.currentTimeMillis());
     
     private final HttpServer server;
     private final int port;
+    private final ExecutorService executor;
     
     /**
      * 构造函数
@@ -58,7 +63,8 @@ public class MiniMindAPIServer {
         this.server = HttpServer.create(new InetSocketAddress(port), 0);
         
         // 设置线程池
-        server.setExecutor(Executors.newFixedThreadPool(10));
+        this.executor = Executors.newFixedThreadPool(10);
+        server.setExecutor(executor);
         
         // 注册路由
         registerHandlers();
@@ -97,6 +103,9 @@ public class MiniMindAPIServer {
      */
     public void stop() {
         server.stop(0);
+        if (executor != null && !executor.isShutdown()) {
+            executor.shutdown();
+        }
         System.out.println("MiniMind API Server Stopped");
     }
     
@@ -175,13 +184,17 @@ public class MiniMindAPIServer {
             }
         }
         
-        // 速率限制
+        // 速率限制（使用synchronized保护清除操作）
         String clientIp = exchange.getRemoteAddress().getAddress().getHostAddress();
         long now = System.currentTimeMillis();
-        if (now - counterResetTime > 60_000) {
-            requestCounters.clear();
-            counterResetTime = now;
+        
+        synchronized (counterResetTime) {
+            if (now - counterResetTime.get() > 60_000) {
+                requestCounters.clear();
+                counterResetTime.set(now);
+            }
         }
+        
         AtomicInteger counter = requestCounters.computeIfAbsent(clientIp, k -> new AtomicInteger(0));
         if (counter.incrementAndGet() > MAX_REQUESTS_PER_MINUTE) {
             sendJSONResponse(exchange, 429, 
@@ -232,14 +245,24 @@ public class MiniMindAPIServer {
     }
     
     /**
-     * 读取请求体（带大小限制）
+     * 读取请求体（流式读取，边读边检查大小限制，防止OOM攻击）
      */
     static String readRequestBody(HttpExchange exchange) throws IOException {
-        byte[] bytes = exchange.getRequestBody().readAllBytes();
-        if (bytes.length > MAX_REQUEST_BODY_SIZE) {
-            throw new IOException("Request body too large: " + bytes.length + " bytes (max: " + MAX_REQUEST_BODY_SIZE + ")");
+        InputStream inputStream = exchange.getRequestBody();
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        byte[] chunk = new byte[8192];
+        int bytesRead;
+        int totalBytes = 0;
+        
+        while ((bytesRead = inputStream.read(chunk)) != -1) {
+            totalBytes += bytesRead;
+            if (totalBytes > MAX_REQUEST_BODY_SIZE) {
+                throw new IOException("Request body too large: " + totalBytes + " bytes (max: " + MAX_REQUEST_BODY_SIZE + ")");
+            }
+            buffer.write(chunk, 0, bytesRead);
         }
-        return new String(bytes, StandardCharsets.UTF_8);
+        
+        return buffer.toString(StandardCharsets.UTF_8.name());
     }
     
     /**

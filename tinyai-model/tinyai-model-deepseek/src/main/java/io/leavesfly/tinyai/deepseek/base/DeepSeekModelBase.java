@@ -81,22 +81,31 @@ public abstract class DeepSeekModelBase extends Model {
             }
         }
 
-        // 自回归生成
+        // 自回归生成（预分配最大长度数组，避免每步创建新数组）
+        int totalLen = promptLen + maxNewTokens;
+        float[][] currentInput = new float[batchSize][totalLen];
+        for (int b = 0; b < batchSize; b++) {
+            System.arraycopy(generatedSeq[b], 0, currentInput[b], 0, promptLen);
+        }
+        
         for (int i = 0; i < maxNewTokens; i++) {
             int currentLen = promptLen + i;
-            float[][] currentInput = new float[batchSize][currentLen];
+
+            // 创建当前长度的视图用于预测
+            float[][] inputView = new float[batchSize][currentLen];
             for (int b = 0; b < batchSize; b++) {
-                System.arraycopy(generatedSeq[b], 0, currentInput[b], 0, currentLen);
+                System.arraycopy(currentInput[b], 0, inputView[b], 0, currentLen);
             }
 
             // 预测下一个token
-            Variable logits = predict(new Variable(NdArray.of(currentInput)));
+            Variable logits = predict(new Variable(NdArray.of(inputView)));
             NdArray logitsArray = logits.getValue();
 
             // 贪婪选择（选择概率最大的token）
             for (int b = 0; b < batchSize; b++) {
                 int nextToken = argmax(logitsArray, b, currentLen - 1);
                 generatedSeq[b][currentLen] = nextToken;
+                currentInput[b][currentLen] = nextToken;
             }
         }
 

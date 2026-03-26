@@ -93,6 +93,9 @@ public class DeepSeekTokenEmbeddingBase extends Module {
         }
 
         Variable tokenIds = inputs[0];
+        if (tokenIds == null || tokenIds.getValue() == null) {
+            throw new IllegalArgumentException("输入 tokenIds 及其值不能为 null");
+        }
         NdArray tokenData = tokenIds.getValue();
 
         // 验证输入维度

@@ -150,8 +150,11 @@ public class MiniMindBlock extends Module {
         // 1. Token Embedding
         Variable x = tokenEmbedding.forward(tokenIds);
 
-        // 2. 通过所有 Transformer 层
+        // 2. 通过所有 Transformer 层（添加防御性空值检查）
         if (config.isUseMoE()) {
+            if (moeLayers == null) {
+                throw new IllegalStateException("MoE模式配置为true，但moeLayers为null");
+            }
             for (int i = 0; i < moeLayers.size(); i++) {
                 MiniMindMoETransformerLayer layer = moeLayers.get(i);
                 KVCache kvCache = (kvCaches != null && i < kvCaches.size()) ? kvCaches.get(i) : null;
@@ -161,6 +164,9 @@ public class MiniMindBlock extends Module {
                 totalBalanceLoss += layerOutput.getBalanceLoss();
             }
         } else {
+            if (layers == null) {
+                throw new IllegalStateException("标准模式配置为false，但layers为null");
+            }
             for (int i = 0; i < layers.size(); i++) {
                 MiniMindTransformerLayer layer = layers.get(i);
                 KVCache kvCache = (kvCaches != null && i < kvCaches.size()) ? kvCaches.get(i) : null;

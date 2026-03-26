@@ -233,9 +233,15 @@ public class DPOTrainer extends BaseTrainer {
         Variable maskVar = new Variable(promptMask);
         
         // 1. 参考模型前向传播 (不需要梯度，使用 detached 计算)
+        // 修复：在参考模型前向传播前设置training=false，确保不计算梯度
         referenceModel.setTraining(false);
         Variable refChosenLogits = referenceModel.predict(new Variable(chosenInput));
         Variable refRejectedLogits = referenceModel.predict(new Variable(rejectedInput));
+        
+        // 确保参考模型的输出不参与梯度计算
+        refChosenLogits = refChosenLogits.detach();
+        refRejectedLogits = refRejectedLogits.detach();
+        
         float refChosenLogProb = dpoLoss.computeLogProbsDetached(refChosenLogits, chosenLabelsVar, maskVar);
         float refRejectedLogProb = dpoLoss.computeLogProbsDetached(refRejectedLogits, rejectedLabelsVar, maskVar);
         

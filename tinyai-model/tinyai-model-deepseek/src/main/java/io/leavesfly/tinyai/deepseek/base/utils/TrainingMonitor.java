@@ -128,7 +128,9 @@ public class TrainingMonitor {
         System.out.println("  总用时: " + formatTime(totalTimeMs));
         System.out.println("  最佳Loss: " + String.format("%.6f", bestLoss) + 
                          " (Epoch " + bestEpoch + ")");
-        System.out.println("  最终Loss: " + String.format("%.6f", lossHistory.get(lossHistory.size() - 1)));
+        if (!lossHistory.isEmpty()) {
+            System.out.println("  最终Loss: " + String.format("%.6f", lossHistory.get(lossHistory.size() - 1)));
+        }
         
         // 收敛性分析
         if (lossHistory.size() >= 3) {

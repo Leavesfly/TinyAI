@@ -115,7 +115,18 @@ public class DeepSeekBaseConfig implements Serializable {
     
     /** 权重初始化范围，默认0.02 */
     protected double initializerRange = 0.02;
-    
+
+    // ==================== 缓存字段 ====================
+
+    /** 参数量缓存 */
+    private Long cachedParameterCount;
+
+    /** 激活参数量缓存 */
+    private Long cachedActiveParameterCount;
+
+    /** 激活率缓存 */
+    private Double cachedActivationRatio;
+
     /**
      * 默认构造函数，创建标准DeepSeek基础配置
      */
@@ -227,54 +238,77 @@ public class DeepSeekBaseConfig implements Serializable {
      * @return 估算的总参数数量
      */
     public long estimateParameterCount() {
+        if (cachedParameterCount != null) {
+            return cachedParameterCount;
+        }
+
         // Token嵌入: vocabSize * nEmbd
         long tokenEmbed = (long) vocabSize * nEmbd;
-        
+
         // 位置嵌入: nPositions * nEmbd
         long posEmbed = (long) nPositions * nEmbd;
-        
+
         // 每个Transformer层的参数
-        // 1. MultiHeadAttention: 
-        //    Q: nEmbd * nEmbd + nEmbd
-        //    K: nEmbd * nEmbd + nEmbd
-        //    V: nEmbd * nEmbd + nEmbd
-        //    O: nEmbd * nEmbd + nEmbd
-        long attnParams = 4L * ((long) nEmbd * nEmbd + nEmbd);
-        
-        // 2. LayerNorm1: gamma(nEmbd) + beta(nEmbd)
-        long ln1Params = 2L * nEmbd;
-        
-        // 3. MoE层:
-        //    门控网络: nEmbd * numExperts + numExperts
-        long gatingParams = (long) nEmbd * numExperts + numExperts;
-        
-        //    每个专家的FFN: fc1(nEmbd * expertHiddenDim + expertHiddenDim) + fc2(expertHiddenDim * nEmbd + nEmbd)
-        long paramsPerExpert = (long) nEmbd * expertHiddenDim + expertHiddenDim +
-                                (long) expertHiddenDim * nEmbd + nEmbd;
-        
-        //    所有专家的参数
-        long allExpertsParams = paramsPerExpert * numExperts;
-        
-        //    MoE总参数
-        long moeParams = gatingParams + allExpertsParams;
-        
-        // 4. LayerNorm2: gamma(nEmbd) + beta(nEmbd)
-        long ln2Params = 2L * nEmbd;
-        
+        long attnParams = calculateAttentionParams();
+        long ln1Params = calculateLayerNormParams();
+        long moeParams = calculateMoEParams();
+        long ln2Params = calculateLayerNormParams();
+
         // 每层总参数
         long paramsPerLayer = attnParams + ln1Params + moeParams + ln2Params;
-        
+
         // 所有Transformer层的参数
         long allLayersParams = paramsPerLayer * nLayer;
-        
+
         // 最终LayerNorm: gamma(nEmbd) + beta(nEmbd)
         long finalLnParams = 2L * nEmbd;
-        
-        // 输出投影: nEmbd * vocabSize（通常与token嵌入权重共享）
-        // 这里不重复计算
-        
+
         // 总参数 = 嵌入 + 所有Transformer层 + 最终LN
-        return tokenEmbed + posEmbed + allLayersParams + finalLnParams;
+        cachedParameterCount = tokenEmbed + posEmbed + allLayersParams + finalLnParams;
+        return cachedParameterCount;
+    }
+
+    /**
+     * 计算注意力层参数
+     * 
+     * @return 注意力层参数数量
+     */
+    private long calculateAttentionParams() {
+        // Q: nEmbd * nEmbd + nEmbd
+        // K: nEmbd * nEmbd + nEmbd
+        // V: nEmbd * nEmbd + nEmbd
+        // O: nEmbd * nEmbd + nEmbd
+        return 4L * ((long) nEmbd * nEmbd + nEmbd);
+    }
+
+    /**
+     * 计算LayerNorm层参数
+     * 
+     * @return LayerNorm层参数数量
+     */
+    private long calculateLayerNormParams() {
+        // gamma(nEmbd) + beta(nEmbd)
+        return 2L * nEmbd;
+    }
+
+    /**
+     * 计算MoE层参数
+     * 
+     * @return MoE层参数数量
+     */
+    private long calculateMoEParams() {
+        // 门控网络: nEmbd * numExperts + numExperts
+        long gatingParams = (long) nEmbd * numExperts + numExperts;
+
+        // 每个专家的FFN: fc1(nEmbd * expertHiddenDim + expertHiddenDim) + fc2(expertHiddenDim * nEmbd + nEmbd)
+        long paramsPerExpert = (long) nEmbd * expertHiddenDim + expertHiddenDim +
+                                (long) expertHiddenDim * nEmbd + nEmbd;
+
+        // 所有专家的参数
+        long allExpertsParams = paramsPerExpert * numExperts;
+
+        // MoE总参数
+        return gatingParams + allExpertsParams;
     }
     
     /**
@@ -283,36 +317,53 @@ public class DeepSeekBaseConfig implements Serializable {
      * @return 激活的参数数量
      */
     public long estimateActiveParameterCount() {
+        if (cachedActiveParameterCount != null) {
+            return cachedActiveParameterCount;
+        }
+
         // Token嵌入
         long tokenEmbed = (long) vocabSize * nEmbd;
-        
+
         // 位置嵌入
         long posEmbed = (long) nPositions * nEmbd;
-        
+
         // 每层的激活参数
-        // 注意力层参数（全部激活）
-        long attnParams = 4L * ((long) nEmbd * nEmbd + nEmbd);
-        long ln1Params = 2L * nEmbd;
-        
-        // MoE层激活参数（仅激活Top-K个专家）
-        long gatingParams = (long) nEmbd * numExperts + numExperts;
-        long paramsPerExpert = (long) nEmbd * expertHiddenDim + expertHiddenDim +
-                                (long) expertHiddenDim * nEmbd + nEmbd;
-        long activeExpertsParams = paramsPerExpert * topK;
-        long activeMoeParams = gatingParams + activeExpertsParams;
-        
-        long ln2Params = 2L * nEmbd;
-        
+        long attnParams = calculateAttentionParams();
+        long ln1Params = calculateLayerNormParams();
+        long activeMoeParams = calculateActiveMoEParams();
+        long ln2Params = calculateLayerNormParams();
+
         // 每层激活参数
         long activeParamsPerLayer = attnParams + ln1Params + activeMoeParams + ln2Params;
-        
+
         // 所有层的激活参数
         long allLayersActiveParams = activeParamsPerLayer * nLayer;
-        
+
         // 最终LayerNorm
         long finalLnParams = 2L * nEmbd;
-        
-        return tokenEmbed + posEmbed + allLayersActiveParams + finalLnParams;
+
+        cachedActiveParameterCount = tokenEmbed + posEmbed + allLayersActiveParams + finalLnParams;
+        return cachedActiveParameterCount;
+    }
+
+    /**
+     * 计算激活的MoE层参数（仅Top-K个专家）
+     * 
+     * @return 激活的MoE层参数数量
+     */
+    private long calculateActiveMoEParams() {
+        // 门控网络: nEmbd * numExperts + numExperts
+        long gatingParams = (long) nEmbd * numExperts + numExperts;
+
+        // 每个专家的FFN: fc1(nEmbd * expertHiddenDim + expertHiddenDim) + fc2(expertHiddenDim * nEmbd + nEmbd)
+        long paramsPerExpert = (long) nEmbd * expertHiddenDim + expertHiddenDim +
+                                (long) expertHiddenDim * nEmbd + nEmbd;
+
+        // 仅激活Top-K个专家
+        long activeExpertsParams = paramsPerExpert * topK;
+
+        // 激活的MoE总参数
+        return gatingParams + activeExpertsParams;
     }
     
     /**
@@ -321,7 +372,23 @@ public class DeepSeekBaseConfig implements Serializable {
      * @return 激活率百分比（0-100之间）
      */
     public double getActivationRatio() {
-        return (double) estimateActiveParameterCount() / estimateParameterCount() * 100;
+        if (cachedActivationRatio != null) {
+            return cachedActivationRatio;
+        }
+
+        cachedActivationRatio = (double) estimateActiveParameterCount() / estimateParameterCount() * 100;
+        return cachedActivationRatio;
+    }
+
+    /**
+     * 清除缓存
+     * 
+     * 当配置参数发生变化时调用此方法清除缓存
+     */
+    public void clearCache() {
+        cachedParameterCount = null;
+        cachedActiveParameterCount = null;
+        cachedActivationRatio = null;
     }
     
     // ==================== Getter和Setter方法 ====================
@@ -332,6 +399,7 @@ public class DeepSeekBaseConfig implements Serializable {
     
     public void setVocabSize(int vocabSize) {
         this.vocabSize = vocabSize;
+        clearCache();
     }
     
     public int getNPositions() {
@@ -340,6 +408,7 @@ public class DeepSeekBaseConfig implements Serializable {
     
     public void setNPositions(int nPositions) {
         this.nPositions = nPositions;
+        clearCache();
     }
     
     public int getNEmbd() {
@@ -348,6 +417,7 @@ public class DeepSeekBaseConfig implements Serializable {
     
     public void setNEmbd(int nEmbd) {
         this.nEmbd = nEmbd;
+        clearCache();
     }
     
     public int getNLayer() {
@@ -356,6 +426,7 @@ public class DeepSeekBaseConfig implements Serializable {
     
     public void setNLayer(int nLayer) {
         this.nLayer = nLayer;
+        clearCache();
     }
     
     public int getNHead() {
@@ -364,6 +435,7 @@ public class DeepSeekBaseConfig implements Serializable {
     
     public void setNHead(int nHead) {
         this.nHead = nHead;
+        clearCache();
     }
     
     public int getNInner() {
@@ -372,6 +444,7 @@ public class DeepSeekBaseConfig implements Serializable {
     
     public void setNInner(int nInner) {
         this.nInner = nInner;
+        clearCache();
     }
     
     public String getActivationFunction() {
@@ -388,6 +461,7 @@ public class DeepSeekBaseConfig implements Serializable {
     
     public void setNumExperts(int numExperts) {
         this.numExperts = numExperts;
+        clearCache();
     }
     
     public int getTopK() {
@@ -396,6 +470,7 @@ public class DeepSeekBaseConfig implements Serializable {
     
     public void setTopK(int topK) {
         this.topK = topK;
+        clearCache();
     }
     
     public int getNumSharedExperts() {
@@ -404,6 +479,7 @@ public class DeepSeekBaseConfig implements Serializable {
     
     public void setNumSharedExperts(int numSharedExperts) {
         this.numSharedExperts = numSharedExperts;
+        clearCache();
     }
     
     public int getExpertHiddenDim() {
@@ -412,6 +488,7 @@ public class DeepSeekBaseConfig implements Serializable {
     
     public void setExpertHiddenDim(int expertHiddenDim) {
         this.expertHiddenDim = expertHiddenDim;
+        clearCache();
     }
     
     public double getLoadBalanceLossWeight() {

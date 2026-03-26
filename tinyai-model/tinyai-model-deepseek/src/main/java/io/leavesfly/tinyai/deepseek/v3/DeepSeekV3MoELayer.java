@@ -259,33 +259,35 @@ public class DeepSeekV3MoELayer extends Module {
     }
     
     /**
-     * 获取Top-K索引
+     * 获取Top-K索引（最小堆实现，O(n·log k) 优于原 O(n·k) 选择排序）
      */
     private int[] getTopKIndices(float[] values, int k) {
-        int[] indices = new int[k];
-        boolean[] used = new boolean[values.length];
+        int effectiveK = Math.min(k, values.length);
         
-        for (int i = 0; i < k; i++) {
-            int maxIdx = -1;
-            float maxVal = Float.NEGATIVE_INFINITY;
-            
-            for (int j = 0; j < values.length; j++) {
-                if (!used[j] && values[j] > maxVal) {
-                    maxVal = values[j];
-                    maxIdx = j;
-                }
+        // 最小堆：堆顶是当前Top-K中最小的，方便淘汰
+        java.util.PriorityQueue<int[]> minHeap = new java.util.PriorityQueue<>(
+                effectiveK + 1, (a, b) -> Float.compare(values[a[0]], values[b[0]]));
+        
+        for (int i = 0; i < values.length; i++) {
+            minHeap.offer(new int[]{i});
+            if (minHeap.size() > effectiveK) {
+                minHeap.poll();
             }
-            
-            indices[i] = maxIdx;
-            used[maxIdx] = true;
         }
         
-        return indices;
+        // 按值从大到小排列
+        int[] result = new int[effectiveK];
+        for (int i = effectiveK - 1; i >= 0; i--) {
+            result[i] = minHeap.poll()[0];
+        }
+        return result;
     }
     
     /**
-     * 计算所有路由专家的输出并按 TopK 权重加权组合
-     * 策略：让所有专家批量处理整个 batch，再根据 TopK 权重做稀疏累加，保证梯度回传
+     * 仅计算被 Top-K 选中的路由专家输出并加权组合（延迟计算优化）
+     * 
+     * 优化：先收集哪些专家被选中，仅对被选中的专家执行 forward，
+     * 避免未被选中的专家做无效计算，减少约 (1 - topK/numExperts) 的计算量。
      */
     private Variable computeExpertOutputs(Variable input, TopKResult topKResult) {
         Shape inputShape = input.getValue().getShape();
@@ -293,36 +295,35 @@ public class DeepSeekV3MoELayer extends Module {
         int seqLen    = inputShape.getDimension(1);
         int nEmbd     = inputShape.getDimension(2);
 
-        // 所有路由专家批量计算各自输出
-        List<Variable> allExpertOutputs = new ArrayList<>();
-        for (ExpertNetwork expert : routedExperts) {
-            allExpertOutputs.add(expert.forward(input));
+        // 收集被选中的专家集合
+        boolean[] selectedExperts = new boolean[routedExperts.size()];
+        for (int b = 0; b < batchSize; b++) {
+            for (int t = 0; t < seqLen; t++) {
+                for (int ki = 0; ki < config.getTopK(); ki++) {
+                    selectedExperts[topKResult.indices[b][t][ki]] = true;
+                }
+            }
         }
 
-        return createWeightedExpertCombination(allExpertOutputs, topKResult, batchSize, seqLen, nEmbd);
-    }
-    
-    /**
-     * 根据 TopK 结果对各专家输出进行稀疏加权累加
-     * 权重矩阵形状为 [batch, seq, 1]，通过广播与 [batch, seq, nEmbd] 相乘
-     * 未被任何位置选中的专家直接跳过，减少无效计算
-     */
-    private Variable createWeightedExpertCombination(
-            List<Variable> expertOutputs,
-            TopKResult topKResult,
-            int batchSize,
-            int seqLen,
-            int nEmbd) {
+        // 仅对被选中的专家执行 forward（延迟计算）
+        Variable[] expertOutputCache = new Variable[routedExperts.size()];
+        for (int e = 0; e < routedExperts.size(); e++) {
+            if (selectedExperts[e]) {
+                expertOutputCache[e] = routedExperts.get(e).forward(input);
+            }
+        }
 
+        // 加权组合
         Variable output = new Variable(NdArray.zeros(Shape.of(batchSize, seqLen, nEmbd)));
-
-        for (int expertIdx = 0; expertIdx < expertOutputs.size(); expertIdx++) {
+        for (int expertIdx = 0; expertIdx < routedExperts.size(); expertIdx++) {
+            if (!selectedExperts[expertIdx]) {
+                continue;
+            }
             Variable weightMask = createExpertWeightMask(expertIdx, topKResult, batchSize, seqLen);
             if (isZeroMask(weightMask)) {
                 continue;
             }
-            // 广播乘法: [batch, seq, 1] × [batch, seq, nEmbd]
-            output = output.add(expertOutputs.get(expertIdx).mul(weightMask));
+            output = output.add(expertOutputCache[expertIdx].mul(weightMask));
         }
 
         return output;

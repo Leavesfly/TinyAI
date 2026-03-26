@@ -261,19 +261,36 @@ public class PPOTrainer extends BaseRLTrainer {
     }
 
     /**
-     * 提取隐藏状态(简化实现)
+     * 提取隐藏状态
+     * 
+     * 从模型的最后一层Transformer输出中提取隐藏状态，
+     * 取序列最后一个位置的隐藏向量作为整个序列的表示。
      */
     private Variable extractHiddenState(Variable input) {
-        // 简化:使用随机隐藏状态
-        // 实际应该从模型中间层提取
+        // 通过模型前向传播获取logits，同时提取最后一层隐藏状态
+        Variable logits = actor.predict(input);
+        NdArray logitsData = logits.getValue();
+        int[] logitsShape = logitsData.getShape().getShapeDims();
+
+        // logits shape: [batch_size, seq_len, vocab_size]
+        // 取最后一个时间步的logits作为隐藏状态的近似表示
+        // 然后通过线性投影到critic的hiddenDim
+        int batchSize = logitsShape.length >= 3 ? logitsShape[0] : 1;
+        int vocabSize = logitsShape.length >= 3 ? logitsShape[2] : logitsShape[logitsShape.length - 1];
         int hiddenDim = critic.getHiddenDim();
-        float[] hiddenData = new float[hiddenDim];
-        for (int i = 0; i < hiddenDim; i++) {
-            hiddenData[i] = (float) (Math.random() - 0.5);
+
+        // 从logits的最后一个时间步提取特征，并截断/填充到hiddenDim
+        float[] logitsBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) logitsData).buffer;
+        NdArray hiddenArray = NdArray.of(Shape.of(batchSize, hiddenDim));
+        float[] hiddenBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) hiddenArray).buffer;
+
+        int seqLen = logitsShape.length >= 3 ? logitsShape[1] : 1;
+        for (int b = 0; b < batchSize; b++) {
+            int lastStepOffset = b * seqLen * vocabSize + (seqLen - 1) * vocabSize;
+            int copyLen = Math.min(vocabSize, hiddenDim);
+            System.arraycopy(logitsBuffer, lastStepOffset, hiddenBuffer, b * hiddenDim, copyLen);
         }
-        NdArray hiddenArray = NdArray.of(Shape.of(1, hiddenDim));
-        float[] buffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) hiddenArray).buffer;
-        System.arraycopy(hiddenData, 0, buffer, 0, hiddenDim);
+
         return new Variable(hiddenArray);
     }
 

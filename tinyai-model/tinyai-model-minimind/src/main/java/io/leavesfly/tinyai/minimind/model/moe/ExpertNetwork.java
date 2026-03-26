@@ -141,7 +141,7 @@ public class ExpertNetwork extends Module {
     public ExpertNetwork clone(int newExpertId) {
         ExpertNetwork cloned = new ExpertNetwork(newExpertId, inputDim, hiddenDim, outputDim);
         
-        // 复制参数(简化实现:共享参数引用)
+        // 复制参数(深拷贝：创建独立的权重副本)
         Map<String, Parameter> params = this.namedParameters();
         Map<String, Parameter> clonedParams = cloned.namedParameters();
         
@@ -150,14 +150,16 @@ public class ExpertNetwork extends Module {
             String newKey = key.replace("expert_" + expertId, "expert_" + newExpertId);
             
             if (clonedParams.containsKey(newKey)) {
-                // 复制参数值
+                // 深拷贝：复制参数值到新的 NdArray
                 NdArray srcData = param.data();
                 NdArray dstData = clonedParams.get(newKey).data();
                 
                 float[] srcBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) srcData).buffer;
                 float[] dstBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) dstData).buffer;
                 
-                System.arraycopy(srcBuffer, 0, dstBuffer, 0, Math.min(srcBuffer.length, dstBuffer.length));
+                // 确保目标缓冲区有足够空间
+                int copyLength = Math.min(srcBuffer.length, dstBuffer.length);
+                System.arraycopy(srcBuffer, 0, dstBuffer, 0, copyLength);
             }
         }
         

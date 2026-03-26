@@ -96,8 +96,9 @@ public class SFTTrainer extends BaseTrainer {
         
         // 检查异常值
         if (Float.isNaN(lossValue) || Float.isInfinite(lossValue)) {
-            System.err.println("警告: 损失值异常 (" + lossValue + "), 跳过此步");
-            return 0.0f;
+            System.err.println("警告: 损失值异常 (" + lossValue + "), 跳过此batch");
+            // 跳过此batch，不进行参数更新
+            return Float.NaN;  // 返回NaN标识跳过，训练循环应处理此情况
         }
         
         // 清除梯度

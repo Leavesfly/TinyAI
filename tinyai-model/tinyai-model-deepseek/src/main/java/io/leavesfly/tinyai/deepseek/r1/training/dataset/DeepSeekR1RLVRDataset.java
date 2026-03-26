@@ -24,6 +24,9 @@ import java.util.List;
  */
 public class DeepSeekR1RLVRDataset extends DeepSeekBaseDataset<DeepSeekR1RLVRDataset.Batch> {
     
+    /** 词汇表模数大小，用于字符到 token ID 的映射 */
+    private static final int VOCAB_MOD_SIZE = 1000;
+    
     private final List<String> questions;       // 问题文本
     private final List<String> groundTruths;    // 标准答案
     private final List<String> verifierTypes;   // 验证器类型
@@ -139,6 +142,7 @@ public class DeepSeekR1RLVRDataset extends DeepSeekBaseDataset<DeepSeekR1RLVRDat
      * @return token ID 数组
      */
     private int[] simpleTokenize(String text) {
+        // 添加 null 检查
         if (text == null || text.isEmpty()) {
             return new int[]{0};
         }
@@ -147,7 +151,8 @@ public class DeepSeekR1RLVRDataset extends DeepSeekBaseDataset<DeepSeekR1RLVRDat
         int length = Math.min(chars.length, 100);
         int[] tokens = new int[length];
         for (int i = 0; i < length; i++) {
-            tokens[i] = chars[i] % 1000;
+            // 使用常量 VOCAB_MOD_SIZE 替代魔法数字 1000
+            tokens[i] = chars[i] % VOCAB_MOD_SIZE;
         }
         return tokens;
     }

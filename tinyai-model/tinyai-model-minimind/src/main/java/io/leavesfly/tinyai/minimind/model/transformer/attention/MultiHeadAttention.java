@@ -97,7 +97,7 @@ public class MultiHeadAttention extends Module {
     /**
      * 缓存的掩码大小：记录缓存的掩码对应的序列长度
      */
-    private int cachedMaskSize = -1;
+    private long cachedMaskSize = -1;
 
     /**
      * 构造多头注意力层
@@ -409,8 +409,10 @@ public class MultiHeadAttention extends Module {
                                         int qSeqLen, int kvSeqLen, int startPos) {
         // scores: [batch, numHeads, qSeqLen, kvSeqLen]
         
-        // 缓存键必须包含 batchSize，避免不同 batch 大小时复用错误形状的掩码
-        int cacheKey = batchSize * 100000000 + qSeqLen * 10000 + kvSeqLen;
+        // 使用 Long 类型的缓存键，使用更大的乘数避免冲突
+        long cacheKey = (long) batchSize * 1_000_000L * 1_000_000L + 
+                        (long) qSeqLen * 1_000_000L + 
+                        (long) kvSeqLen;
         
         // 检查缓存是否有效
         if (cachedMask != null && cachedMaskSize == cacheKey) {

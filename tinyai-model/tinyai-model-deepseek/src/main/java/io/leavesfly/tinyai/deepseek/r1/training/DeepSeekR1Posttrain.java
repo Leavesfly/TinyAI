@@ -122,21 +122,64 @@ public class DeepSeekR1Posttrain {
             
             System.out.printf("Epoch %d 验证损失: %.4f%n", currentEpoch + 1, valLoss);
             
-            if (valLoss < bestValLoss) {
-                bestValLoss = valLoss;
-                stepsWithoutImprovement = 0;
-                saveCheckpoint("best");
-                System.out.println("✓ 保存最佳模型 (val_loss: " + String.format("%.4f", bestValLoss) + ")");
-            } else {
-                stepsWithoutImprovement++;
-                if (stepsWithoutImprovement >= patience) {
-                    System.out.println("触发早停,训练结束");
-                    break;
-                }
-            }
+//            if (valLoss < bestValLoss) {
+//                bestValLoss = valLoss;
+//                stepsWithoutImprovement = 0;
+//                saveCheckpoint("best");
+//                System.out.println("✓ 保存最佳模型 (val_loss: " + String.format("%.4f", bestValLoss) + ")");
+//            } else {
+//                stepsWithoutImprovement++;
+//                if (stepsWithoutImprovement >= patience) {
+//                    System.out.println("触发早停,训练结束");
+//                    break;
+//                }
+//            }
         }
         
         System.out.println("\n后训练完成! 最佳验证损失: " + bestValLoss);
+    }
+    
+    /**
+     * 计算带掩码的损失
+     * 
+     * @param batch 训练批次
+     * @param logits 模型输出的 logits
+     * @return 计算后的损失变量
+     */
+    private Variable computeMaskedLoss(DeepSeekR1Dataset.Batch batch, Variable logits) {
+        // SoftmaxCE只支持2D输入，需要reshape
+        int[] logitsShape = logits.getValue().getShape().getShapeDims();
+        int batchSize = logitsShape[0];
+        int seqLen = logitsShape[1];
+        int vocabSize = logitsShape[2];
+        
+        Variable logits2D = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
+        Variable targetVar = new Variable(batch.getTargetIds().reshape(Shape.of(batchSize * seqLen, 1)));
+        
+        Variable loss;
+        if (batch.hasLossMask()) {
+            // Answer-only Loss: 使用逐元素 loss 乘以 mask，只对 assistant 回复部分计算梯度
+            Variable elementWiseLoss = elementWiseLossFunction.loss(targetVar, logits2D);
+            
+            // 将 mask reshape 为 [batchSize * seqLen, 1] 与逐元素 loss 对齐
+            NdArray maskFlat = batch.getLossMask().reshape(Shape.of(batchSize * seqLen, 1));
+            Variable maskVar = new Variable(maskFlat);
+            
+            // masked loss = elementWiseLoss * mask
+            Variable maskedLoss = elementWiseLoss.mul(maskVar);
+            
+            // 计算有效位置数量，避免除以零
+            float maskSum = maskFlat.sum().getNumber().floatValue();
+            float effectiveCount = Math.max(maskSum, 1.0f);
+            
+            // 对有效位置求平均: sum(maskedLoss) / count(mask==1)
+            loss = maskedLoss.sum().div(new Variable(NdArray.of(new float[]{effectiveCount})));
+        } else {
+            // 无 mask 时使用标准 MEAN 归约
+            loss = lossFunction.loss(targetVar, logits2D);
+        }
+        
+        return loss;
     }
     
     private void trainOneEpoch() {
@@ -145,43 +188,11 @@ public class DeepSeekR1Posttrain {
         while (trainDataset.hasNext()) {
             DeepSeekR1Dataset.Batch batch = trainDataset.nextBatch();
             
-            NdArray inputIds = batch.getInputIds();
-            NdArray targetIds = batch.getTargetIds();
+            Variable inputIds = new Variable(batch.getInputIds());
+            DeepSeekR1Model.ReasoningResult result = model.performReasoning(inputIds);
             
-            Variable inputVar = new Variable(inputIds);
-            DeepSeekR1Model.ReasoningResult result = model.performReasoning(inputVar);
-            
-            // SoftmaxCE只支持2D输入，需要reshape
-            int[] logitsShape = result.logits.getValue().getShape().getShapeDims();
-            int batchSize = logitsShape[0];
-            int seqLen = logitsShape[1];
-            int vocabSize = logitsShape[2];
-            
-            Variable logits2D = result.logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
-            Variable targetVar = new Variable(targetIds.reshape(Shape.of(batchSize * seqLen, 1)));
-            
-            Variable loss;
-            if (batch.hasLossMask()) {
-                // Answer-only Loss: 使用逐元素 loss 乘以 mask，只对 assistant 回复部分计算梯度
-                Variable elementWiseLoss = elementWiseLossFunction.loss(targetVar, logits2D);
-                
-                // 将 mask reshape 为 [batchSize * seqLen, 1] 与逐元素 loss 对齐
-                NdArray maskFlat = batch.getLossMask().reshape(Shape.of(batchSize * seqLen, 1));
-                Variable maskVar = new Variable(maskFlat);
-                
-                // masked loss = elementWiseLoss * mask
-                Variable maskedLoss = elementWiseLoss.mul(maskVar);
-                
-                // 计算有效位置数量，避免除以零
-                float maskSum = maskFlat.sum().getNumber().floatValue();
-                float effectiveCount = Math.max(maskSum, 1.0f);
-                
-                // 对有效位置求平均: sum(maskedLoss) / count(mask==1)
-                loss = maskedLoss.sum().div(new Variable(NdArray.of(new float[]{effectiveCount})));
-            } else {
-                // 无 mask 时使用标准 MEAN 归约
-                loss = lossFunction.loss(targetVar, logits2D);
-            }
+            Variable logits = result.logits;
+            Variable loss = computeMaskedLoss(batch, logits);
             
             float lossValue = loss.getValue().getNumber().floatValue();
             float moeLoss = (float) result.moeLoss;
@@ -197,7 +208,7 @@ public class DeepSeekR1Posttrain {
             // 彻底断开计算图，释放内存
             loss.unChainBackward();
             result.logits.unChainBackward();
-            inputVar.unChainBackward();
+            inputIds.unChainBackward();
             
             globalStep++;
             
@@ -221,30 +232,11 @@ public class DeepSeekR1Posttrain {
         while (valDataset.hasNext()) {
             DeepSeekR1Dataset.Batch batch = valDataset.nextBatch();
             
-            Variable inputVar = new Variable(batch.getInputIds());
-            DeepSeekR1Model.ReasoningResult result = model.performReasoning(inputVar);
+            Variable inputIds = new Variable(batch.getInputIds());
+            DeepSeekR1Model.ReasoningResult result = model.performReasoning(inputIds);
             
-            // SoftmaxCE只支持2D输入，需要reshape
-            int[] logitsShape = result.logits.getValue().getShape().getShapeDims();
-            int batchSize = logitsShape[0];
-            int seqLen = logitsShape[1];
-            int vocabSize = logitsShape[2];
-            
-            Variable logits2D = result.logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
-            Variable targetVar = new Variable(batch.getTargetIds().reshape(Shape.of(batchSize * seqLen, 1)));
-            
-            Variable loss;
-            if (batch.hasLossMask()) {
-                Variable elementWiseLoss = elementWiseLossFunction.loss(targetVar, logits2D);
-                NdArray maskFlat = batch.getLossMask().reshape(Shape.of(batchSize * seqLen, 1));
-                Variable maskVar = new Variable(maskFlat);
-                Variable maskedLoss = elementWiseLoss.mul(maskVar);
-                float maskSum = maskFlat.sum().getNumber().floatValue();
-                float effectiveCount = Math.max(maskSum, 1.0f);
-                loss = maskedLoss.sum().div(new Variable(NdArray.of(new float[]{effectiveCount})));
-            } else {
-                loss = lossFunction.loss(targetVar, logits2D);
-            }
+            Variable logits = result.logits;
+            Variable loss = computeMaskedLoss(batch, logits);
             
             totalLoss += loss.getValue().getNumber().floatValue();
             count++;
@@ -252,7 +244,7 @@ public class DeepSeekR1Posttrain {
             // 验证时也需要释放计算图
             loss.unChainBackward();
             result.logits.unChainBackward();
-            inputVar.unChainBackward();
+            inputIds.unChainBackward();
         }
         
         valDataset.reset();
@@ -272,7 +264,8 @@ public class DeepSeekR1Posttrain {
         
         totalNorm = Math.sqrt(totalNorm);
         
-        if (totalNorm > maxGradNorm) {
+        // 当 totalNorm 为 0 时跳过裁剪，避免除零
+        if (totalNorm > 0.0 && totalNorm > maxGradNorm) {
             float scale = (float) (maxGradNorm / totalNorm);
             for (Parameter param : params.values()) {
                 if (param.grad() != null) {

@@ -244,6 +244,14 @@ public class MiniMindModel extends Model {
         float[] lastLogits = new float[vocabSize];
 
         int offset = (batchSize - 1) * seqLen * vocabSize + (seqLen - 1) * vocabSize;
+        
+        // 边界检查：确保不会越界访问
+        if (offset + vocabSize > logitsData.length) {
+            throw new IllegalArgumentException(String.format(
+                "提取last logits时越界: offset=%d, vocabSize=%d, arrayLength=%d",
+                offset, vocabSize, logitsData.length));
+        }
+        
         System.arraycopy(logitsData, offset, lastLogits, 0, vocabSize);
 
         return NdArray.of(lastLogits, Shape.of(vocabSize));

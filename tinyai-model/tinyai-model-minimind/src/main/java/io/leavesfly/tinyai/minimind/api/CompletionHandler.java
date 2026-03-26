@@ -99,12 +99,13 @@ public class CompletionHandler implements HttpHandler {
     /**
      * 生成文本（集成实际的MiniMind模型）
      */
-    private String generateText(String prompt, int maxTokens, double temperature, double topP) {
+    private String generateText(String prompt, int maxTokens, double temperature, double topP) throws IOException {
+        if (SharedModelHolder.getModel() == null || SharedModelHolder.getTokenizer() == null) {
+            sendError(null, 503, "Model not initialized");
+            throw new IOException("Model not initialized");
+        }
+            
         try {
-            if (SharedModelHolder.getModel() == null || SharedModelHolder.getTokenizer() == null) {
-                return "[Error: Model not initialized]";
-            }
-                
             // 1. 编码输入
             List<Integer> promptIds = SharedModelHolder.getTokenizer().encode(prompt, false, false);
             int[] promptArray = promptIds.stream().mapToInt(i -> i).toArray();
@@ -135,7 +136,7 @@ public class CompletionHandler implements HttpHandler {
                 
         } catch (Exception e) {
             e.printStackTrace();
-            return "[Error: " + e.getMessage() + "]";
+            throw new IOException("Failed to generate text: " + e.getMessage(), e);
         }
     }
     

@@ -438,8 +438,17 @@ public class DeepSeekR1Pretrain {
                         lossHistory.add(result.loss);
                         reasoningConfidenceHistory.add(result.confidence);
                     }
-                } catch (Exception e) {
-                    // 忽略失败的批次
+                } catch (ExecutionException e) {
+                    // 解包 ExecutionException 获取原始异常
+                    Throwable cause = e.getCause();
+                    System.err.println("⚠️ 并行批次执行异常: " + (cause != null ? cause.getMessage() : e.getMessage()));
+                    if (cause != null) {
+                        cause.printStackTrace();
+                    }
+                } catch (InterruptedException e) {
+                    // 处理线程中断
+                    System.err.println("⚠️ 并行批次处理被中断: " + e.getMessage());
+                    Thread.currentThread().interrupt();
                 }
             }
             

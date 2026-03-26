@@ -103,10 +103,11 @@ public abstract class DeepSeekBaseDataset<T> {
             int[] sequence = sequences.get(dataIndex);
             
             // 有效长度：sequence 中可用于构建 input/target 对的 token 数
-            int validLen = Math.min(sequence.length - 1, maxSeqLength);
-            if (validLen <= 0) {
+            // 序列至少需要2个token才能构成 input/target 对
+            if (sequence.length < 2) {
                 continue;
             }
+            int validLen = Math.min(sequence.length - 1, maxSeqLength);
             
             // 输入: sequence[0 .. validLen-1]
             for (int j = 0; j < validLen; j++) {

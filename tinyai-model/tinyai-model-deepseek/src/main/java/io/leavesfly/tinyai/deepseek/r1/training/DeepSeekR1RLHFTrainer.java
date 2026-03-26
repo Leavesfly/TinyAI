@@ -130,11 +130,22 @@ public class DeepSeekR1RLHFTrainer {
         List<float[]> lossMasks = r1Dataset.getLossMasks();
         List<Float> rewards = r1Dataset.getRewardsList();
         
+        // 添加长度一致性校验
         if (!lossMasks.isEmpty() && !rewards.isEmpty()) {
+            if (lossMasks.size() != sequences.size() || rewards.size() != sequences.size()) {
+                throw new IllegalArgumentException(
+                    String.format("数据集长度不一致: sequences=%d, lossMasks=%d, rewards=%d",
+                        sequences.size(), lossMasks.size(), rewards.size()));
+            }
             // RLHF 模式：带 loss mask + 奖励
             return new DeepSeekV3Dataset(sequences, taskTypes, lossMasks, rewards,
                                          maxSeqLength, batchSize, true);
         } else if (!lossMasks.isEmpty()) {
+            if (lossMasks.size() != sequences.size()) {
+                throw new IllegalArgumentException(
+                    String.format("数据集长度不一致: sequences=%d, lossMasks=%d",
+                        sequences.size(), lossMasks.size()));
+            }
             // SFT 模式：仅带 loss mask
             return new DeepSeekV3Dataset(sequences, taskTypes, lossMasks,
                                          maxSeqLength, batchSize, true, true);

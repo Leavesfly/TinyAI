@@ -41,6 +41,11 @@ public class DeepSeekV3Attention extends Module {
     // RoPE 旋转位置编码（作用于每个 head 的维度）
     private final RotaryEmbedding rotaryEmbedding;
 
+    // Permute 对象缓存（避免每次 forward 都创建新对象）
+    private static final Permute SPLIT_HEADS_PERMUTE = new Permute(0, 2, 1, 3);
+    private static final Permute MERGE_HEADS_PERMUTE = new Permute(0, 2, 1, 3);
+    private static final Permute KEY_TRANSPOSE_PERMUTE = new Permute(0, 1, 3, 2);
+
     /**
      * 构造函数
      *
@@ -126,14 +131,14 @@ public class DeepSeekV3Attention extends Module {
      */
     private Variable splitHeads(Variable x, int batchSize, int seqLen) {
         Variable reshaped = x.reshape(Shape.of(batchSize, seqLen, numHeads, headDim));
-        return new Permute(0, 2, 1, 3).call(reshaped);
+        return SPLIT_HEADS_PERMUTE.call(reshaped);
     }
 
     /**
      * 合并多头: [B, H, L, D_k] -> [B, L, D]
      */
     private Variable mergeHeads(Variable x, int batchSize, int seqLen) {
-        Variable permuted = new Permute(0, 2, 1, 3).call(x);
+        Variable permuted = MERGE_HEADS_PERMUTE.call(x);
         return permuted.reshape(Shape.of(batchSize, seqLen, dModel));
     }
 
@@ -151,7 +156,7 @@ public class DeepSeekV3Attention extends Module {
     private Variable scaledDotProductAttention(Variable queryTensor, Variable keyTensor,
                                                Variable valueTensor, Variable causalMask) {
         // Q · K^T
-        Variable keyTransposed = new Permute(0, 1, 3, 2).call(keyTensor);
+        Variable keyTransposed = KEY_TRANSPOSE_PERMUTE.call(keyTensor);
         Variable scores = queryTensor.matMul(keyTransposed);
 
         // 缩放

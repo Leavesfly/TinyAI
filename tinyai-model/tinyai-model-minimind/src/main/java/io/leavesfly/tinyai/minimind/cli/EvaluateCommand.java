@@ -112,17 +112,14 @@ public class EvaluateCommand implements Command {
             double avgInferenceTime = (totalInferenceTime / (sampleCount * 1_000_000.0));  // ms
             double throughput = (totalTokens * 1000.0) / avgInferenceTime;  // tokens/s
             
-            // 困惑度（示例值）
-            double avgLoss = 3.5;  // 随机初始化模型的典型值
+            // 困惑度（注意：这是随机初始化模型的估计值）
+            // TODO: 需要实际通过模型前向传播计算loss，当前使用典型估计值
+            double avgLoss = 3.5;  // 随机初始化模型的典型值，实际训练后应显著降低
             double perplexity = Math.exp(avgLoss);
             
             System.out.println("评估指标:");
-            System.out.println("  - 困惑度(Perplexity): " + String.format("%.2f", perplexity));
-            System.out.println("  - 平均损失(Loss): " + String.format("%.4f", avgLoss));
-            System.out.println("  - 准确率(Accuracy): N/A (需要标注数据)");
-            System.out.println("  - 推理速度: " + String.format("%.2f", throughput) + " tokens/s");
-            System.out.println("  - 平均延迟: " + String.format("%.2f", avgInferenceTime / sampleCount) + " ms");
-            System.out.println("  - 评估样本数: " + sampleCount);
+            System.out.println("  - 困惑度(Perplexity): " + String.format("%.2f", perplexity) + " (随机初始化模型估计值)");
+            System.out.println("  - 平均损失(Loss): " + String.format("%.4f", avgLoss) + " (随机初始化模型估计值)");
             
             // 5. 评估建议
             System.out.println("\n评估结论:");

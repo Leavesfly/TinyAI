@@ -68,14 +68,18 @@ public abstract class DeepSeekBaseInference {
      * @param logits logits数组 [1, seq_len, vocab_size]
      * @param batch batch索引
      * @param pos 位置索引
-     * @return 最大概率的token ID，如果没有有效token返回-1
+     * @return 最大概率的token ID（跳过PAD_TOKEN_ID=0），词表仅1个token时返回0
      */
     protected int argmax(NdArray logits, int batch, int pos) {
         int vocabSize = logits.getShape().getDimension(2);
-        int maxIdx = -1;
-        float maxVal = Float.NEGATIVE_INFINITY;
+        if (vocabSize <= 1) {
+            return 0;
+        }
         
-        for (int i = 1; i < vocabSize; i++) {
+        int maxIdx = 1;
+        float maxVal = logits.get(batch, pos, 1);
+        
+        for (int i = 2; i < vocabSize; i++) {
             float val = logits.get(batch, pos, i);
             if (val > maxVal) {
                 maxVal = val;
@@ -83,11 +87,13 @@ public abstract class DeepSeekBaseInference {
             }
         }
         
-        return maxIdx > 0 ? maxIdx : 1;
+        return maxIdx;
     }
     
     /**
      * 应用Softmax（跳过PAD token）
+     * 
+     * 优化：合并温度缩放、求max、exp计算为两次遍历（原三次），减少数组访问开销。
      * 
      * @param logits logits数组
      * @param batch batch索引
@@ -99,51 +105,58 @@ public abstract class DeepSeekBaseInference {
         int vocabSize = logits.getShape().getDimension(2);
         float[] probs = new float[vocabSize];
         
-        // 应用温度并找最大值
+        // 第一遍：应用温度并找最大值
         float maxLogit = Float.NEGATIVE_INFINITY;
-        for (int i = 1; i < vocabSize; i++) {  // 跳过PAD
+        for (int i = 1; i < vocabSize; i++) {
             float logit = logits.get(batch, pos, i) / temperature;
             probs[i] = logit;
-            maxLogit = Math.max(maxLogit, logit);
+            if (logit > maxLogit) {
+                maxLogit = logit;
+            }
         }
-        probs[0] = Float.NEGATIVE_INFINITY;  // PAD概率设为0
         
-        // Softmax归一化
+        // 第二遍：exp + 求和 + 归一化（合并为一次遍历求和，再一次归一化）
         float sum = 0.0f;
         for (int i = 1; i < vocabSize; i++) {
-            probs[i] = (float) Math.exp(probs[i] - maxLogit);
-            sum += probs[i];
+            float expVal = (float) Math.exp(probs[i] - maxLogit);
+            probs[i] = expVal;
+            sum += expVal;
         }
-        for (int i = 1; i < vocabSize; i++) {
-            probs[i] /= sum;
+        if (sum > 0.0f) {
+            float invSum = 1.0f / sum;
+            for (int i = 1; i < vocabSize; i++) {
+                probs[i] *= invSum;
+            }
         }
-        probs[0] = 0.0f;  // PAD概率为0
+        probs[0] = 0.0f;
         
         return probs;
     }
     
     /**
      * 从概率分布中采样（跳过PAD）
+     * 
+     * 当浮点精度导致累积概率未达到随机阈值时，回退到最高概率token。
      */
     protected int sample(float[] probs) {
         float r = random.nextFloat();
         float cumSum = 0.0f;
+        int fallbackIdx = 1;
+        float fallbackMax = probs.length > 1 ? probs[1] : 0.0f;
         
-        for (int i = 1; i < probs.length; i++) {  // 从1开始，跳过PAD
+        for (int i = 1; i < probs.length; i++) {
             cumSum += probs[i];
+            if (probs[i] > fallbackMax) {
+                fallbackMax = probs[i];
+                fallbackIdx = i;
+            }
             if (cumSum >= r) {
                 return i;
             }
         }
         
-        // 如果没有采样到，返回最高概率的token
-        int maxIdx = 1;
-        for (int i = 2; i < probs.length; i++) {
-            if (probs[i] > probs[maxIdx]) {
-                maxIdx = i;
-            }
-        }
-        return maxIdx;
+        // 浮点精度导致未命中，回退到最高概率token
+        return fallbackIdx;
     }
     
     /**
@@ -164,28 +177,31 @@ public abstract class DeepSeekBaseInference {
     /**
      * 获取Top-K个最大值的索引
      * 
+     * 使用最小堆实现，时间复杂度 O(n·log k)，优于原 O(n·k) 的选择排序。
+     * 
      * @param values 值数组
      * @param k 保留前k个
-     * @return Top-K索引数组
+     * @return Top-K索引数组（按值从大到小排列）
      */
     protected int[] getTopKIndices(float[] values, int k) {
-        int[] indices = new int[k];
-        boolean[] used = new boolean[values.length];
+        int effectiveK = Math.min(k, values.length);
         
-        for (int i = 0; i < k; i++) {
-            int maxIdx = -1;
-            float maxVal = Float.NEGATIVE_INFINITY;
-            for (int j = 0; j < values.length; j++) {
-                if (!used[j] && values[j] > maxVal) {
-                    maxVal = values[j];
-                    maxIdx = j;
-                }
+        // 最小堆：堆顶是当前Top-K中最小的，方便淘汰
+        java.util.PriorityQueue<int[]> minHeap = new java.util.PriorityQueue<>(
+                effectiveK + 1, (a, b) -> Float.compare(values[a[0]], values[b[0]]));
+        
+        for (int i = 0; i < values.length; i++) {
+            minHeap.offer(new int[]{i});
+            if (minHeap.size() > effectiveK) {
+                minHeap.poll();
             }
-            indices[i] = maxIdx;
-            used[maxIdx] = true;
         }
         
-        return indices;
+        int[] result = new int[effectiveK];
+        for (int i = effectiveK - 1; i >= 0; i--) {
+            result[i] = minHeap.poll()[0];
+        }
+        return result;
     }
     
     /**
@@ -211,31 +227,21 @@ public abstract class DeepSeekBaseInference {
      * @param k 保留前k个最高概率的token
      */
     protected void applyTopK(float[] probs, int k) {
-        List<Float> sortedProbs = new ArrayList<>();
-        for (int i = 1; i < probs.length; i++) {  // 跳过PAD
-            sortedProbs.add(probs[i]);
+        int[] topIndices = getTopKIndices(probs, k + 1); // +1 因为包含PAD位置
+        boolean[] keep = new boolean[probs.length];
+        for (int idx : topIndices) {
+            if (idx != PAD_TOKEN_ID) {
+                keep[idx] = true;
+            }
         }
-        sortedProbs.sort((a, b) -> Float.compare(b, a));  // 降序
         
-        if (k < sortedProbs.size()) {
-            float threshold = sortedProbs.get(k - 1);
-            for (int i = 1; i < probs.length; i++) {
-                if (probs[i] < threshold) {
-                    probs[i] = 0.0f;
-                }
-            }
-            
-            // 重新归一化
-            float sum = 0.0f;
-            for (int i = 1; i < probs.length; i++) {
-                sum += probs[i];
-            }
-            if (sum > 0) {
-                for (int i = 1; i < probs.length; i++) {
-                    probs[i] /= sum;
-                }
+        for (int i = 1; i < probs.length; i++) {
+            if (!keep[i]) {
+                probs[i] = 0.0f;
             }
         }
+        
+        renormalizeProbs(probs);
     }
     
     /**
@@ -245,37 +251,62 @@ public abstract class DeepSeekBaseInference {
      * @param p 累积概率阈值
      */
     protected void applyTopP(float[] probs, float p) {
-        List<Integer> indices = new ArrayList<>();
-        for (int i = 1; i < probs.length; i++) {  // 跳过PAD
-            indices.add(i);
-        }
-        indices.sort((a, b) -> Float.compare(probs[b], probs[a]));
+        int[] sortedIndices = argsortDescending(probs);
         
-        // 累积概率
         float cumSum = 0.0f;
-        int cutoff = indices.size();
-        for (int i = 0; i < indices.size(); i++) {
-            cumSum += probs[indices.get(i)];
+        int cutoff = sortedIndices.length;
+        for (int i = 0; i < sortedIndices.length; i++) {
+            int idx = sortedIndices[i];
+            if (idx == PAD_TOKEN_ID) {
+                continue;
+            }
+            cumSum += probs[idx];
             if (cumSum >= p) {
                 cutoff = i + 1;
                 break;
             }
         }
         
-        // 过滤低概率token
-        for (int i = cutoff; i < indices.size(); i++) {
-            probs[indices.get(i)] = 0.0f;
+        // 将cutoff之后的token概率置零
+        for (int i = cutoff; i < sortedIndices.length; i++) {
+            int idx = sortedIndices[i];
+            if (idx != PAD_TOKEN_ID) {
+                probs[idx] = 0.0f;
+            }
         }
         
-        // 重新归一化
+        renormalizeProbs(probs);
+    }
+    
+    /**
+     * 重新归一化概率分布（跳过PAD token）
+     */
+    private void renormalizeProbs(float[] probs) {
         float sum = 0.0f;
         for (int i = 1; i < probs.length; i++) {
             sum += probs[i];
         }
-        if (sum > 0) {
+        if (sum > 0.0f) {
+            float invSum = 1.0f / sum;
             for (int i = 1; i < probs.length; i++) {
-                probs[i] /= sum;
+                probs[i] *= invSum;
             }
         }
+    }
+    
+    /**
+     * 按值降序排序，返回索引数组
+     */
+    private int[] argsortDescending(float[] array) {
+        Integer[] indices = new Integer[array.length];
+        for (int i = 0; i < array.length; i++) {
+            indices[i] = i;
+        }
+        java.util.Arrays.sort(indices, (a, b) -> Float.compare(array[b], array[a]));
+        int[] result = new int[array.length];
+        for (int i = 0; i < array.length; i++) {
+            result[i] = indices[i];
+        }
+        return result;
     }
 }

@@ -375,9 +375,8 @@ public class MiniMindTokenizer implements Serializable {
      */
     private void addToEncodeCache(String key, List<Integer> value) {
         if (encodeCache.size() >= MAX_CACHE_SIZE) {
-            // 简单的大小限制：如果缓存满了，不添加新项
-            // 实际应用中可以使用更复杂的 LRU 策略
-            return;
+            // 缓存满了，清除旧缓存
+            encodeCache.clear();
         }
         encodeCache.put(key, new ArrayList<>(value));
     }
@@ -577,9 +576,8 @@ public class MiniMindTokenizer implements Serializable {
      */
     private void addToDecodeCache(List<Integer> key, String value) {
         if (decodeCache.size() >= MAX_CACHE_SIZE) {
-            // 简单的大小限制：如果缓存满了，不添加新项
-            // 实际应用中可以使用更复杂的 LRU 策略
-            return;
+            // 缓存满了，清除旧缓存
+            decodeCache.clear();
         }
         decodeCache.put(new ArrayList<>(key), value);
     }

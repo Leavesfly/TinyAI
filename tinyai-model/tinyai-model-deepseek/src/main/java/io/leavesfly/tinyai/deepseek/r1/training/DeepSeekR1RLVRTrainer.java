@@ -411,9 +411,17 @@ public class DeepSeekR1RLVRTrainer {
         float std = (float) Math.sqrt(variance + advantageEps);
 
         // 归一化优势 A_i = (r_i - mean) / std
+        // 当 std 过小（组内所有奖励相同）时，使用均匀优势（所有优势设为0）
         float[] advantages = new float[G];
-        for (int i = 0; i < G; i++) {
-            advantages[i] = (rewards[i] - mean) / std;
+        if (std < advantageEps) {
+            // 标准差过小，使用均匀优势
+            for (int i = 0; i < G; i++) {
+                advantages[i] = 0.0f;
+            }
+        } else {
+            for (int i = 0; i < G; i++) {
+                advantages[i] = (rewards[i] - mean) / std;
+            }
         }
         return advantages;
     }

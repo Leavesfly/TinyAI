@@ -248,7 +248,7 @@ public class BPETrainer {
     /**
      * 在所有words中合并指定的token pair
      * 
-     * 优化：原地修改 wordTokens，避免每次创建新 Map
+     * 修复：创建新的 Map 来存储合并后的结果，避免在迭代过程中修改 Map 导致 ConcurrentModificationException
      */
     private void mergePairInWords(
             Map<List<String>, Integer> wordTokens,
@@ -256,13 +256,21 @@ public class BPETrainer {
             String token2,
             String mergedToken) {
         
-        // 使用迭代器原地修改 Map
+        // 创建新的 Map 存储合并后的结果
+        Map<List<String>, Integer> newWordTokens = new HashMap<>();
+        
         for (Map.Entry<List<String>, Integer> entry : wordTokens.entrySet()) {
             List<String> tokens = entry.getKey();
+            int freq = entry.getValue();
             
-            // 原地合并 tokens 中的 pair
-            mergePairInPlace(tokens, token1, token2, mergedToken);
+            // 创建新的 token 列表进行合并
+            List<String> mergedTokens = mergePair(tokens, token1, token2, mergedToken);
+            newWordTokens.put(mergedTokens, freq);
         }
+        
+        // 清空原 Map 并填充新结果
+        wordTokens.clear();
+        wordTokens.putAll(newWordTokens);
     }
     
     /**

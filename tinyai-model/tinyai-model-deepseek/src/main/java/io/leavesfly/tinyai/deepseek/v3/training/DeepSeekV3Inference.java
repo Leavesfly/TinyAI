@@ -17,7 +17,6 @@ import java.util.List;
  * 1. Greedy贪婪解码 - 选择概率最高的token
  * 2. Temperature采样 - 控制生成随机性
  * 3. Top-K采样 - 从Top-K个候选中采样
- *  fremium
  * 4. Top-P(Nucleus)采样 - 累积概率采样
  * 
  * @author leavesfly
@@ -35,6 +34,13 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
     private final int eosTokenId;
     
     /**
+     * 采样策略接口
+     */
+    private interface SamplingStrategy {
+        int sampleToken(NdArray logits, int seqLen, int vocabSize);
+    }
+    
+    /**
      * 构造函数
      */
     public DeepSeekV3Inference(DeepSeekV3Model model) {
@@ -44,16 +50,18 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
         this.eosTokenId = model.getConfig().getVocabSize() - 1;
     }
     
-    // ==================== 贪婪解码 ====================
+    // ==================== 模板方法 ====================
     
     /**
-     * 贪婪解码生成
+     * 使用指定采样策略的自回归生成模板方法
      * 
-     * @param promptIds 提示词token序列 [1, prompt_len]
+     * @param promptIds 提示词token序列
      * @param maxNewTokens 最大生成token数
+     * @param strategy 采样策略
      * @return 生成结果
      */
-    public GenerationResult generateGreedy(int[] promptIds, int maxNewTokens) {
+    private GenerationResult generateWithStrategy(int[] promptIds, int maxNewTokens,
+                                                  SamplingStrategy strategy) {
         List<Integer> generated = new ArrayList<>();
         for (int id : promptIds) {
             generated.add(id);
@@ -73,23 +81,8 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
             int seqLen = currentSeq.length;
             int vocabSize = logits.getShape().getDimension(2);
             
-            // 获取并排序概率，跳过PAD token (id=0)
-            float[] probs = new float[vocabSize];
-            probs[0] = 0.0f;  // PAD token概率设为0
-            float sum = 0.0f;
-            for (int j = 1; j < vocabSize; j++) {
-                float logit = logits.get(0, seqLen - 1, j);
-                probs[j] = (float) Math.exp(logit);
-                sum += probs[j];
-            }
-            
-            // 归一化
-            for (int j = 0; j < vocabSize; j++) {
-                probs[j] /= sum;
-            }
-            
-            // 采样
-            int nextToken = sampleFromProbs(probs);
+            // 使用采样策略选择下一个token
+            int nextToken = strategy.sampleToken(logits, seqLen, vocabSize);
             generated.add(nextToken);
 
             if (nextToken == eosTokenId) break;
@@ -102,6 +95,22 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
         }
         
         return new GenerationResult(toIntArray(generated), reasoningSteps);
+    }
+    
+    // ==================== 贪婪解码 ====================
+    
+    /**
+     * 贪婪解码生成
+     * 
+     * @param promptIds 提示词token序列 [1, prompt_len]
+     * @param maxNewTokens 最大生成token数
+     * @return 生成结果
+     */
+    public GenerationResult generateGreedy(int[] promptIds, int maxNewTokens) {
+        return generateWithStrategy(promptIds, maxNewTokens, (logits, seqLen, vocabSize) -> {
+            // 使用基类的argmax方法
+            return argmax(logits, 0, seqLen - 1);
+        });
     }
     
     // ==================== Temperature采样 ====================
@@ -116,54 +125,12 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
      */
     public GenerationResult generateWithTemperature(int[] promptIds, int maxNewTokens,
                                                     float temperature) {
-        List<Integer> generated = new ArrayList<>();
-        for (int id : promptIds) {
-            generated.add(id);
-        }
-        
-        List<ReasoningStep> reasoningSteps = new ArrayList<>();
-        
-        for (int i = 0; i < maxNewTokens; i++) {
-            if (generated.size() >= maxSeqLen) break;
-
-            int[] currentSeq = toIntArray(generated);
-            Variable inputVar = new Variable(createInputArray(currentSeq));
-            
-            var result = model.predictWithDetails(inputVar);
-            NdArray logits = result.logits.getValue();
-            
-            int seqLen = currentSeq.length;
-            int vocabSize = logits.getShape().getDimension(2);
-            
-            // 应用temperature，跳过PAD token (id=0)
-            float[] probs = new float[vocabSize];
-            probs[0] = 0.0f;  // PAD token概率设为0
-            float sum = 0.0f;
-            for (int j = 1; j < vocabSize; j++) {
-                float logit = logits.get(0, seqLen - 1, j);
-                probs[j] = (float) Math.exp(logit / temperature);
-                sum += probs[j];
-            }
-            
-            // 归一化
-            for (int j = 0; j < vocabSize; j++) {
-                probs[j] /= sum;
-            }
-            
-            // 采样
-            int nextToken = sampleFromProbs(probs);
-            generated.add(nextToken);
-
-            if (nextToken == eosTokenId) break;
-            
-            reasoningSteps.add(new ReasoningStep(
-                i,
-                0.0,  // confidence不再可用（MoE自然涌现）
-                result.avgMoELoss
-            ));
-        }
-        
-        return new GenerationResult(toIntArray(generated), reasoningSteps);
+        return generateWithStrategy(promptIds, maxNewTokens, (logits, seqLen, vocabSize) -> {
+            // 使用基类的applySoftmax方法
+            float[] probs = applySoftmax(logits, 0, seqLen - 1, temperature);
+            // 使用基类的sample方法
+            return sample(probs);
+        });
     }
     
     // ==================== Top-K采样 ====================
@@ -178,81 +145,14 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
      */
     public GenerationResult generateTopK(int[] promptIds, int maxNewTokens,
                                          int topK) {
-        List<Integer> generated = new ArrayList<>();
-        for (int id : promptIds) {
-            generated.add(id);
-        }
-        
-        List<ReasoningStep> reasoningSteps = new ArrayList<>();
-        
-        for (int i = 0; i < maxNewTokens; i++) {
-            if (generated.size() >= maxSeqLen) break;
-
-            int[] currentSeq = toIntArray(generated);
-            Variable inputVar = new Variable(createInputArray(currentSeq));
-            
-            var result = model.predictWithDetails(inputVar);
-            NdArray logits = result.logits.getValue();
-            
-            int seqLen = currentSeq.length;
-            int vocabSize = logits.getShape().getDimension(2);
-            
-            // 获取并排序概率，跳过PAD token (id=0)
-            float[] probs = new float[vocabSize];
-            probs[0] = 0.0f;  // PAD token概率设为0
-            float sum = 0.0f;
-            for (int j = 1; j < vocabSize; j++) {
-                float logit = logits.get(0, seqLen - 1, j);
-                probs[j] = (float) Math.exp(logit);
-                sum += probs[j];
-            }
-            
-            // 归一化
-            for (int j = 0; j < vocabSize; j++) {
-                probs[j] /= sum;
-            }
-            
-            // 排序并累积
-            int[] sortedIndices = argsort(probs);
-            float cumProb = 0.0f;
-            List<Integer> nucleusIndices = new ArrayList<>();
-            List<Float> nucleusProbs = new ArrayList<>();
-            
-            for (int j = sortedIndices.length - 1; j >= 0; j--) {
-                int idx = sortedIndices[j];
-                nucleusIndices.add(idx);
-                nucleusProbs.add(probs[idx]);
-                cumProb += probs[idx];
-                if (cumProb >= topK) {
-                    break;
-                }
-            }
-            
-            // 重新归一化并采样
-            float[] nucleusProbArray = new float[nucleusProbs.size()];
-            float nucleusSum = 0.0f;
-            for (int j = 0; j < nucleusProbs.size(); j++) {
-                nucleusProbArray[j] = nucleusProbs.get(j);
-                nucleusSum += nucleusProbArray[j];
-            }
-            for (int j = 0; j < nucleusProbArray.length; j++) {
-                nucleusProbArray[j] /= nucleusSum;
-            }
-            
-            int sampledIdx = sampleFromProbs(nucleusProbArray);
-            int nextToken = nucleusIndices.get(sampledIdx);
-            generated.add(nextToken);
-
-            if (nextToken == eosTokenId) break;
-            
-            reasoningSteps.add(new ReasoningStep(
-                i,
-                0.0,  // confidence不再可用（MoE自然涌现）
-                result.avgMoELoss
-            ));
-        }
-        
-        return new GenerationResult(toIntArray(generated), reasoningSteps);
+        return generateWithStrategy(promptIds, maxNewTokens, (logits, seqLen, vocabSize) -> {
+            // 使用基类的applySoftmax方法（temperature=1.0）
+            float[] probs = applySoftmax(logits, 0, seqLen - 1, 1.0f);
+            // 使用基类的applyTopK方法
+            applyTopK(probs, topK);
+            // 使用基类的sample方法
+            return sample(probs);
+        });
     }
     
     // ==================== Top-P (Nucleus)采样 ====================
@@ -267,84 +167,15 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
      */
     public GenerationResult generateTopP(int[] promptIds, int maxNewTokens,
                                          float topP) {
-        List<Integer> generated = new ArrayList<>();
-        for (int id : promptIds) {
-            generated.add(id);
-        }
-        
-        List<ReasoningStep> reasoningSteps = new ArrayList<>();
-        
-        for (int i = 0; i < maxNewTokens; i++) {
-            if (generated.size() >= maxSeqLen) break;
-
-            int[] currentSeq = toIntArray(generated);
-            Variable inputVar = new Variable(createInputArray(currentSeq));
-            
-            var result = model.predictWithDetails(inputVar);
-            NdArray logits = result.logits.getValue();
-            
-            int seqLen = currentSeq.length;
-            int vocabSize = logits.getShape().getDimension(2);
-            
-            // 获取并排序概率，跳过PAD token (id=0)
-            float[] probs = new float[vocabSize];
-            probs[0] = 0.0f;  // PAD token概率设为0
-            float sum = 0.0f;
-            for (int j = 1; j < vocabSize; j++) {
-                float logit = logits.get(0, seqLen - 1, j);
-                probs[j] = (float) Math.exp(logit);
-                sum += probs[j];
-            }
-            
-            // 归一化
-            for (int j = 0; j < vocabSize; j++) {
-                probs[j] /= sum;
-            }
-            
-            // 排序并累积
-            int[] sortedIndices = argsort(probs);
-            float cumProb = 0.0f;
-            List<Integer> nucleusIndices = new ArrayList<>();
-            List<Float> nucleusProbs = new ArrayList<>();
-            
-            for (int j = sortedIndices.length - 1; j >= 0; j--) {
-                int idx = sortedIndices[j];
-                nucleusIndices.add(idx);
-                nucleusProbs.add(probs[idx]);
-                cumProb += probs[idx];
-                if (cumProb >= topP) {
-                    break;
-                }
-            }
-            
-            // 重新归一化并采样
-            float[] nucleusProbArray = new float[nucleusProbs.size()];
-            float nucleusSum = 0.0f;
-            for (int j = 0; j < nucleusProbs.size(); j++) {
-                nucleusProbArray[j] = nucleusProbs.get(j);
-                nucleusSum += nucleusProbArray[j];
-            }
-            for (int j = 0; j < nucleusProbArray.length; j++) {
-                nucleusProbArray[j] /= nucleusSum;
-            }
-            
-            int sampledIdx = sampleFromProbs(nucleusProbArray);
-            int nextToken = nucleusIndices.get(sampledIdx);
-            generated.add(nextToken);
-
-            if (nextToken == eosTokenId) break;
-            
-            reasoningSteps.add(new ReasoningStep(
-                i,
-                0.0,  // confidence不再可用（MoE自然涌现）
-                result.avgMoELoss
-            ));
-        }
-        
-        return new GenerationResult(toIntArray(generated), reasoningSteps);
+        return generateWithStrategy(promptIds, maxNewTokens, (logits, seqLen, vocabSize) -> {
+            // 使用基类的applySoftmax方法（temperature=1.0）
+            float[] probs = applySoftmax(logits, 0, seqLen - 1, 1.0f);
+            // 使用基类的applyTopP方法
+            applyTopP(probs, topP);
+            // 使用基类的sample方法
+            return sample(probs);
+        });
     }
-    
-    // ==================== 辅助方法（继承自DeepSeekBaseInference） ====================
     
     // ==================== 结果类 ====================
     

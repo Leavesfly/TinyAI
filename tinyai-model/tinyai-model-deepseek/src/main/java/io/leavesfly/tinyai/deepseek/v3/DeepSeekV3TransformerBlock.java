@@ -6,6 +6,9 @@ import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
 import io.leavesfly.tinyai.nnet.v2.layer.norm.RMSNorm;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * DeepSeek-V3 Transformer块（Pre-RMSNorm + RoPE + MoE 架构）
  *
@@ -33,6 +36,9 @@ public class DeepSeekV3TransformerBlock extends Module {
     // MoE 子层（替代传统 FFN）
     private final DeepSeekV3MoELayer moeLayer;
     private final RMSNorm layerNorm2;
+
+    // 因果掩码缓存（避免每次 forward 都重新生成）
+    private final Map<Integer, Variable> causalMaskCache;
 
     /**
      * 构造函数
@@ -66,6 +72,9 @@ public class DeepSeekV3TransformerBlock extends Module {
         registerModule("resid_dropout", residDropout);
         registerModule("moe", moeLayer);
         registerModule("ln2", layerNorm2);
+
+        // 初始化因果掩码缓存
+        this.causalMaskCache = new HashMap<>();
     }
 
     /**
@@ -87,8 +96,8 @@ public class DeepSeekV3TransformerBlock extends Module {
         Variable x = inputs[0];
         int seqLen = x.getValue().getShape().getDimension(1);
 
-        // 生成因果掩码
-        Variable causalMask = DeepSeekV3Attention.generateCausalMask(seqLen);
+        // 生成或获取缓存的因果掩码
+        Variable causalMask = getCausalMask(seqLen);
 
         // ===== 注意力子层 (Pre-RMSNorm + RoPE) =====
         Variable normalized1 = layerNorm1.forward(x);
@@ -105,6 +114,24 @@ public class DeepSeekV3TransformerBlock extends Module {
     }
 
     /**
+     * 获取或生成因果掩码（带缓存）
+     *
+     * @param seqLen 序列长度
+     * @return 因果掩码 [1, 1, seqLen, seqLen]
+     */
+    private Variable getCausalMask(int seqLen) {
+        // 检查缓存
+        if (causalMaskCache.containsKey(seqLen)) {
+            return causalMaskCache.get(seqLen);
+        }
+
+        // 生成新的因果掩码
+        Variable causalMask = DeepSeekV3Attention.generateCausalMask(seqLen);
+        causalMaskCache.put(seqLen, causalMask);
+        return causalMask;
+    }
+
+    /**
      * 带详细输出的前向传播（包含 MoE 损失）
      *
      * @param input 输入张量 [batch_size, seq_len, d_model]
@@ -113,8 +140,8 @@ public class DeepSeekV3TransformerBlock extends Module {
     public DetailedForwardResult forwardWithDetails(Variable input) {
         int seqLen = input.getValue().getShape().getDimension(1);
 
-        // 生成因果掩码
-        Variable causalMask = DeepSeekV3Attention.generateCausalMask(seqLen);
+        // 生成或获取缓存的因果掩码
+        Variable causalMask = getCausalMask(seqLen);
 
         // ===== 注意力子层 =====
         Variable normalized1 = layerNorm1.forward(input);

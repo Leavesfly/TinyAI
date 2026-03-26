@@ -30,15 +30,17 @@ public class TextSampler {
      * @return 采样的 token ID
      */
     public static int sample(float[] logits, float temperature, int topK, float topP) {
-        // 应用温度缩放
+        // 应用温度缩放（创建副本避免修改原始数组）
+        float[] workingLogits = logits;
         if (temperature > 0 && temperature != 1.0f) {
+            workingLogits = new float[logits.length];
             for (int i = 0; i < logits.length; i++) {
-                logits[i] /= temperature;
+                workingLogits[i] = logits[i] / temperature;
             }
         }
 
         // Softmax 转换为概率
-        float[] probs = softmax(logits);
+        float[] probs = softmax(workingLogits);
 
         // 贪婪采样（temperature = 0）
         if (temperature == 0.0f) {

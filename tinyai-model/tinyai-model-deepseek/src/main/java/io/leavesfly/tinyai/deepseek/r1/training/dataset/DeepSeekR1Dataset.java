@@ -141,10 +141,14 @@ public class DeepSeekR1Dataset extends DeepSeekBaseDataset<DeepSeekR1Dataset.Bat
                 float[] originalMask = lossMasks.get(dataIndex);
                 // Loss Mask 需要右移一位对齐 target（target = input 右移一位）
                 // target[j] = sequence[j+1]，对应的 mask 也应该是 mask[j+1]
-                int validLen = Math.min(originalMask.length - 1, maxSeqLength);
-                for (int j = 0; j < validLen; j++) {
-                    batchLossMasks[i][j] = originalMask[j + 1];
+                // 添加长度校验，避免数组越界
+                if (originalMask.length >= 2) {
+                    int validLen = Math.min(originalMask.length - 1, maxSeqLength);
+                    for (int j = 0; j < validLen; j++) {
+                        batchLossMasks[i][j] = originalMask[j + 1];
+                    }
                 }
+                // 如果 originalMask.length < 2，batchLossMasks[i] 保持全零（默认值）
             }
         }
         

@@ -206,12 +206,28 @@ public class MiniMindCLI {
         
         public int getInt(String key, int defaultValue) {
             String value = options.get(key);
-            return value != null ? Integer.parseInt(value) : defaultValue;
+            if (value == null) {
+                return defaultValue;
+            }
+            try {
+                return Integer.parseInt(value);
+            } catch (NumberFormatException e) {
+                System.err.println("警告: 参数 '" + key + "' 的值 '" + value + "' 不是有效的整数，使用默认值 " + defaultValue);
+                return defaultValue;
+            }
         }
         
         public float getFloat(String key, float defaultValue) {
             String value = options.get(key);
-            return value != null ? Float.parseFloat(value) : defaultValue;
+            if (value == null) {
+                return defaultValue;
+            }
+            try {
+                return Float.parseFloat(value);
+            } catch (NumberFormatException e) {
+                System.err.println("警告: 参数 '" + key + "' 的值 '" + value + "' 不是有效的浮点数，使用默认值 " + defaultValue);
+                return defaultValue;
+            }
         }
         
         public boolean getBoolean(String key) {

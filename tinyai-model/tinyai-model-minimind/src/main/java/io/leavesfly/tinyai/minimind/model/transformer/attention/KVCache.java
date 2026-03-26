@@ -125,15 +125,27 @@ public class KVCache {
         int[] newShape = newData.getShape().getShapeDims();
         int newSeqLen = newShape[2];
         
-        // 直接拷贝到预分配位置
+        // 边界检查：验证 offset + newSeqLen 不超过 maxCacheLen
+        if (offset + newSeqLen > maxCacheLen) {
+            throw new IllegalArgumentException(
+                String.format("Buffer overflow: offset=%d + newSeqLen=%d exceeds maxCacheLen=%d", 
+                             offset, newSeqLen, maxCacheLen));
+        }
+        
+        // 优化：使用 System.arraycopy 批量操作，减少循环嵌套
+        int batchHeadStride = maxCacheLen * headDim;
+        int seqStride = headDim;
+        
         for (int b = 0; b < batchSize; b++) {
             for (int h = 0; h < numHeads; h++) {
+                int batchHeadOffset = (b * numHeads + h) * batchHeadStride + offset * seqStride;
+                int newBatchHeadOffset = (b * numHeads + h) * newSeqLen * seqStride;
+                
+                // 批量拷贝整个序列的 headDim 维度
                 for (int s = 0; s < newSeqLen; s++) {
-                    for (int d = 0; d < headDim; d++) {
-                        int srcIdx = ((b * numHeads + h) * newSeqLen + s) * headDim + d;
-                        int dstIdx = ((b * numHeads + h) * maxCacheLen + (offset + s)) * headDim + d;
-                        bufferData[dstIdx] = newDataArr[srcIdx];
-                    }
+                    int srcPos = newBatchHeadOffset + s * seqStride;
+                    int dstPos = batchHeadOffset + s * seqStride;
+                    System.arraycopy(newDataArr, srcPos, bufferData, dstPos, headDim);
                 }
             }
         }

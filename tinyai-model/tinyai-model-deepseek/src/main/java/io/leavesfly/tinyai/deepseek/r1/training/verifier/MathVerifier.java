@@ -28,6 +28,17 @@ public class MathVerifier implements Verifier {
         "-?\\d+\\.?\\d*(?:[eE][+-]?\\d+)?"
     );
     
+    // 匹配答案模式的正则表达式
+    private static final Pattern ANSWER_PATTERN = Pattern.compile(
+        "(?:answer|答案|结果)(?:\\s+is)?\\s*[:=]?\\s*(-?\\d+\\.?\\d*)",
+        Pattern.CASE_INSENSITIVE
+    );
+    
+    // 匹配简单方程的正则表达式
+    private static final Pattern EQUATION_PATTERN = Pattern.compile(
+        "(-?\\d+\\.?\\d*)\\s*\\*\\s*x\\s*([+-])\\s*(-?\\d+\\.?\\d*)\\s*=\\s*(-?\\d+\\.?\\d*)"
+    );
+    
     @Override
     public String getVerifierType() {
         return "math";
@@ -96,11 +107,7 @@ public class MathVerifier implements Verifier {
         }
         
         // 策略1: 查找 "answer is X" 模式
-        Pattern answerPattern = Pattern.compile(
-            "(?:answer|答案|结果)(?:\\s+is)?\\s*[:=]?\\s*(-?\\d+\\.?\\d*)",
-            Pattern.CASE_INSENSITIVE
-        );
-        Matcher answerMatcher = answerPattern.matcher(modelOutput);
+        Matcher answerMatcher = ANSWER_PATTERN.matcher(modelOutput);
         if (answerMatcher.find()) {
             return answerMatcher.group(1);
         }
@@ -156,10 +163,7 @@ public class MathVerifier implements Verifier {
             double x = parseNumber(solution);
             
             // 简单的代入验证（仅支持形如 "a*x + b = c" 的方程）
-            Pattern eqPattern = Pattern.compile(
-                "(-?\\d+\\.?\\d*)\\s*\\*\\s*x\\s*([+-])\\s*(-?\\d+\\.?\\d*)\\s*=\\s*(-?\\d+\\.?\\d*)"
-            );
-            Matcher matcher = eqPattern.matcher(equation.replace(" ", ""));
+            Matcher matcher = EQUATION_PATTERN.matcher(equation.replace(" ", ""));
             
             if (matcher.find()) {
                 double a = parseNumber(matcher.group(1));

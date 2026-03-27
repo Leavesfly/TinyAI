@@ -422,43 +422,191 @@ public class DeepSeekR1DatasetGenerator {
      */
     private static List<String> generateRLHFReasoningData() {
         List<String> rlhfData = new ArrayList<>();
-        
-        // 高奖励的正确推理 (10条, reward 0.8-1.0)
-        rlhfData.add("[REWARD:0.95] " + DeepSeekR1TokenizerUtil.buildSFTText("5 plus 3", "5 plus 3 equals 8. Verified by counting.", "8"));
-        rlhfData.add("[REWARD:0.90] " + DeepSeekR1TokenizerUtil.buildSFTText("What is 12 divided by 4", "12 divided by 4 means how many 4s in 12. 4 times 3 is 12.", "3"));
-        rlhfData.add("[REWARD:0.92] " + DeepSeekR1TokenizerUtil.buildSFTText("All dogs bark. Rex is a dog. Does Rex bark", "Major premise says all dogs bark. Rex is a dog. Therefore Rex barks by syllogism.", "Yes"));
-        rlhfData.add("[REWARD:0.88] " + DeepSeekR1TokenizerUtil.buildSFTText("If today is Monday what is tomorrow", "Days follow Monday Tuesday order. Day after Monday is Tuesday.", "Tuesday"));
-        rlhfData.add("[REWARD:0.93] " + DeepSeekR1TokenizerUtil.buildSFTText("Which is larger 7 or 5", "7 is greater than 5 because 7 minus 5 equals 2 which is positive.", "7"));
-        rlhfData.add("[REWARD:0.91] " + DeepSeekR1TokenizerUtil.buildSFTText("Half of 10 is what", "Half means divide by 2. 10 divided by 2 equals 5.", "5"));
-        rlhfData.add("[REWARD:0.89] " + DeepSeekR1TokenizerUtil.buildSFTText("3 times 4 equals what", "3 groups of 4 is 4 plus 4 plus 4 which equals 12.", "12"));
-        rlhfData.add("[REWARD:0.94] " + DeepSeekR1TokenizerUtil.buildSFTText("If A then B and A is true what is B", "Apply modus ponens: Given A implies B and A is true, B must be true.", "B is true"));
-        rlhfData.add("[REWARD:0.87] " + DeepSeekR1TokenizerUtil.buildSFTText("20 minus 8 is what", "Start with 20, take away 8. 20 minus 8 equals 12. Verify: 12 plus 8 is 20.", "12"));
-        rlhfData.add("[REWARD:0.96] " + DeepSeekR1TokenizerUtil.buildSFTText("Is 15 odd or even", "Odd numbers are not divisible by 2. 15 divided by 2 is 7.5 which is not integer.", "15 is odd"));
-        
-        // 中等奖励的可接受推理 (10条, reward 0.5-0.7)
-        rlhfData.add("[REWARD:0.65] " + DeepSeekR1TokenizerUtil.buildSFTText("6 plus 7", "Brief calculation.", "13"));
-        rlhfData.add("[REWARD:0.60] " + DeepSeekR1TokenizerUtil.buildSFTText("What is 9 times 2", "Direct multiplication.", "18"));
-        rlhfData.add("[REWARD:0.70] " + DeepSeekR1TokenizerUtil.buildSFTText("Is a square a rectangle", "It has four right angles.", "Yes"));
-        rlhfData.add("[REWARD:0.55] " + DeepSeekR1TokenizerUtil.buildSFTText("100 divided by 5", "Simple division.", "20"));
-        rlhfData.add("[REWARD:0.68] " + DeepSeekR1TokenizerUtil.buildSFTText("Sum of 4 and 9", "Add ones digit 4 plus 9 is 13.", "13"));
-        rlhfData.add("[REWARD:0.62] " + DeepSeekR1TokenizerUtil.buildSFTText("Next number after 7", "Counting sequence.", "8"));
-        rlhfData.add("[REWARD:0.58] " + DeepSeekR1TokenizerUtil.buildSFTText("Double of 6", "Double means multiply by 2.", "12"));
-        rlhfData.add("[REWARD:0.66] " + DeepSeekR1TokenizerUtil.buildSFTText("Is 10 greater than 3", "10 is clearly larger.", "Yes"));
-        rlhfData.add("[REWARD:0.72] " + DeepSeekR1TokenizerUtil.buildSFTText("What comes before 5", "In counting order 4 precedes 5.", "4"));
-        rlhfData.add("[REWARD:0.64] " + DeepSeekR1TokenizerUtil.buildSFTText("8 minus 3", "Subtraction gives 5.", "5"));
-        
-        // 低奖励的需改进推理 (10条, reward 0.2-0.4)
-        rlhfData.add("[REWARD:0.25] " + DeepSeekR1TokenizerUtil.buildSFTText("7 plus 8", "I think it is 14.", "14"));
-        rlhfData.add("[REWARD:0.30] " + DeepSeekR1TokenizerUtil.buildSFTText("All cats are pets. Some pets are dogs. Are all cats dogs", "Since cats are pets and some pets are dogs, cats must be dogs.", "Yes"));
-        rlhfData.add("[REWARD:0.35] " + DeepSeekR1TokenizerUtil.buildSFTText("5 times 5", "5 times 5 should be around 20.", "20"));
-        rlhfData.add("[REWARD:0.28] " + DeepSeekR1TokenizerUtil.buildSFTText("12 divided by 3", "12 divided by 3 is 3.", "3"));
-        rlhfData.add("[REWARD:0.40] " + DeepSeekR1TokenizerUtil.buildSFTText("Is 8 even", "Not sure about this.", "Maybe"));
-        rlhfData.add("[REWARD:0.32] " + DeepSeekR1TokenizerUtil.buildSFTText("What is 15 minus 7", "15 minus 7 is 7.", "7"));
-        rlhfData.add("[REWARD:0.38] " + DeepSeekR1TokenizerUtil.buildSFTText("If P then Q and Q is true what about P", "Since Q is true and P implies Q, P must be true.", "P is true"));
-        rlhfData.add("[REWARD:0.22] " + DeepSeekR1TokenizerUtil.buildSFTText("9 plus 4", "9 plus 4 is 12.", "12"));
-        rlhfData.add("[REWARD:0.35] " + DeepSeekR1TokenizerUtil.buildSFTText("6 times 7", "6 times 7 is 43.", "43"));
-        rlhfData.add("[REWARD:0.29] " + DeepSeekR1TokenizerUtil.buildSFTText("Half of 14", "Half of 14 is 8.", "8"));
-        
+
+        // ===== 高奖励：详细推理链 + 验证步骤 (15条, reward 0.85-0.97) =====
+
+        // 算术推理（含自我验证）
+        rlhfData.add("[REWARD:0.95] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is 17 plus 28",
+                "Break into parts: 17 plus 20 is 37, then 37 plus 8 is 45. Verify: 45 minus 28 is 17. Correct.",
+                "45"));
+        rlhfData.add("[REWARD:0.93] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is 56 divided by 8",
+                "Ask: how many 8s fit in 56? 8 times 7 is 56. So 56 divided by 8 equals 7. Verify: 7 times 8 is 56. Correct.",
+                "7"));
+        rlhfData.add("[REWARD:0.91] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "Is 36 a perfect square",
+                "A perfect square equals n times n for some integer n. Try n equals 6: 6 times 6 is 36. Yes, 36 is a perfect square.",
+                "Yes 36 is a perfect square"));
+        rlhfData.add("[REWARD:0.89] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is 9 times 7",
+                "Use the identity: 9 times n equals 10n minus n. So 9 times 7 is 70 minus 7 which is 63. Verify: 7 plus 7 is 14, times 4 is 56, plus 7 is 63. Consistent.",
+                "63"));
+
+        // 逻辑三段论
+        rlhfData.add("[REWARD:0.96] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "All birds have wings. Penguins are birds. Do penguins have wings",
+                "Premise 1: All birds have wings. Premise 2: Penguins are birds. By universal instantiation, penguins fall under all birds. Therefore penguins have wings.",
+                "Yes penguins have wings"));
+        rlhfData.add("[REWARD:0.94] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "If A implies B and B implies C and A is true what can we conclude about C",
+                "Given A implies B and B implies C, by hypothetical syllogism A implies C. Since A is true, by modus ponens C is also true.",
+                "C is true"));
+        rlhfData.add("[REWARD:0.90] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "No reptiles are warm blooded. Snakes are reptiles. Are snakes warm blooded",
+                "Premise: No reptiles are warm blooded. Snakes belong to reptiles. Therefore snakes are not warm blooded.",
+                "No snakes are not warm blooded"));
+
+        // 词义推理 / 类比
+        rlhfData.add("[REWARD:0.88] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "Doctor is to hospital as teacher is to what",
+                "A doctor works in a hospital. By analogy, a teacher works in the corresponding institution for teaching, which is a school.",
+                "School"));
+        rlhfData.add("[REWARD:0.92] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "Book is to reading as fork is to what",
+                "A book is an instrument used for reading. A fork is an instrument used for eating. The relationship is tool to its function.",
+                "Eating"));
+
+        // 因果推理
+        rlhfData.add("[REWARD:0.87] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "If water is heated to 100 degrees Celsius at sea level what happens",
+                "At sea level the boiling point of water is 100 degrees Celsius. When water reaches this temperature it transitions from liquid to gas. Therefore it boils and turns to steam.",
+                "Water boils and becomes steam"));
+        rlhfData.add("[REWARD:0.94] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "A train leaves at 9am and arrives at 1pm how long is the journey",
+                "From 9am to 1pm: 9 to 12 is 3 hours, 12 to 1 is 1 hour. Total is 4 hours. Verify: 9 plus 4 equals 13 which is 1pm. Correct.",
+                "4 hours"));
+
+        // 序列规律
+        rlhfData.add("[REWARD:0.91] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is the next number in the sequence 2 4 8 16",
+                "Each term is double the previous: 2 times 2 is 4, 4 times 2 is 8, 8 times 2 is 16. The pattern is multiply by 2. So next is 16 times 2 which is 32.",
+                "32"));
+        rlhfData.add("[REWARD:0.89] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is the next term in 1 4 9 16 25",
+                "The terms are 1 squared, 2 squared, 3 squared, 4 squared, 5 squared. The pattern is n squared. Next is 6 squared which equals 36.",
+                "36"));
+
+        // 反事实推理
+        rlhfData.add("[REWARD:0.86] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "If all months had 30 days how many days would a year have",
+                "There are 12 months in a year. If each had 30 days then total days equal 12 times 30. 12 times 30 equals 360.",
+                "360 days"));
+        rlhfData.add("[REWARD:0.97] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "A rectangle has length 8 and width 5 what is its area and perimeter",
+                "Area equals length times width equals 8 times 5 equals 40. Perimeter equals 2 times length plus width equals 2 times 13 equals 26. Both formulas applied correctly.",
+                "Area is 40 and perimeter is 26"));
+
+        // ===== 中等奖励：答案正确但推理不完整或缺少验证 (12条, reward 0.50-0.72) =====
+
+        // 正确答案 + 简短单步推理（缺少解释过程）
+        rlhfData.add("[REWARD:0.65] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is 6 plus 7",
+                "6 plus 7 equals 13.",
+                "13"));
+        rlhfData.add("[REWARD:0.60] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "Is a square a rectangle",
+                "A square has four right angles so it is a rectangle.",
+                "Yes"));
+        rlhfData.add("[REWARD:0.55] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is the capital of France",
+                "France capital is Paris.",
+                "Paris"));
+        rlhfData.add("[REWARD:0.68] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is 100 divided by 4",
+                "100 divided by 4 is 25.",
+                "25"));
+        rlhfData.add("[REWARD:0.72] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "Which season comes after summer",
+                "After summer comes autumn.",
+                "Autumn"));
+        rlhfData.add("[REWARD:0.58] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "How many sides does a triangle have",
+                "A triangle has 3 sides.",
+                "3"));
+        rlhfData.add("[REWARD:0.62] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is the square root of 49",
+                "Square root of 49 is 7 because 7 times 7 is 49.",
+                "7"));
+        rlhfData.add("[REWARD:0.70] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "If a bag has 5 red and 3 blue balls how many balls in total",
+                "Add them: 5 plus 3 equals 8 balls.",
+                "8"));
+        rlhfData.add("[REWARD:0.66] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "Is the number 2 prime",
+                "2 is only divisible by 1 and itself so it is prime.",
+                "Yes 2 is prime"));
+        rlhfData.add("[REWARD:0.54] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is 8 times 8",
+                "8 times 8 is 64.",
+                "64"));
+        rlhfData.add("[REWARD:0.67] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "How many minutes in 2 hours",
+                "1 hour is 60 minutes so 2 hours is 120 minutes.",
+                "120 minutes"));
+        rlhfData.add("[REWARD:0.63] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is larger 0.5 or 0.05",
+                "0.5 is greater than 0.05.",
+                "0.5"));
+
+        // ===== 低奖励：错误答案或明显逻辑谬误 (12条, reward 0.18-0.40) =====
+
+        // 计算错误（常见笔误型错误）
+        rlhfData.add("[REWARD:0.25] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is 7 plus 8",
+                "7 plus 8, let me count: 7 plus 7 is 14, so 7 plus 8 is 14.",
+                "14"));
+        rlhfData.add("[REWARD:0.22] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is 9 times 6",
+                "9 times 6: I recall 9 times 5 is 45, so 9 times 6 is 53.",
+                "53"));
+        rlhfData.add("[REWARD:0.30] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is 15 minus 7",
+                "15 minus 7: 15 minus 5 is 10, 10 minus 2 is 8, so the answer is 9.",
+                "9"));
+        rlhfData.add("[REWARD:0.28] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is half of 18",
+                "Half of 18: 18 divided by 2, I think that is 8.",
+                "8"));
+
+        // 逻辑谬误（典型谬误类型）
+        rlhfData.add("[REWARD:0.35] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "If P then Q and Q is true what can we conclude about P",
+                "Q is true and P leads to Q, so P must be true since Q confirms it.",
+                "P is true"));
+        rlhfData.add("[REWARD:0.32] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "All cats are mammals. All mammals breathe. Do all breathing creatures include cats",
+                "All cats breathe since they are mammals. Therefore all breathing creatures must be cats.",
+                "Yes all breathing creatures are cats"));
+        rlhfData.add("[REWARD:0.38] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "Some students passed the exam. John is a student. Did John pass",
+                "Some students passed and John is a student so John must have passed.",
+                "Yes John passed"));
+
+        // 概念混淆
+        rlhfData.add("[REWARD:0.40] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "Is a whale a fish",
+                "A whale lives in the ocean and has fins so it is a fish.",
+                "Yes a whale is a fish"));
+        rlhfData.add("[REWARD:0.18] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "How many sides does a square have",
+                "A square looks like a box shape, it has 3 sides.",
+                "3"));
+        rlhfData.add("[REWARD:0.33] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "What is the next prime number after 7",
+                "After 7 the next number is 8, and 8 is prime.",
+                "8"));
+
+        // 顺序 / 方向错误
+        rlhfData.add("[REWARD:0.27] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "If today is Wednesday what day was it 3 days ago",
+                "3 days before Wednesday: Wednesday minus 3 goes to Friday.",
+                "Friday"));
+        rlhfData.add("[REWARD:0.36] " + DeepSeekR1TokenizerUtil.buildSFTText(
+                "A sequence is 3 6 9 12 what is the pattern",
+                "Each number increases by 3, so the pattern is multiply by 3.",
+                "Multiply by 3"));
+
         return rlhfData;
     }
     

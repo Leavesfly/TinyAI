@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.deepseek.v3.training;
 
+import io.leavesfly.tinyai.deepseek.base.DeepSeekTrainerBase;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Block;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Config;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3MTPHead;
@@ -31,7 +32,7 @@ import java.util.Map;
  * @author leavesfly
  * @version 1.0
  */
-public class DeepSeekV3Pretrain {
+public class DeepSeekV3Pretrain extends DeepSeekTrainerBase {
     
     private final DeepSeekV3Model model;
     private final DeepSeekV3Config config;
@@ -40,21 +41,14 @@ public class DeepSeekV3Pretrain {
     private final Adam optimizer;
     
     // 训练超参数
-    private int maxEpochs;
     private float initialLearningRate;
     private float minLearningRate;
     private int warmupSteps;
-    private float maxGradNorm;
     private float moeLoadBalanceWeight;  // MoE负载均衡权重(V3特有)
-    private int logInterval;
     private int saveInterval;
-    private String checkpointDir;
     
     // 训练状态
-    private int currentEpoch;
-    private int globalStep;
     private float currentLearningRate;
-    private List<Float> lossHistory;
     private List<Float> moeLossHistory;      // MoE损失历史(V3特有)
     private List<Float> confidenceHistory;
     
@@ -62,30 +56,24 @@ public class DeepSeekV3Pretrain {
      * 构造函数
      */
     public DeepSeekV3Pretrain(DeepSeekV3Model model, DeepSeekV3Dataset dataset) {
+        super(model, 10, 1.0f, 100, "./checkpoints/deepseek_v3/pretrain");
         this.model = model;
         this.config = model.getConfig();
         this.dataset = dataset;
         this.lossFunction = new SoftmaxCrossEntropy();
         
         // 默认超参数
-        this.maxEpochs = 10;
         this.initialLearningRate = 2.5e-4f;
         this.minLearningRate = 1e-5f;
         this.warmupSteps = 2000;
-        this.maxGradNorm = 1.0f;
         this.moeLoadBalanceWeight = (float) config.getLoadBalanceLossWeight();
-        this.logInterval = 100;
         this.saveInterval = 5000;
-        this.checkpointDir = "./checkpoints/deepseek_v3/pretrain";
         
         // 创建优化器
         this.optimizer = new Adam(model, initialLearningRate, 0.9f, 0.999f, 1e-8f);
         
         // 初始化状态
-        this.currentEpoch = 0;
-        this.globalStep = 0;
         this.currentLearningRate = 0.0f;
-        this.lossHistory = new ArrayList<>();
         this.moeLossHistory = new ArrayList<>();
         this.confidenceHistory = new ArrayList<>();
     }
@@ -122,6 +110,7 @@ public class DeepSeekV3Pretrain {
     /**
      * 开始训练
      */
+    @Override
     public void train() {
         System.out.println("=".repeat(80));
         System.out.println("DeepSeek-V3 预训练（含MoE负载均衡）");
@@ -404,66 +393,6 @@ public class DeepSeekV3Pretrain {
     }
     
     /**
-     * 梯度裁剪（全局梯度范数裁剪，防止梯度爆炸）
-     */
-    private void clipGradients() {
-        double totalNorm = 0.0;
-        Map<String, Parameter> params = model.getModule().namedParameters("", true);
-        for (Parameter param : params.values()) {
-            if (param.requiresGrad() && param.grad() != null) {
-                NdArray grad = param.grad();
-                double norm = grad.mul(grad).sum().getNumber().doubleValue();
-                totalNorm += norm;
-            }
-        }
-        
-        totalNorm = Math.sqrt(totalNorm);
-        
-        // 裁剪梯度
-        if (totalNorm > maxGradNorm) {
-            float scale = (float) (maxGradNorm / totalNorm);
-            for (Parameter param : params.values()) {
-                if (param.requiresGrad() && param.grad() != null) {
-                    NdArray clippedGrad = param.grad().mulNum(scale);
-                    param.setGrad(clippedGrad);
-                }
-            }
-        }
-    }
-    
-    /**
-     * 创建检查点目录
-     */
-    private void createCheckpointDir() {
-        File dir = new File(checkpointDir);
-        if (!dir.exists()) {
-            dir.mkdirs();
-        }
-    }
-    
-    /**
-     * 保存检查点
-     */
-    private void saveCheckpoint(String name) {
-        String path = checkpointDir + "/" + name + ".ckpt";
-        System.out.println("保存检查点: " + path);
-    }
-    
-    /**
-     * 计算平均值
-     */
-    private float getAverage(List<Float> values, int last) {
-        if (values.isEmpty()) return 0.0f;
-        
-        int start = Math.max(0, values.size() - last);
-        float sum = 0.0f;
-        for (int i = start; i < values.size(); i++) {
-            sum += values.get(i);
-        }
-        return sum / (values.size() - start);
-    }
-    
-    /**
      * 格式化参数数量
      */
     private String formatParamCount(long count) {
@@ -474,6 +403,16 @@ public class DeepSeekV3Pretrain {
         } else {
             return String.format("%,d", count);
         }
+    }
+    
+    @Override
+    protected String getTrainerName() {
+        return "DeepSeek-V3 Pretrain";
+    }
+    
+    @Override
+    protected String getCheckpointPrefix() {
+        return "deepseek_v3_pretrain";
     }
     
     /**

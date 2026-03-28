@@ -88,7 +88,7 @@ public class Model implements Serializable {
         if (inputShape != null) {
             tmpPredict = module.forward(new Variable(NdArray.ones(inputShape)));
         }
-        // System.out.println(Uml.getDotGraph(tmpPredict)); // 暂时注释，因为Uml类不可用
+        // System.out.println(UmlPrinter.getDotGraph(tmpPredict)); // 暂时注释，因为Uml类不可用
     }
 
     /**

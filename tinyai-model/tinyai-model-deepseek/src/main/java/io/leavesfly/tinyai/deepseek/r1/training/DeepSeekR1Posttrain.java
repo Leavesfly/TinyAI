@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.deepseek.r1.training;
 
+import io.leavesfly.tinyai.deepseek.base.DeepSeekTrainerBase;
 import io.leavesfly.tinyai.deepseek.r1.DeepSeekR1Config;
 import io.leavesfly.tinyai.deepseek.r1.DeepSeekR1Model;
 import io.leavesfly.tinyai.deepseek.r1.training.dataset.DeepSeekR1Dataset;
@@ -32,7 +33,7 @@ import java.util.Map;
  * @author leavesfly
  * @version 2.0
  */
-public class DeepSeekR1Posttrain {
+public class DeepSeekR1Posttrain extends DeepSeekTrainerBase {
     
     private final DeepSeekR1Model model;
     private final DeepSeekR1Config config;
@@ -43,17 +44,11 @@ public class DeepSeekR1Posttrain {
     private final SGD optimizer;
     
     // 后训练超参数
-    private int maxEpochs;
     private float learningRate;
-    private float maxGradNorm;
-    private int logInterval;
     private int evalInterval;
     private int patience;
-    private String checkpointDir;
     
     // 训练状态
-    private int currentEpoch;
-    private int globalStep;
     private List<Float> trainLossHistory;
     private List<Float> valLossHistory;
     private List<Float> qualityScoreHistory;
@@ -63,6 +58,8 @@ public class DeepSeekR1Posttrain {
     public DeepSeekR1Posttrain(DeepSeekR1Model model, 
                                DeepSeekR1Dataset trainDataset,
                                DeepSeekR1Dataset valDataset) {
+        super(model, 5, 1.0f, 5, "./checkpoints/deepseek_r1/posttrain");
+        
         this.model = model;
         this.config = model.getConfig();
         this.trainDataset = trainDataset;
@@ -71,19 +68,13 @@ public class DeepSeekR1Posttrain {
         this.elementWiseLossFunction = new SoftmaxCrossEntropy(Loss.Reduction.NONE);
         
         // 后训练学习率比预训练小10倍
-        this.maxEpochs = 5;
         this.learningRate = 2.5e-5f;
-        this.maxGradNorm = 1.0f;
-        this.logInterval = 5;
         this.evalInterval = 100;
         this.patience = 3;
-        this.checkpointDir = "./checkpoints/deepseek_r1/posttrain";
         
         // 使用SGD替代Adam，减少临时NdArray对象创建，降低内存占用
         this.optimizer = new SGD(model, learningRate);
         
-        this.currentEpoch = 0;
-        this.globalStep = 0;
         this.trainLossHistory = new ArrayList<>();
         this.valLossHistory = new ArrayList<>();
         this.qualityScoreHistory = new ArrayList<>();
@@ -100,6 +91,7 @@ public class DeepSeekR1Posttrain {
         return this;
     }
     
+    @Override
     public void train() {
         System.out.println("=".repeat(70));
         System.out.println("DeepSeek-R1 后训练/微调 (Posttrain)");
@@ -251,46 +243,19 @@ public class DeepSeekR1Posttrain {
         return count > 0 ? (float) (totalLoss / count) : 0.0f;
     }
     
-    private void clipGradients() {
-        double totalNorm = 0.0;
-        Map<String, Parameter> params = model.getModule().namedParameters("", true);
-        
-        for (Parameter param : params.values()) {
-            if (param.grad() != null) {
-                double norm = param.grad().mul(param.grad()).sum().getNumber().doubleValue();
-                totalNorm += norm;
-            }
-        }
-        
-        totalNorm = Math.sqrt(totalNorm);
-        
-        // 当 totalNorm 为 0 时跳过裁剪，避免除零
-        if (totalNorm > 0.0 && totalNorm > maxGradNorm) {
-            float scale = (float) (maxGradNorm / totalNorm);
-            for (Parameter param : params.values()) {
-                if (param.grad() != null) {
-                    param.setGrad(param.grad().mulNum(scale));
-                }
-            }
-        }
+    /**
+     * 获取训练器名称
+     */
+    @Override
+    public String getTrainerName() {
+        return "DeepSeek-R1 Posttrain";
     }
     
-    private void saveCheckpoint(String suffix) {
-        try {
-            String filepath = checkpointDir + File.separator + 
-                            String.format("deepseek_r1_posttrain_%s.model", suffix);
-            model.saveModel(filepath);
-            System.out.println("检查点已保存: " + filepath);
-        } catch (Exception e) {
-            System.err.println("保存失败: " + e.getMessage());
-        }
-    }
-    
-    private void createCheckpointDir() {
-        try {
-            Files.createDirectories(Paths.get(checkpointDir));
-        } catch (IOException e) {
-            System.err.println("创建目录失败: " + e.getMessage());
-        }
+    /**
+     * 获取检查点前缀
+     */
+    @Override
+    public String getCheckpointPrefix() {
+        return "deepseek_r1_posttrain";
     }
 }

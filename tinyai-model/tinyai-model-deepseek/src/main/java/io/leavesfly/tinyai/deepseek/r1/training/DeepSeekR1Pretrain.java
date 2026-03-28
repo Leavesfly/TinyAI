@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.deepseek.r1.training;
 
+import io.leavesfly.tinyai.deepseek.base.DeepSeekTrainerBase;
 import io.leavesfly.tinyai.deepseek.r1.DeepSeekR1Config;
 import io.leavesfly.tinyai.deepseek.r1.training.dataset.DeepSeekR1Dataset;
 import io.leavesfly.tinyai.deepseek.r1.DeepSeekR1Model;
@@ -33,7 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author leavesfly
  * @version 1.0
  */
-public class DeepSeekR1Pretrain {
+public class DeepSeekR1Pretrain extends DeepSeekTrainerBase {
     
     private final DeepSeekR1Model model;
     private final DeepSeekR1Config config;
@@ -42,20 +43,13 @@ public class DeepSeekR1Pretrain {
     private final SGD optimizer;
     
     // 训练超参数
-    private int maxEpochs;
     private float initialLearningRate;
     private float minLearningRate;
     private int warmupSteps;
-    private float maxGradNorm;
-    private int logInterval;
     private int saveInterval;
-    private String checkpointDir;
     
     // 训练状态
-    private int currentEpoch;
-    private int globalStep;
     private float currentLearningRate;
-    private List<Float> lossHistory;
     private List<Float> reasoningConfidenceHistory;
     
     // 并行训练配置
@@ -68,30 +62,25 @@ public class DeepSeekR1Pretrain {
      * 构造函数
      */
     public DeepSeekR1Pretrain(DeepSeekR1Model model, DeepSeekR1Dataset dataset) {
+        super(model, 10, 1.0f, 100, "./checkpoints/deepseek_r1/pretrain");
+        
         this.model = model;
         this.config = model.getConfig();
         this.dataset = dataset;
         this.lossFunction = new SoftmaxCrossEntropy();
         
         // 默认超参数
-        this.maxEpochs = 10;
         this.initialLearningRate = 2.5e-4f;
         this.minLearningRate = 1e-5f;
         this.warmupSteps = 2000;
-        this.maxGradNorm = 1.0f;
-        this.logInterval = 100;
         this.saveInterval = 5000;
-        this.checkpointDir = "./checkpoints/deepseek_r1/pretrain";
         
         // 创建优化器
         // 使用SGD替代Adam，减少临时NdArray对象创建，降低内存占用
         this.optimizer = new SGD(model, initialLearningRate);
         
         // 初始化状态
-        this.currentEpoch = 0;
-        this.globalStep = 0;
         this.currentLearningRate = 0.0f;
-        this.lossHistory = new ArrayList<>();
         this.reasoningConfidenceHistory = new ArrayList<>();
     }
     
@@ -194,6 +183,7 @@ public class DeepSeekR1Pretrain {
     /**
      * 开始训练
      */
+    @Override
     public void train() {
         DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
         String startTime = LocalDateTime.now().format(timeFormatter);
@@ -595,61 +585,6 @@ public class DeepSeekR1Pretrain {
     }
     
     /**
-     * 梯度裁剪
-     */
-    private void clipGradients() {
-        double totalNorm = 0.0;
-        
-        // 计算梯度范数(使用V2 Parameter)
-        Map<String, Parameter> params = model.getModule().namedParameters("", true);
-        for (Parameter param : params.values()) {
-            if (param.grad() != null) {
-                NdArray grad = param.grad();
-                double norm = grad.mul(grad).sum().getNumber().doubleValue();
-                totalNorm += norm;
-            }
-        }
-        
-        totalNorm = Math.sqrt(totalNorm);
-        
-        // 裁剪
-        if (totalNorm > maxGradNorm) {
-            float scale = (float) (maxGradNorm / totalNorm);
-            for (Parameter param : params.values()) {
-                if (param.grad() != null) {
-                    NdArray clippedGrad = param.grad().mulNum(scale);
-                    param.setGrad(clippedGrad);
-                }
-            }
-        }
-    }
-    
-    /**
-     * 保存检查点
-     */
-    private void saveCheckpoint(String suffix) {
-        try {
-            String filename = String.format("deepseek_r1_pretrain_%s.model", suffix);
-            String filepath = checkpointDir + File.separator + filename;
-            model.saveModel(filepath);
-            System.out.println("检查点已保存: " + filepath);
-        } catch (Exception e) {
-            System.err.println("保存检查点失败: " + e.getMessage());
-        }
-    }
-    
-    /**
-     * 创建检查点目录
-     */
-    private void createCheckpointDir() {
-        try {
-            Files.createDirectories(Paths.get(checkpointDir));
-        } catch (IOException e) {
-            System.err.println("创建检查点目录失败: " + e.getMessage());
-        }
-    }
-    
-    /**
      * 获取平均损失
      */
     private float getAverageLoss(List<Float> history, int n) {
@@ -663,6 +598,22 @@ public class DeepSeekR1Pretrain {
             sum += history.get(i);
         }
         return sum / (history.size() - start);
+    }
+    
+    /**
+     * 获取训练器名称
+     */
+    @Override
+    public String getTrainerName() {
+        return "DeepSeek-R1 Pretrain";
+    }
+    
+    /**
+     * 获取检查点前缀
+     */
+    @Override
+    public String getCheckpointPrefix() {
+        return "deepseek_r1_pretrain";
     }
     
     /**

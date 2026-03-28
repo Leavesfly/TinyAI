@@ -19,7 +19,7 @@ import io.leavesfly.tinyai.nnet.v2.container.Sequential;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
 import io.leavesfly.tinyai.nnet.v2.layer.activation.ReLU;
 import io.leavesfly.tinyai.nnet.v2.init.Initializers;
-import io.leavesfly.tinyai.util.Config;
+import io.leavesfly.tinyai.util.UmlPrinter;
 
 import java.util.List;
 
@@ -247,9 +247,11 @@ public class SpiralMlpExamV2 {
         System.out.println("\n=== 生成预测结果用于可视化 ===");
         sequential.eval();  // 设置为推理模式
 
-        Variable variableX = new Variable(NdArray.likeRandom(-1, 1, Shape.of(2000, 2)));
+        Variable variableX = new Variable(NdArray.likeRandom(-1, 1, Shape.of(2000, 2)), "input");
         Variable y = sequential.forward(variableX);
         SpiralDateSet spiralDateSet = SpiralDateSet.toSpiralDateSet(variableX, y);
+
+//        System.out.println(UmlPrinter.getDotGraph(y));
 
         // 可视化
         Plot plot = new Plot();

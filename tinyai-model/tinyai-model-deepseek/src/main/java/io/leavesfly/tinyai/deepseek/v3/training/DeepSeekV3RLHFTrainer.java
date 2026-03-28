@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.deepseek.v3.training;
 
+import io.leavesfly.tinyai.deepseek.base.DeepSeekTrainerBase;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Block;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Config;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Model;
@@ -44,7 +45,7 @@ import java.util.Map;
  * @author leavesfly
  * @version 1.0
  */
-public class DeepSeekV3RLHFTrainer {
+public class DeepSeekV3RLHFTrainer extends DeepSeekTrainerBase {
     
     private final DeepSeekV3Model model;
     private final DeepSeekV3Config config;
@@ -52,19 +53,11 @@ public class DeepSeekV3RLHFTrainer {
     private final SoftmaxCrossEntropy elementWiseLossFunction;
     private final Adam optimizer;
     
-    private int maxEpochs;
     private float learningRate;
-    private float maxGradNorm;
     private float rewardWeight;
     private float moeQualityWeight;
     private float moeLoadBalanceWeight;
-    private int logInterval;
-    private String checkpointDir;
-    
-    private int currentEpoch;
-    private int globalStep;
     private List<Float> rewardHistory;
-    private List<Float> lossHistory;
     
     /**
      * 构造函数
@@ -73,26 +66,20 @@ public class DeepSeekV3RLHFTrainer {
      * @param dataset 包含奖励标注的 RLHF 数据集
      */
     public DeepSeekV3RLHFTrainer(DeepSeekV3Model model, DeepSeekV3Dataset dataset) {
+        super(model, 3, 0.5f, 20, "./checkpoints/deepseek_v3/rlhf");
         this.model = model;
         this.config = model.getConfig();
         this.dataset = dataset;
         this.elementWiseLossFunction = new SoftmaxCrossEntropy(SoftmaxCrossEntropy.Reduction.NONE);
         
-        this.maxEpochs = 3;
         this.learningRate = 1e-5f;
-        this.maxGradNorm = 0.5f;
         this.rewardWeight = 1.0f;
         this.moeQualityWeight = 0.5f;
         this.moeLoadBalanceWeight = (float) config.getLoadBalanceLossWeight();
-        this.logInterval = 20;
-        this.checkpointDir = "./checkpoints/deepseek_v3/rlhf";
         
         this.optimizer = new Adam(model, learningRate, 0.9f, 0.999f, 1e-8f);
         
-        this.currentEpoch = 0;
-        this.globalStep = 0;
         this.rewardHistory = new ArrayList<>();
-        this.lossHistory = new ArrayList<>();
     }
     
     /**
@@ -117,6 +104,7 @@ public class DeepSeekV3RLHFTrainer {
     /**
      * 开始 RLHF 训练
      */
+    @Override
     public void train() {
         System.out.println("=".repeat(70));
         System.out.println("DeepSeek-V3 强化学习训练 (RLHF - Reward-weighted Regression)");
@@ -257,53 +245,14 @@ public class DeepSeekV3RLHFTrainer {
         return lmLoss.add(moeLossVar);
     }
     
-    private float calculateAverage(float[] values) {
-        if (values == null || values.length == 0) return 0.0f;
-        float sum = 0.0f;
-        for (float v : values) sum += v;
-        return sum / values.length;
+    @Override
+    protected String getTrainerName() {
+        return "DeepSeek-V3 RLHF";
     }
     
-    private void clipGradients() {
-        double totalNorm = 0.0;
-        Map<String, Parameter> params = model.getModule().namedParameters("", true);
-        
-        for (Parameter param : params.values()) {
-            if (param.requiresGrad() && param.grad() != null) {
-                double norm = param.grad().mul(param.grad()).sum().getNumber().doubleValue();
-                totalNorm += norm;
-            }
-        }
-        
-        totalNorm = Math.sqrt(totalNorm);
-        
-        if (totalNorm > maxGradNorm) {
-            float scale = (float) (maxGradNorm / totalNorm);
-            for (Parameter param : params.values()) {
-                if (param.requiresGrad() && param.grad() != null) {
-                    param.setGrad(param.grad().mulNum(scale));
-                }
-            }
-        }
-    }
-    
-    private void saveCheckpoint(String suffix) {
-        try {
-            String filepath = checkpointDir + File.separator +
-                            String.format("deepseek_v3_rlhf_%s.model", suffix);
-            model.saveModel(filepath);
-            System.out.println("检查点已保存: " + filepath);
-        } catch (Exception e) {
-            System.err.println("保存失败: " + e.getMessage());
-        }
-    }
-    
-    private void createCheckpointDir() {
-        try {
-            Files.createDirectories(Paths.get(checkpointDir));
-        } catch (Exception e) {
-            System.err.println("创建目录失败: " + e.getMessage());
-        }
+    @Override
+    protected String getCheckpointPrefix() {
+        return "deepseek_v3_rlhf";
     }
     
     /**

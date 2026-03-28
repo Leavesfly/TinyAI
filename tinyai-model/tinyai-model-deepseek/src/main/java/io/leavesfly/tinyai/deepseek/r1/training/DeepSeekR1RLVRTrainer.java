@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.deepseek.r1.training;
 
+import io.leavesfly.tinyai.deepseek.base.DeepSeekTrainerBase;
 import io.leavesfly.tinyai.deepseek.r1.training.dataset.DeepSeekR1RLVRDataset;
 import io.leavesfly.tinyai.deepseek.r1.training.verifier.*;
 import io.leavesfly.tinyai.deepseek.r1.DeepSeekR1Model;
@@ -32,7 +33,7 @@ import java.util.*;
  * GRPO训练流程（对标论文第4节）：
  * 1. 对每个问题 q，从当前策略采样 G 个输出 {o1,...,oG}
  * 2. 验证器为每个输出计算奖励 {r1,...,rG}
- * 3. 组内相对优势： A_i = (r_i - mean(r)) / (std(r) + ε)
+ * 3. 组内相对优势： A_i = (r_i - mean(r)) / std(r)
  * 4. PPO clip目标： L = clip(A_g, -ε, +ε) * CE(logits, o_g)
  * 5. 反向传播更新参数
  * 
@@ -44,7 +45,7 @@ import java.util.*;
  * @author leavesfly
  * @version 2.0
  */
-public class DeepSeekR1RLVRTrainer {
+public class DeepSeekR1RLVRTrainer extends DeepSeekTrainerBase {
     
     private final DeepSeekR1Model model;
     private final DeepSeekR1RLVRDataset dataset;
@@ -54,26 +55,16 @@ public class DeepSeekR1RLVRTrainer {
     private final Map<String, Verifier> verifiers;
     
     // 训练参数
-    private int maxEpochs;
     private float learningRate;
-    private float maxGradNorm;
     
     // 奖励权重
     private float correctnessWeight;     // 正确性权重 (主)
     private float reasoningQualityWeight; // 推理质量权重 (辅)
     private float verificationWeight;     // 验证完整性权重 (辅)
     
-    private int logInterval;
-    private String checkpointDir;
-    
-    // 训练状态
-    private int currentEpoch;
-    private int globalStep;
-    
     // 训练统计
     private List<Float> correctnessHistory;
     private List<Float> qualityHistory;
-    private List<Float> lossHistory;
     
     // ========== GRPO参数 ==========
     /** 组采样大小G：每个问题采样的输出数量（论文默认16，教学简化为4） */
@@ -92,6 +83,8 @@ public class DeepSeekR1RLVRTrainer {
      * @param dataset RLVR数据集
      */
     public DeepSeekR1RLVRTrainer(DeepSeekR1Model model, DeepSeekR1RLVRDataset dataset) {
+        super(model, 5, 1.0f, 10, "./checkpoints/deepseek_r1/rlvr");
+        
         this.model = model;
         this.dataset = dataset;
         
@@ -102,27 +95,19 @@ public class DeepSeekR1RLVRTrainer {
         this.verifiers.put("logic", new LogicVerifier());
         
         // RLVR训练参数（与RLHF类似但更激进）
-        this.maxEpochs = 5;
         this.learningRate = 5e-5f;  // RLVR可以使用稍大的学习率
-        this.maxGradNorm = 1.0f;
         
         // 奖励权重配置
         this.correctnessWeight = 0.7f;      // 正确性最重要
         this.reasoningQualityWeight = 0.2f;  // 推理质量
         this.verificationWeight = 0.1f;      // 验证完整性
         
-        this.logInterval = 10;
-        this.checkpointDir = "./checkpoints/deepseek_r1/rlvr";
-        
         // 使用SGD优化器
         this.optimizer = new SGD(model, learningRate);
         
         // 初始化状态
-        this.currentEpoch = 0;
-        this.globalStep = 0;
         this.correctnessHistory = new ArrayList<>();
         this.qualityHistory = new ArrayList<>();
-        this.lossHistory = new ArrayList<>();
     }
     
     /**
@@ -149,6 +134,7 @@ public class DeepSeekR1RLVRTrainer {
     /**
      * 开始训练
      */
+    @Override
     public void train() {
         System.out.println("=".repeat(70));
         System.out.println("DeepSeek-R1 强化学习训练 (GRPO - Group Relative Policy Optimization)");
@@ -548,58 +534,6 @@ public class DeepSeekR1RLVRTrainer {
         }
         return vocabSize - 1;
     }
-
-    /**
-     * 梯度裁剪
-     */
-    private void clipGradients() {
-        double totalNorm = 0.0;
-        Map<String, Parameter> params = model.getModule().namedParameters("", true);
-        
-        for (Parameter param : params.values()) {
-            if (param.grad() != null) {
-                double norm = param.grad().mul(param.grad()).sum().getNumber().doubleValue();
-                totalNorm += norm;
-            }
-        }
-        
-        totalNorm = Math.sqrt(totalNorm);
-        
-        if (totalNorm > maxGradNorm) {
-            float scale = (float) (maxGradNorm / totalNorm);
-            for (Parameter param : params.values()) {
-                if (param.grad() != null) {
-                    param.setGrad(param.grad().mulNum(scale));
-                }
-            }
-        }
-    }
-    
-    /**
-     * 保存检查点
-     */
-    private void saveCheckpoint(String suffix) {
-        try {
-            String filepath = checkpointDir + File.separator +
-                            String.format("deepseek_r1_rlvr_%s.model", suffix);
-            model.saveModel(filepath);
-            System.out.println("检查点已保存: " + filepath);
-        } catch (Exception e) {
-            System.err.println("保存失败: " + e.getMessage());
-        }
-    }
-    
-    /**
-     * 创建检查点目录
-     */
-    private void createCheckpointDir() {
-        try {
-            Files.createDirectories(Paths.get(checkpointDir));
-        } catch (Exception e) {
-            System.err.println("创建目录失败: " + e.getMessage());
-        }
-    }
-    
     /**
      * 打印训练总结
      */
@@ -638,26 +572,6 @@ public class DeepSeekR1RLVRTrainer {
     }
     
     /**
-     * 计算平均値（float[] 版）
-     */
-    private float calculateAverage(float[] values) {
-        if (values == null || values.length == 0) return 0.0f;
-        float sum = 0.0f;
-        for (float v : values) sum += v;
-        return sum / values.length;
-    }
-    
-    /**
-     * 计算平均値
-     */
-    private float calculateAverage(List<Float> values) {
-        if (values == null || values.isEmpty()) return 0.0f;
-        float sum = 0.0f;
-        for (float v : values) sum += v;
-        return sum / values.size();
-    }
-    
-    /**
      * 获取训练统计
      */
     public Map<String, Object> getTrainingStats() {
@@ -667,5 +581,21 @@ public class DeepSeekR1RLVRTrainer {
         stats.put("avg_reward", calculateAverage(correctnessHistory));
         stats.put("avg_quality", calculateAverage(qualityHistory));
         return stats;
+    }
+    
+    /**
+     * 获取训练器名称
+     */
+    @Override
+    public String getTrainerName() {
+        return "DeepSeek-R1 RLVR";
+    }
+    
+    /**
+     * 获取检查点前缀
+     */
+    @Override
+    public String getCheckpointPrefix() {
+        return "deepseek_r1_rlvr";
     }
 }

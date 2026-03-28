@@ -105,6 +105,14 @@ public class GPT3Model extends Model {
     }
     
     // ==================== 工厂方法 ====================
+
+
+
+
+    public static GPT3Model createNanoModel(String name) {
+        GPT3Config config = GPT3Config.createNanoConfig();
+        return new GPT3Model(name, config);
+    }
     
     /**
      * 创建小型GPT-3模型（125M参数）

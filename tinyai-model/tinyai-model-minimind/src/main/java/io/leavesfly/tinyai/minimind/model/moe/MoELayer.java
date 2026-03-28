@@ -116,7 +116,16 @@ public class MoELayer extends Module {
      * @return 输出 [batch_size, output_dim]
      */
     public Variable forwardWithRouterOutput(Variable input, ExpertRouter.RouterOutput routerOutput) {
-        int batchSize = input.getShape().getDimension(0);
+        // 支持3D输入 [batch_size, seq_len, input_dim] -> reshape为 [batch_size * seq_len, input_dim]
+        int origBatchSize = input.getShape().getDimension(0);
+        int seqLen = -1;
+        Variable flatInput = input;
+        if (input.getShape().getDimNum() == 3) {
+            seqLen = input.getShape().getDimension(1);
+            flatInput = input.reshape(Shape.of(origBatchSize * seqLen, inputDim));
+        }
+        
+        int batchSize = flatInput.getShape().getDimension(0);
         int[][] topKIndices = routerOutput.getTopKIndices();
         float[][] topKWeights = routerOutput.getTopKWeights();
         
@@ -166,7 +175,7 @@ public class MoELayer extends Module {
             
             Variable indicesVar = new Variable(NdArray.of(indicesArray));
             indicesVar.setRequireGrad(false);
-            Variable expertInput = input.indexSelect(0, indicesVar);  // [expert_batch_size, input_dim]
+            Variable expertInput = flatInput.indexSelect(0, indicesVar);  // [expert_batch_size, input_dim]
             
             // 批量调用专家
             ExpertNetwork expert = experts.get(e);
@@ -192,6 +201,11 @@ public class MoELayer extends Module {
         }
         
         totalCalls += batchSize;
+        
+        // 如果原始输入是3D的，将输出reshape回 [batch_size, seq_len, output_dim]
+        if (seqLen > 0) {
+            output = output.reshape(Shape.of(origBatchSize, seqLen, outputDim));
+        }
         
         return output;
     }

@@ -6,6 +6,7 @@ import io.leavesfly.tinyai.minimind.model.MiniMindModel;
 import io.leavesfly.tinyai.minimind.tokenizer.MiniMindTokenizer;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
+import io.leavesfly.tinyai.nnet.v2.util.PlantUML;
 import io.leavesfly.tinyai.util.UmlPrinter;
 
 import java.util.Arrays;
@@ -62,14 +63,13 @@ public class Example01_ModelCreationAndInference {
                 "神经网络"
         };
 
-        Variable output = batchInference(model, tokenizer, batchTexts);
+        batchInference(model, tokenizer, batchTexts);
 
         // 6. 不同配置示例
         System.out.println("\n6. 不同规模模型配置对比");
         compareModelConfigs();
         System.out.println("\n=== 示例完成 ===");
 
-        System.out.printf(UmlPrinter.getDotGraph(output));
 
     }
 
@@ -82,7 +82,7 @@ public class Example01_ModelCreationAndInference {
         config.setVocabSize(vocabSize);
         config.setMaxSeqLen(64);          // 序列长度
         config.setHiddenSize(128);        // 隐藏维度
-        config.setNumLayers(1);           // 层数
+        config.setNumLayers(2);           // 层数
         config.setNumHeads(2);            // 注意力头数
         config.setFfnHiddenSize(256);     // FFN隐藏维度
         config.setDropout(0.1f);
@@ -137,7 +137,7 @@ public class Example01_ModelCreationAndInference {
     /**
      * 批量推理
      */
-    private static Variable batchInference(MiniMindModel model, MiniMindTokenizer tokenizer, String[] texts) {
+    private static void batchInference(MiniMindModel model, MiniMindTokenizer tokenizer, String[] texts) {
         System.out.println("批量输入 " + texts.length + " 个文本:");
         for (int i = 0; i < texts.length; i++) {
             System.out.println("  [" + i + "] " + texts[i]);
@@ -168,7 +168,9 @@ public class Example01_ModelCreationAndInference {
         System.out.println("批量输出形状: [" + outputShape[0] + ", " +
                 outputShape[1] + ", " + outputShape[2] + "]");
 
-        return output;
+
+        System.out.printf(PlantUML.generateModuleGraph(model.getModule()));
+
     }
 
     /**

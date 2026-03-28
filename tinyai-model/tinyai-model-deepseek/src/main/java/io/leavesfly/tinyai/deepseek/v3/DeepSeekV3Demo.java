@@ -78,8 +78,7 @@ public class DeepSeekV3Demo {
         };
         Variable inputVar = new Variable(NdArray.of(inputs));
         
-        DeepSeekV3Block.DetailedForwardResult result = 
-            model.predictWithDetails(inputVar);
+        DeepSeekV3Block.DetailedForwardResult result = model.predictWithDetails(inputVar);
         
         System.out.println("\n执行结果:");
         System.out.println("  - 平均MoE损失: " + String.format("%.6f", result.avgMoELoss));

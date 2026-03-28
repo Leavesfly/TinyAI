@@ -103,7 +103,7 @@ public class MiniMindConfig implements Serializable {
     /**
      * 是否启用 MoE 架构
      */
-    private boolean useMoE = false;
+    private boolean useMoE = true;
 
     /**
      * MoE 专家数量
@@ -399,77 +399,197 @@ public class MiniMindConfig implements Serializable {
 
     // ========== Getter 和 Setter 方法 ==========
 
-    public int getVocabSize() { return vocabSize; }
-    public void setVocabSize(int vocabSize) { this.vocabSize = vocabSize; }
+    public int getVocabSize() {
+        return vocabSize;
+    }
 
-    public int getMaxSeqLen() { return maxSeqLen; }
-    public void setMaxSeqLen(int maxSeqLen) { this.maxSeqLen = maxSeqLen; }
+    public void setVocabSize(int vocabSize) {
+        this.vocabSize = vocabSize;
+    }
 
-    public int getHiddenSize() { return hiddenSize; }
-    public void setHiddenSize(int hiddenSize) { this.hiddenSize = hiddenSize; }
+    public int getMaxSeqLen() {
+        return maxSeqLen;
+    }
 
-    public int getNumLayers() { return numLayers; }
-    public void setNumLayers(int numLayers) { this.numLayers = numLayers; }
+    public void setMaxSeqLen(int maxSeqLen) {
+        this.maxSeqLen = maxSeqLen;
+    }
 
-    public int getNumHeads() { return numHeads; }
-    public void setNumHeads(int numHeads) { this.numHeads = numHeads; }
+    public int getHiddenSize() {
+        return hiddenSize;
+    }
 
-    public int getFfnHiddenSize() { return ffnHiddenSize; }
-    public void setFfnHiddenSize(int ffnHiddenSize) { this.ffnHiddenSize = ffnHiddenSize; }
+    public void setHiddenSize(int hiddenSize) {
+        this.hiddenSize = hiddenSize;
+    }
 
-    public float getDropout() { return dropout; }
-    public void setDropout(float dropout) { this.dropout = dropout; }
+    public int getNumLayers() {
+        return numLayers;
+    }
 
-    public float getAttentionDropout() { return attentionDropout; }
-    public void setAttentionDropout(float attentionDropout) { this.attentionDropout = attentionDropout; }
+    public void setNumLayers(int numLayers) {
+        this.numLayers = numLayers;
+    }
 
-    public float getEpsilon() { return epsilon; }
-    public void setEpsilon(float epsilon) { this.epsilon = epsilon; }
+    public int getNumHeads() {
+        return numHeads;
+    }
 
-    public String getActivationFunction() { return activationFunction; }
-    public void setActivationFunction(String activationFunction) { this.activationFunction = activationFunction; }
+    public void setNumHeads(int numHeads) {
+        this.numHeads = numHeads;
+    }
 
-    public boolean isUseRoPE() { return useRoPE; }
-    public void setUseRoPE(boolean useRoPE) { this.useRoPE = useRoPE; }
+    public int getFfnHiddenSize() {
+        return ffnHiddenSize;
+    }
 
-    public boolean isPreLayerNorm() { return preLayerNorm; }
-    public void setPreLayerNorm(boolean preLayerNorm) { this.preLayerNorm = preLayerNorm; }
+    public void setFfnHiddenSize(int ffnHiddenSize) {
+        this.ffnHiddenSize = ffnHiddenSize;
+    }
 
-    public float getRopeTheta() { return ropeTheta; }
-    public void setRopeTheta(float ropeTheta) { this.ropeTheta = ropeTheta; }
+    public float getDropout() {
+        return dropout;
+    }
 
-    public boolean isUseBias() { return useBias; }
-    public void setUseBias(boolean useBias) { this.useBias = useBias; }
+    public void setDropout(float dropout) {
+        this.dropout = dropout;
+    }
 
-    public boolean isUseMoE() { return useMoE; }
-    public void setUseMoE(boolean useMoE) { this.useMoE = useMoE; }
+    public float getAttentionDropout() {
+        return attentionDropout;
+    }
 
-    public int getNumExperts() { return numExperts; }
-    public void setNumExperts(int numExperts) { this.numExperts = numExperts; }
+    public void setAttentionDropout(float attentionDropout) {
+        this.attentionDropout = attentionDropout;
+    }
 
-    public int getNumExpertsPerToken() { return numExpertsPerToken; }
-    public void setNumExpertsPerToken(int numExpertsPerToken) { this.numExpertsPerToken = numExpertsPerToken; }
+    public float getEpsilon() {
+        return epsilon;
+    }
 
-    public float getMoeLoadBalanceWeight() { return moeLoadBalanceWeight; }
-    public void setMoeLoadBalanceWeight(float moeLoadBalanceWeight) { this.moeLoadBalanceWeight = moeLoadBalanceWeight; }
+    public void setEpsilon(float epsilon) {
+        this.epsilon = epsilon;
+    }
 
-    public float getMoeNoiseFactor() { return moeNoiseFactor; }
-    public void setMoeNoiseFactor(float moeNoiseFactor) { this.moeNoiseFactor = moeNoiseFactor; }
+    public String getActivationFunction() {
+        return activationFunction;
+    }
 
-    public float getMoeImportanceCoef() { return moeImportanceCoef; }
-    public void setMoeImportanceCoef(float moeImportanceCoef) { this.moeImportanceCoef = moeImportanceCoef; }
+    public void setActivationFunction(String activationFunction) {
+        this.activationFunction = activationFunction;
+    }
 
-    public float getMoeLoadCoef() { return moeLoadCoef; }
-    public void setMoeLoadCoef(float moeLoadCoef) { this.moeLoadCoef = moeLoadCoef; }
+    public boolean isUseRoPE() {
+        return useRoPE;
+    }
 
-    public boolean isMoeSharedExperts() { return moeSharedExperts; }
-    public void setMoeSharedExperts(boolean moeSharedExperts) { this.moeSharedExperts = moeSharedExperts; }
+    public void setUseRoPE(boolean useRoPE) {
+        this.useRoPE = useRoPE;
+    }
 
-    public boolean isMoeEnableLoadBalance() { return moeEnableLoadBalance; }
-    public void setMoeEnableLoadBalance(boolean moeEnableLoadBalance) { this.moeEnableLoadBalance = moeEnableLoadBalance; }
+    public boolean isPreLayerNorm() {
+        return preLayerNorm;
+    }
 
-    public int getEosTokenId() { return eosTokenId; }
-    public void setEosTokenId(int eosTokenId) { this.eosTokenId = eosTokenId; }
+    public void setPreLayerNorm(boolean preLayerNorm) {
+        this.preLayerNorm = preLayerNorm;
+    }
+
+    public float getRopeTheta() {
+        return ropeTheta;
+    }
+
+    public void setRopeTheta(float ropeTheta) {
+        this.ropeTheta = ropeTheta;
+    }
+
+    public boolean isUseBias() {
+        return useBias;
+    }
+
+    public void setUseBias(boolean useBias) {
+        this.useBias = useBias;
+    }
+
+    public boolean isUseMoE() {
+        return useMoE;
+    }
+
+    public void setUseMoE(boolean useMoE) {
+        this.useMoE = useMoE;
+    }
+
+    public int getNumExperts() {
+        return numExperts;
+    }
+
+    public void setNumExperts(int numExperts) {
+        this.numExperts = numExperts;
+    }
+
+    public int getNumExpertsPerToken() {
+        return numExpertsPerToken;
+    }
+
+    public void setNumExpertsPerToken(int numExpertsPerToken) {
+        this.numExpertsPerToken = numExpertsPerToken;
+    }
+
+    public float getMoeLoadBalanceWeight() {
+        return moeLoadBalanceWeight;
+    }
+
+    public void setMoeLoadBalanceWeight(float moeLoadBalanceWeight) {
+        this.moeLoadBalanceWeight = moeLoadBalanceWeight;
+    }
+
+    public float getMoeNoiseFactor() {
+        return moeNoiseFactor;
+    }
+
+    public void setMoeNoiseFactor(float moeNoiseFactor) {
+        this.moeNoiseFactor = moeNoiseFactor;
+    }
+
+    public float getMoeImportanceCoef() {
+        return moeImportanceCoef;
+    }
+
+    public void setMoeImportanceCoef(float moeImportanceCoef) {
+        this.moeImportanceCoef = moeImportanceCoef;
+    }
+
+    public float getMoeLoadCoef() {
+        return moeLoadCoef;
+    }
+
+    public void setMoeLoadCoef(float moeLoadCoef) {
+        this.moeLoadCoef = moeLoadCoef;
+    }
+
+    public boolean isMoeSharedExperts() {
+        return moeSharedExperts;
+    }
+
+    public void setMoeSharedExperts(boolean moeSharedExperts) {
+        this.moeSharedExperts = moeSharedExperts;
+    }
+
+    public boolean isMoeEnableLoadBalance() {
+        return moeEnableLoadBalance;
+    }
+
+    public void setMoeEnableLoadBalance(boolean moeEnableLoadBalance) {
+        this.moeEnableLoadBalance = moeEnableLoadBalance;
+    }
+
+    public int getEosTokenId() {
+        return eosTokenId;
+    }
+
+    public void setEosTokenId(int eosTokenId) {
+        this.eosTokenId = eosTokenId;
+    }
 
     @Override
     public String toString() {
@@ -486,7 +606,7 @@ public class MiniMindConfig implements Serializable {
         sb.append(", activation='").append(activationFunction).append('\'');
         sb.append(", useRoPE=").append(useRoPE);
         sb.append(", useMoE=").append(useMoE);
-        
+
         if (useMoE) {
             sb.append(", numExperts=").append(numExperts);
             sb.append(", numExpertsPerToken=").append(numExpertsPerToken);
@@ -496,7 +616,7 @@ public class MiniMindConfig implements Serializable {
             sb.append(", moeSharedExperts=").append(moeSharedExperts);
             sb.append(", moeEnableLoadBalance=").append(moeEnableLoadBalance);
         }
-        
+
         sb.append(", estimatedParams=").append(estimateParameters());
         sb.append('}');
         return sb.toString();

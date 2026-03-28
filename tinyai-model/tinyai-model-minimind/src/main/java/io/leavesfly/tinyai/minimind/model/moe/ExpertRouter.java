@@ -100,10 +100,17 @@ public class ExpertRouter extends Module {
      * @return 路由结果 RouterOutput
      */
     public RouterOutput forwardRouter(Variable input) {
-        int batchSize = input.getShape().getDimension(0);
+        // 支持3D输入 [batch_size, seq_len, input_dim] -> reshape为 [batch_size * seq_len, input_dim]
+        Variable flatInput = input;
+        if (input.getShape().getDimNum() == 3) {
+            int batchSize = input.getShape().getDimension(0);
+            int seqLen = input.getShape().getDimension(1);
+            flatInput = input.reshape(Shape.of(batchSize * seqLen, inputDim));
+        }
+        int flatBatchSize = flatInput.getShape().getDimension(0);
         
-        // 1. 计算门控logits: [batch_size, num_experts]
-        Variable gateLogits = gateLinear.forward(input);
+        // 1. 计算门控logits: [flatBatchSize, num_experts]
+        Variable gateLogits = gateLinear.forward(flatInput);
         
         // 2. 添加噪声(训练时)
         if (isTraining() && noiseFactor > 0) {
@@ -111,7 +118,7 @@ public class ExpertRouter extends Module {
         }
         
         // 3. Top-K选择和Softmax
-        RouterOutput output = topKGating(gateLogits, batchSize);
+        RouterOutput output = topKGating(gateLogits, flatBatchSize);
         
         return output;
     }

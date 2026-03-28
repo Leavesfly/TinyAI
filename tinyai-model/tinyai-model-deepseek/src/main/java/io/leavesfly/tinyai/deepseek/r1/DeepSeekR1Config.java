@@ -124,6 +124,25 @@ public class DeepSeekR1Config extends DeepSeekBaseConfig {
     }
     
     /**
+     * 创建极小型DeepSeek-R1配置（用于默认JVM堆内存下测试）
+     * 配置：64维, 2层, 2头, 2专家, Top-1路由, 序列长度32
+     * 参数量：约200K，适合在默认JVM内存下运行
+     */
+    public static DeepSeekR1Config createMicroConfig() {
+        DeepSeekR1Config config = new DeepSeekR1Config();
+        config.setVocabSize(1000);
+        config.setNEmbd(64);
+        config.setNLayer(2);
+        config.setNHead(2);
+        config.setNInner(128);
+        config.setNPositions(32);
+        config.setNumExperts(2);
+        config.setTopK(1);
+        config.setExpertHiddenDim(128);
+        return config;
+    }
+    
+    /**
      * 创建小型DeepSeek-R1配置（用于学习和实验）
      * 配置：512维, 8层, 8头, 8专家, Top-2路由, 序列长度1024
      */

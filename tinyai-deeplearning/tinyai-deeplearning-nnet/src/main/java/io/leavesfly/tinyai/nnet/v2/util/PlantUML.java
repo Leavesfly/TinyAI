@@ -72,51 +72,6 @@ public class PlantUML {
         return result.toString();
     }
 
-    /**
-     * 生成包含 Module 维度信息的增强计算图（无 Module 参数版本）
-     * <p>
-     * 尝试从计算图中自动发现 Module 类型的 Function 节点。
-     * 注意：如果 Module.forward() 内部使用 forward() 而非 call()，
-     * 则无法自动发现 Module，建议使用 {@link #generateGraph(Variable, Module)}。
-     *
-     * @param outputVariable 计算图的输出变量
-     * @return PlantUML 格式的字符串
-     */
-    public static String generateGraph(Variable outputVariable) {
-        StringBuilder declarations = new StringBuilder();
-        StringBuilder edges = new StringBuilder();
-        Set<Integer> visited = new HashSet<>();
-        Map<Integer, Module> functionToModule = new LinkedHashMap<>();
-
-        collectNodes(outputVariable, declarations, edges, visited, functionToModule);
-
-        StringBuilder modulePackages = new StringBuilder();
-        Set<Integer> visitedModules = new HashSet<>();
-        for (Map.Entry<Integer, Module> entry : functionToModule.entrySet()) {
-            generateModulePackage(entry.getValue(), modulePackages, visitedModules);
-        }
-
-        StringBuilder result = new StringBuilder();
-        result.append("@startuml\n");
-        result.append("left to right direction\n");
-
-        if (modulePackages.length() > 0) {
-            result.append("skinparam packageStyle rectangle\n");
-            result.append("skinparam packageBorderColor #4A90D9\n");
-            result.append("skinparam packageBackgroundColor #F0F8FF\n\n");
-            result.append("' === Module 层级结构 ===\n");
-            result.append(modulePackages);
-            result.append("\n");
-        }
-
-        result.append("' === 计算图节点 ===\n");
-        result.append(declarations);
-        result.append("\n' === 计算图数据流 ===\n");
-        result.append(edges);
-
-        result.append("@enduml");
-        return result.toString();
-    }
 
     /**
      * 生成基础计算图（与 UmlPrinter 兼容的简单模式）
@@ -158,10 +113,10 @@ public class PlantUML {
     /**
      * 递归收集计算图中的节点声明和边关系
      *
-     * @param variableNode    当前变量节点
-     * @param declarations    节点声明构建器
-     * @param edges           边关系构建器
-     * @param visited         已访问节点集合
+     * @param variableNode     当前变量节点
+     * @param declarations     节点声明构建器
+     * @param edges            边关系构建器
+     * @param visited          已访问节点集合
      * @param functionToModule Module 收集器（可为 null 表示不收集）
      */
     private static void collectNodes(Variable variableNode, StringBuilder declarations,

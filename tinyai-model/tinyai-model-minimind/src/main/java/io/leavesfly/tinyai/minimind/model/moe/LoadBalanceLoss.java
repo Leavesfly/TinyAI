@@ -19,7 +19,9 @@ package io.leavesfly.tinyai.minimind.model.moe;
  * @author leavesfly
  * @since 2024
  */
-public class LoadBalanceLoss {
+public class LoadBalanceLoss implements java.io.Serializable {
+    
+    private static final long serialVersionUID = 1L;
     
     private final float importanceCoef;  // 重要性损失系数
     private final float loadCoef;        // 负载损失系数

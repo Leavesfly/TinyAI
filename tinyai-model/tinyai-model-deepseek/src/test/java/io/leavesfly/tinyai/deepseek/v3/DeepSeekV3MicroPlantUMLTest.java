@@ -56,11 +56,11 @@ public class DeepSeekV3MicroPlantUMLTest {
 
         // 构造输入: [batch_size=1, seq_len=4]
         float[][] inputData = {{1, 2, 3, 4}};
-        Variable input = new Variable(NdArray.of(inputData), "input_token_ids");
+        Variable input = new Variable(NdArray.of(inputData), "input");
 
         // 前向传播，构建计算图
         Variable output = model.predict(input);
-        output.setName("logits_output");
+        output.setName("output");
 
         System.out.println("========== DeepSeek-V3 Micro 计算图 (PlantUML) ==========");
         System.out.println("输入形状: " + input.getValue().getShape());

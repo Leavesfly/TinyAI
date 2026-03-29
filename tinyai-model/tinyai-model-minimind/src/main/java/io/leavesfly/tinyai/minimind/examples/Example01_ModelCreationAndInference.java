@@ -169,7 +169,8 @@ public class Example01_ModelCreationAndInference {
                 outputShape[1] + ", " + outputShape[2] + "]");
 
 
-        System.out.printf(PlantUML.generateModuleGraph(model.getModule()));
+//        System.out.printf(PlantUML.generateModuleGraph(model.getModule()));
+        System.out.printf(PlantUML.generateSimpleGraph(output));
 
     }
 

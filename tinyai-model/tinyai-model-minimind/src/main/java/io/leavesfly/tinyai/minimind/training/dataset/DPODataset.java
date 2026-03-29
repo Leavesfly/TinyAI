@@ -158,8 +158,7 @@ public class DPODataset {
             
             // 编码chosen序列
             List<Integer> chosenTokens = tokenizer.encode(pair.getChosenFullText(), false, false);
-            processSequence(chosenTokens, i, chosenInputData, chosenLabelsData, 
-                          promptMaskData, promptLen);
+            processSequence(chosenTokens, i, chosenInputData, chosenLabelsData, promptMaskData, promptLen);
             
             // 编码rejected序列
             List<Integer> rejectedTokens = tokenizer.encode(pair.getRejectedFullText(), false, false);

@@ -47,7 +47,7 @@ public class SFTTrainer extends BaseTrainer {
         this.maxGradNorm = 1.0f;
         this.logInterval = 50;
         this.saveInterval = 500;
-        this.checkpointDir = "./checkpoints/minimind_sft_checkpoints";
+        this.checkpointDir = "./checkpoints/minimind/sft";
         
         // 创建优化器
         this.optimizer = new Adam(model, learningRate, 0.9f, 0.999f, 1e-8f);

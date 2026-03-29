@@ -94,25 +94,21 @@ public class DPOTrainer extends BaseTrainer {
     }
     
     /**
-     * 复制模型参数
+     * 复制模型参数（深拷贝）
+     *
+     * 使用Parameter原生的deepCopy()方法，将源模型的参数数据深拷贝到目标模型中，
+     * 确保两个模型的参数内存完全独立。
      */
     private void copyModelParameters(MiniMindModel source, MiniMindModel target) {
         Map<String, Parameter> sourceParams = source.getAllParams();
         Map<String, Parameter> targetParams = target.getAllParams();
-        
-        for (String name : sourceParams.keySet()) {
-            if (targetParams.containsKey(name)) {
-                Parameter sourceParam = sourceParams.get(name);
-                Parameter targetParam = targetParams.get(name);
-                
-                // 复制数据
-                NdArray sourceData = sourceParam.getValue();
-                NdArray targetData = targetParam.getValue();
-                
-                // 简化:直接赋值(实际应该深拷贝)
-                float[] srcBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) sourceData).buffer;
-                float[] tgtBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) targetData).buffer;
-                System.arraycopy(srcBuffer, 0, tgtBuffer, 0, srcBuffer.length);
+
+        for (Map.Entry<String, Parameter> entry : sourceParams.entrySet()) {
+            String paramName = entry.getKey();
+            if (targetParams.containsKey(paramName)) {
+                Parameter sourceParam = entry.getValue();
+                Parameter deepCopied = sourceParam.deepCopy();
+                targetParams.get(paramName).setData(deepCopied.data());
             }
         }
     }

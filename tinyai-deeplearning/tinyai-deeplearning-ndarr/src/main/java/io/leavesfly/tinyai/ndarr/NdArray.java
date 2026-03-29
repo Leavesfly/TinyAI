@@ -1014,4 +1014,20 @@ public interface NdArray {
      * @throws IllegalArgumentException 当维度数量不匹配时抛出
      */
     float get(int... _dimension);
+
+    /**
+     * 深拷贝当前NdArray，返回一个数据完全独立的新实例
+     *
+     * 拷贝内容包括形状和底层数据缓冲区，修改副本不会影响原始数组。
+     * 常用于模型参数快照（如DPO训练中的参考模型）等需要独立副本的场景。
+     *
+     * <pre>{@code
+     * NdArray original = NdArray.of(new float[]{1, 2, 3});
+     * NdArray copied = original.copy();
+     * // copied 与 original 数据相同但内存独立
+     * }</pre>
+     *
+     * @return 数据完全独立的新NdArray实例
+     */
+    NdArray copy();
 }

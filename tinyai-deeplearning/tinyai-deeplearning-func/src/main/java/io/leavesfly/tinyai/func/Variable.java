@@ -840,9 +840,27 @@ public class Variable implements Serializable {
         return result;
     }
 
-    /** 深拷贝张量值 */
+    /** 深拷贝张量值（参与计算图，保留梯度追踪） */
     public Variable clone() {
         return new Clone().call(this);
+    }
+
+    /**
+     * 纯数据深拷贝，返回一个与计算图完全无关的独立副本
+     *
+     * 与 clone() 的区别：
+     * - clone() 通过 Clone Function 实现，会加入计算图，支持梯度回传
+     * - deepCopy() 是纯数据拷贝，不参与计算图，适用于模型参数快照等场景
+     *
+     * 拷贝内容：value（深拷贝）、name、requireGrad
+     * 不拷贝：grad、creator（计算图关系）
+     *
+     * @return 数据独立的新Variable实例
+     */
+    public Variable deepCopy() {
+        NdArray copiedValue = this.value.copy();
+        Variable copy = new Variable(copiedValue, this.name, this.requireGrad);
+        return copy;
     }
 
     /** 创建同形状全1张量 */

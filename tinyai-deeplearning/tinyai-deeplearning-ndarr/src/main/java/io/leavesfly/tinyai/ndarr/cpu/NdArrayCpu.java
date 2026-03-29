@@ -1208,4 +1208,16 @@ public class NdArrayCpu implements NdArray, Serializable {
         format1DArray(sb, 0, Math.min(20, buffer.length));
     }
 
+    /**
+     * 深拷贝当前NdArray，返回数据完全独立的新实例
+     *
+     * @return 新的NdArrayCpu实例，shape和buffer均为独立副本
+     */
+    @Override
+    public NdArrayCpu copy() {
+        float[] newBuffer = Arrays.copyOf(this.buffer, this.buffer.length);
+        Shape newShape = Shape.of(this.shape.getShapeDims());
+        return new NdArrayCpu(newBuffer, newShape);
+    }
+
 }

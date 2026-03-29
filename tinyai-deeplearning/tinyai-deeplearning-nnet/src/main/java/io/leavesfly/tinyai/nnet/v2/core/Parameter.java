@@ -89,6 +89,20 @@ public class Parameter extends Variable {
         super.clearGrad();
     }
 
+    /**
+     * 纯数据深拷贝，返回一个与计算图完全无关的独立Parameter副本
+     *
+     * 拷贝内容：value（深拷贝）、requiresGrad
+     * 不拷贝：grad、creator（计算图关系）
+     *
+     * @return 数据独立的新Parameter实例
+     */
+    @Override
+    public Parameter deepCopy() {
+        NdArray copiedValue = getValue().copy();
+        return new Parameter(copiedValue, this.requireGrad);
+    }
+
     @Override
     public String toString() {
         return "Parameter{" +

@@ -314,4 +314,9 @@ public class NdArrayTpu implements NdArray {
     public float get(int... _dimension) {
         return 0;
     }
+
+    @Override
+    public NdArray copy() {
+        return null;
+    }
 }

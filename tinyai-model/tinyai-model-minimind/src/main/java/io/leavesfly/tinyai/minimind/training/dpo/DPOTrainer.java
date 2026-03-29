@@ -72,8 +72,8 @@ public class DPOTrainer extends BaseTrainer {
         this.maxGradNorm = 1.0f;
         this.logInterval = 10;
         this.saveInterval = 500;
-        this.checkpointDir = "./dpo_checkpoints";
-        
+        this.checkpointDir = "./checkpoints/minimind/dpo";
+
         // 创建优化器
         this.optimizer = new Adam(policyModel, learningRate, 0.9f, 0.999f, 1e-8f);
         

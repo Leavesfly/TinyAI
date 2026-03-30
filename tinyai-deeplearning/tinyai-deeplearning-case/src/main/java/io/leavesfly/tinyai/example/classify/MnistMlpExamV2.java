@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.example.classify.v2;
+package io.leavesfly.tinyai.example.classify;
 
 import io.leavesfly.tinyai.ml.model.Model;
 import io.leavesfly.tinyai.ml.visual.Monitor;

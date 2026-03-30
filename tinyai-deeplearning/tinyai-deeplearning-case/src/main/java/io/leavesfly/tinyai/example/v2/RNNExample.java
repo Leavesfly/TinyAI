@@ -8,6 +8,8 @@ import io.leavesfly.tinyai.nnet.v2.layer.rnn.LSTM;
 import io.leavesfly.tinyai.nnet.v2.layer.rnn.GRU;
 import io.leavesfly.tinyai.nnet.v2.layer.rnn.SimpleRNN;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.v2.util.PlantUML;
+import io.leavesfly.tinyai.util.UmlPrinter;
 
 /**
  * RNN序列建模示例
@@ -204,7 +206,7 @@ public class RNNExample {
             seqData[i] = (float) (Math.random() * 0.1 - 0.05);
         }
         NdArray seqArray = NdArray.of(seqData, Shape.of(seqLen, batchSize, inputSize));
-        Variable input = new Variable(seqArray);
+        Variable input = new Variable(seqArray,"input");
 
         // 示例1: LSTM分类器
         System.out.println("示例1: LSTM序列分类器");
@@ -216,6 +218,9 @@ public class RNNExample {
         System.out.println("1. 前向传播:");
         System.out.println("   输入形状: [" + seqLen + ", " + batchSize + ", " + inputSize + "]");
         Variable lstmOutput = lstmModel.forward(input);
+
+//        System.out.println(PlantUML.generateSimpleGraph(lstmOutput));
+
         System.out.println("   输出形状: " + shapeToString(lstmOutput.getValue().getShape()));
 
         float[] lstmOutputData = lstmOutput.getValue().getArray();
@@ -252,6 +257,9 @@ public class RNNExample {
 
         System.out.println("1. 前向传播:");
         Variable rnnOutput = rnnModel.forward(input);
+
+        System.out.println(PlantUML.generateSimpleGraph(rnnOutput));
+
         System.out.println("   输出形状: " + shapeToString(rnnOutput.getValue().getShape()));
 
         float[] rnnOutputData = rnnOutput.getValue().getArray();
@@ -260,6 +268,9 @@ public class RNNExample {
             System.out.printf("     类别%d: %.4f%n", i, rnnOutputData[i]);
         }
         System.out.println();
+
+
+
 
         // RNN变体对比
         System.out.println("\nRNN变体对比:");

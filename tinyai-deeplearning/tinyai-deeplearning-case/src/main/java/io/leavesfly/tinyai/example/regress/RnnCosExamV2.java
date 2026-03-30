@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.example.regress.v2;
+package io.leavesfly.tinyai.example.regress;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.model.Model;

@@ -9,6 +9,7 @@ import io.leavesfly.tinyai.nnet.v2.layer.conv.MaxPool2d;
 import io.leavesfly.tinyai.nnet.v2.layer.activation.ReLU;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
+import io.leavesfly.tinyai.util.UmlPrinter;
 
 /**
  * CNN卷积神经网络示例
@@ -189,6 +190,10 @@ public class CNNExample {
         model.eval();
 
         output = model.forward(input);
+
+        System.out.println(UmlPrinter.getDotGraph(output));
+
+
         System.out.println("   输出形状: " + shapeToString(output.getValue().getShape()));
 
         // 找到预测类别

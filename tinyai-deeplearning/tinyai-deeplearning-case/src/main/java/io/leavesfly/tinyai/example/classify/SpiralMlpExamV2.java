@@ -1,4 +1,4 @@
-package io.leavesfly.tinyai.example.classify.v2;
+package io.leavesfly.tinyai.example.classify;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.dataset.ArrayDataset;

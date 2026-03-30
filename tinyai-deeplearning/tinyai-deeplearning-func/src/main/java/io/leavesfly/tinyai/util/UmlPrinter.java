@@ -24,6 +24,7 @@ public class UmlPrinter {
     /**
      * 在线验证：
      *  http://www.plantuml.com/plantuml/uml/SyfFKj2rKt3CoKnELR1Io4ZDoSa70000
+     *
      */
 
     /**

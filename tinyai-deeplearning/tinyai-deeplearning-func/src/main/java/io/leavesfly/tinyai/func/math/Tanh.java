@@ -13,6 +13,10 @@ import java.util.List;
  * 双曲正切激活函数，用于神经网络中，将输入值映射到(-1,1)区间。
  */
 public class Tanh extends Function {
+
+    /** 缓存前向传播的 tanh 结果，避免 backward 重复计算 */
+    private NdArray cachedTanh;
+
     /**
      * 前向传播计算Tanh
      * <p>
@@ -23,7 +27,8 @@ public class Tanh extends Function {
      */
     @Override
     public NdArray forward(NdArray... inputs) {
-        return inputs[0].tanh();
+        cachedTanh = inputs[0].tanh();
+        return cachedTanh;
     }
 
     /**
@@ -31,16 +36,15 @@ public class Tanh extends Function {
      * <p>
      * 对于Tanh函数，梯度计算公式为：
      * ∂tanh(x)/∂x = 1 - tanh(x)²
+     * 复用前向传播缓存的 tanh 结果。
      *
      * @param yGrad 输出变量的梯度
      * @return 输入变量的梯度列表
      */
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        NdArray x = inputs[0].getValue();
-        NdArray tanhX = x.tanh();
         return Collections.singletonList(
-                yGrad.mul(NdArray.ones(tanhX.getShape()).sub(tanhX.square())));
+                yGrad.mul(NdArray.ones(cachedTanh.getShape()).sub(cachedTanh.square())));
     }
 
     /**

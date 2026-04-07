@@ -16,8 +16,8 @@ import java.util.List;
  */
 public class Sub extends Function {
 
-    private Shape x0Shape;
-    private Shape x1Shape;
+    private Shape input0Shape;
+    private Shape input1Shape;
 
     /**
      * 前向传播计算减法
@@ -33,30 +33,18 @@ public class Sub extends Function {
         NdArray input0 = inputs[0];
         NdArray input1 = inputs[1];
         
-        x0Shape = input0.getShape();
-        x1Shape = input1.getShape();
-        
-        // 检查是否需要广播
-        if (input0.getShape().equals(input1.getShape())) {
-            // 形状相同，直接相减
+        input0Shape = input0.getShape();
+        input1Shape = input1.getShape();
+
+        if (input0Shape.equals(input1Shape)) {
             return input0.sub(input1);
+        } else if (BroadcastUtils.isBroadcastable(input1Shape, input0Shape)) {
+            return input0.sub(input1.broadcastTo(input0Shape));
+        } else if (BroadcastUtils.isBroadcastable(input0Shape, input1Shape)) {
+            return input0.broadcastTo(input1Shape).sub(input1);
         } else {
-            // 需要广播
-            Shape shape0 = input0.getShape();
-            Shape shape1 = input1.getShape();
-            
-            // 判断广播方向
-            if (BroadcastUtils.isBroadcastable(shape1, shape0)) {
-                // input1 需要广播到 input0 的形状
-                return input0.sub(input1.broadcastTo(shape0));
-            } else if (BroadcastUtils.isBroadcastable(shape0, shape1)) {
-                // input0 需要广播到 input1 的形状
-                return input0.broadcastTo(shape1).sub(input1);
-            } else {
-                throw new IllegalArgumentException(
-                    String.format("减法操作的形状不兼容：%s vs %s", shape0, shape1)
-                );
-            }
+            throw new IllegalArgumentException(
+                    String.format("减法操作的形状不兼容：%s vs %s", input0Shape, input1Shape));
         }
     }
 
@@ -75,9 +63,10 @@ public class Sub extends Function {
     @Override
     public List<NdArray> backward(NdArray yGrad) {
         Shape yGradShape = yGrad.getShape();
-        NdArray gx0 = x0Shape.equals(yGradShape) ? yGrad : BroadcastUtils.sumToShape(yGrad, x0Shape, yGradShape);
-        NdArray gx1 = x1Shape.equals(yGradShape) ? yGrad.neg() : BroadcastUtils.sumToShape(yGrad.neg(), x1Shape, yGradShape);
-        return Arrays.asList(gx0, gx1);
+        NdArray grad0 = input0Shape.equals(yGradShape) ? yGrad : BroadcastUtils.sumToShape(yGrad, input0Shape, yGradShape);
+        NdArray negYGrad = yGrad.neg();
+        NdArray grad1 = input1Shape.equals(yGradShape) ? negYGrad : BroadcastUtils.sumToShape(negYGrad, input1Shape, yGradShape);
+        return Arrays.asList(grad0, grad1);
     }
 
     /**

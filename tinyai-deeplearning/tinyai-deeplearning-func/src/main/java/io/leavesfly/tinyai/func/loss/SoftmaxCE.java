@@ -60,24 +60,29 @@ public class SoftmaxCE extends Function {
         NdArray predict = inputs[0].getValue();
         NdArray label = inputs[1].getValue();
 
-        int row = predict.getShape().getRow();
-        int column = predict.getShape().getColumn();
+        int batchSize = predict.getShape().getRow();
+        int numClasses = predict.getShape().getColumn();
 
-        // softmax
+        // softmax（数值稳定版本）
         NdArray max = predict.max(1);
         NdArray stabilized = predict.sub(max.broadcastTo(predict.getShape()));
         NdArray exp = stabilized.exp();
-        NdArray softmax = exp.div(exp.sumTo(Shape.of(row, 1)).broadcastTo(predict.getShape()));
+        NdArray softmax = exp.div(exp.sumTo(Shape.of(batchSize, 1)).broadcastTo(predict.getShape()));
 
-        // one-hot labels - 直接构造，避免创建巨大的单位矩阵
+        // one-hot labels - 带越界检查
         int[] labelIndices = NdArrayUtil.toInt(label.transpose().getMatrix()[0]);
-        float[][] oneHotData = new float[row][column];
-        for (int i = 0; i < row; i++) {
-            oneHotData[i][labelIndices[i]] = 1.0f;
+        float[][] oneHotData = new float[batchSize][numClasses];
+        for (int i = 0; i < batchSize; i++) {
+            int labelIndex = labelIndices[i];
+            if (labelIndex < 0 || labelIndex >= numClasses) {
+                throw new IllegalArgumentException(String.format(
+                        "Label index %d out of range [0, %d) at batch %d", labelIndex, numClasses, i));
+            }
+            oneHotData[i][labelIndex] = 1.0f;
         }
         NdArray oneHot = NdArray.of(oneHotData);
 
-        float scale = yGrad.getNumber().floatValue() / (float) row;
+        float scale = yGrad.getNumber().floatValue() / (float) batchSize;
         NdArray gradPredict = softmax.sub(oneHot).mulNum(scale);
 
         return Arrays.asList(gradPredict, label.like(0));

@@ -53,7 +53,8 @@ public class LeakyReLU extends Function {
     /**
      * 前向传播计算LeakyReLU
      * <p>
-     * 计算公式：max(negative_slope * x, x)
+     * 使用向量化操作：
+     * LeakyReLU(x) = x * (x >= 0) + negativeSlope * x * (x < 0)
      *
      * @param inputs 输入的NdArray数组，长度为1
      * @return LeakyReLU函数值的NdArray
@@ -61,21 +62,17 @@ public class LeakyReLU extends Function {
     @Override
     public NdArray forward(NdArray... inputs) {
         NdArray x = inputs[0];
-        float[] data = x.getArray();
-        float[] result = new float[data.length];
-
-        for (int i = 0; i < data.length; i++) {
-            result[i] = data[i] >= 0 ? data[i] : negativeSlope * data[i];
-        }
-
-        return NdArray.of(result, x.getShape());
+        NdArray zero = NdArray.zeros(x.getShape());
+        NdArray positiveMask = x.gt(zero).add(x.eq(zero));
+        NdArray negativeMask = zero.gt(x);
+        return x.mul(positiveMask).add(x.mulNum(negativeSlope).mul(negativeMask));
     }
 
     /**
      * 反向传播计算梯度
      * <p>
-     * LeakyReLU'(x) = 1,              if x >= 0
-     *               = negative_slope, if x < 0
+     * 使用向量化操作：
+     * LeakyReLU'(x) = 1 * (x >= 0) + negativeSlope * (x < 0)
      *
      * @param yGrad 输出变量的梯度
      * @return 输入变量的梯度列表
@@ -83,15 +80,11 @@ public class LeakyReLU extends Function {
     @Override
     public List<NdArray> backward(NdArray yGrad) {
         NdArray x = inputs[0].getValue();
-        float[] data = x.getArray();
-        float[] gradData = yGrad.getArray();
-        float[] result = new float[data.length];
-
-        for (int i = 0; i < data.length; i++) {
-            result[i] = data[i] >= 0 ? gradData[i] : negativeSlope * gradData[i];
-        }
-
-        return Collections.singletonList(NdArray.of(result, x.getShape()));
+        NdArray zero = NdArray.zeros(x.getShape());
+        NdArray positiveMask = x.gt(zero).add(x.eq(zero));
+        NdArray negativeMask = zero.gt(x);
+        NdArray gradMultiplier = positiveMask.add(negativeMask.mulNum(negativeSlope));
+        return Collections.singletonList(yGrad.mul(gradMultiplier));
     }
 
     /**

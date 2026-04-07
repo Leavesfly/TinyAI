@@ -14,7 +14,7 @@ import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
  * 
  * 架构 (Pre-LayerNorm):
  * 1. x = x + MultiHeadAttention(LayerNorm(x))
- * 2. x = x + MoELayer(LayerNorm(x))
+ * 2. x = x + MoEBlock(LayerNorm(x))
  * 
  * 特点:
  * - 用 MoE 层替换标准 FFN
@@ -25,7 +25,7 @@ import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
  * @author leavesfly
  * @version 1.0
  */
-public class MiniMindMoETransformerLayer extends Module {
+public class MoETransformerBlock extends Module {
 
     /**
      * 第一个归一化层（用于注意力）
@@ -45,7 +45,7 @@ public class MiniMindMoETransformerLayer extends Module {
     /**
      * MoE 层
      */
-    private final MoELayer moeLayer;
+    private final MoEBlock moeLayer;
 
     /**
      * 负载均衡损失计算器
@@ -63,12 +63,12 @@ public class MiniMindMoETransformerLayer extends Module {
     private boolean training = true;
 
     /**
-     * 构造 MiniMindMoETransformerLayer
+     * 构造 MoETransformerBlock
      *
      * @param name   层名称
      * @param config 模型配置
      */
-    public MiniMindMoETransformerLayer(String name, MiniMindConfig config) {
+    public MoETransformerBlock(String name, MiniMindConfig config) {
         super(name);
         this.config = config;
 
@@ -96,7 +96,7 @@ public class MiniMindMoETransformerLayer extends Module {
         registerModule("norm2", norm2);
 
         // 4. MoE 层
-        this.moeLayer = new MoELayer(
+        this.moeLayer = new MoEBlock(
             config.getHiddenSize(),
             config.getFfnHiddenSize(),
             config.getHiddenSize(),
@@ -151,7 +151,7 @@ public class MiniMindMoETransformerLayer extends Module {
         // 3. 计算负载均衡损失（复用同一个 routerOutput）
         float balanceLoss = 0.0f;
         if (training && config.isMoeEnableLoadBalance()) {
-            MoELayer.LoadBalanceStats stats = moeLayer.getLoadBalanceStats(routerOutput);
+            MoEBlock.LoadBalanceStats stats = moeLayer.getLoadBalanceStats(routerOutput);
             balanceLoss = loadBalanceLoss.computeLoss(stats, config.getNumExperts());
         }
 
@@ -175,14 +175,14 @@ public class MiniMindMoETransformerLayer extends Module {
     /**
      * 获取 MoE 层
      */
-    public MoELayer getMoELayer() {
+    public MoEBlock getMoELayer() {
         return moeLayer;
     }
 
     /**
      * 获取专家使用统计
      */
-    public MoELayer.ExpertUsageStats getUsageStats() {
+    public MoEBlock.ExpertUsageStats getUsageStats() {
         return moeLayer.getUsageStats();
     }
 
@@ -195,7 +195,7 @@ public class MiniMindMoETransformerLayer extends Module {
 
     @Override
     public String toString() {
-        return String.format("MiniMindMoETransformerLayer(hidden=%d, experts=%d, topK=%d)",
+        return String.format("MoETransformerBlock(hidden=%d, experts=%d, topK=%d)",
             config.getHiddenSize(), config.getNumExperts(), config.getNumExpertsPerToken());
     }
 

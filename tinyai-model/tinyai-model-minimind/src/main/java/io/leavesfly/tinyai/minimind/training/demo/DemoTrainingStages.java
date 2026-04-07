@@ -145,7 +145,7 @@ public class DemoTrainingStages {
         System.out.println("-".repeat(80));
 
         SFTTrainer trainer = new SFTTrainer(pretrainedModel, dataset);
-        trainer.configure(10, 1e-3f, 1.0f);
+        trainer.configure(30, 1e-3f, 1.0f);
         trainer.setCheckpointDir(CHECKPOINT_DIR + "/sft");
         trainer.train();
 

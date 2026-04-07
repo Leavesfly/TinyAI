@@ -9,12 +9,9 @@ import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
 import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * DeepSeek-V3后训练器（任务感知微调）
@@ -31,7 +28,7 @@ import java.util.Map;
  * @author leavesfly
  * @version 1.0
  */
-public class DeepSeekV3Posttrain extends DeepSeekTrainerBase {
+public class DeepSeekV3SFTrainer extends DeepSeekTrainerBase {
     
     private final DeepSeekV3Model model;
     private final DeepSeekV3Config config;
@@ -61,7 +58,7 @@ public class DeepSeekV3Posttrain extends DeepSeekTrainerBase {
     /**
      * 构造函数
      */
-    public DeepSeekV3Posttrain(DeepSeekV3Model model,
+    public DeepSeekV3SFTrainer(DeepSeekV3Model model,
                                DeepSeekV3Dataset trainDataset,
                                DeepSeekV3Dataset valDataset) {
         super(model, 5, 1.0f, 50, "./checkpoints/deepseek_v3/posttrain");
@@ -96,8 +93,8 @@ public class DeepSeekV3Posttrain extends DeepSeekTrainerBase {
     /**
      * 配置训练参数
      */
-    public DeepSeekV3Posttrain configure(int maxEpochs, float learningRate,
-                                          int patience) {
+    public DeepSeekV3SFTrainer configure(int maxEpochs, float learningRate,
+                                         int patience) {
         this.maxEpochs = maxEpochs;
         this.initialLearningRate = learningRate;
         this.patience = patience;

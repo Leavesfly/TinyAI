@@ -75,40 +75,30 @@ public class Mul extends Function {
      */
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        NdArray ndArray0 = inputs[0].getValue();
-        NdArray ndArray1 = inputs[1].getValue();
-        
-        Shape shape0 = ndArray0.getShape();
-        Shape shape1 = ndArray1.getShape();
+        NdArray inputValue0 = inputs[0].getValue();
+        NdArray inputValue1 = inputs[1].getValue();
         Shape yGradShape = yGrad.getShape();
-        
-        // 计算 dx = yGrad * y
-        NdArray grad0;
-        if (shape1.size() == 1) {
-            grad0 = yGrad.mulNum(ndArray1.getNumber().floatValue());
-        } else if (shape1.equals(yGradShape)) {
-            grad0 = yGrad.mul(ndArray1);
-        } else {
-            grad0 = yGrad.mul(ndArray1.broadcastTo(yGradShape));
-        }
-        if (!shape0.equals(yGradShape)) {
-            grad0 = BroadcastUtils.sumToShape(grad0, shape0, yGradShape);
-        }
-        
-        // 计算 dy = yGrad * x
-        NdArray grad1;
-        if (shape0.size() == 1) {
-            grad1 = yGrad.mulNum(ndArray0.getNumber().floatValue());
-        } else if (shape0.equals(yGradShape)) {
-            grad1 = yGrad.mul(ndArray0);
-        } else {
-            grad1 = yGrad.mul(ndArray0.broadcastTo(yGradShape));
-        }
-        if (!shape1.equals(yGradShape)) {
-            grad1 = BroadcastUtils.sumToShape(grad1, shape1, yGradShape);
-        }
-        
+
+        NdArray grad0 = computePartialGrad(yGrad, inputValue1, inputValue0.getShape(), yGradShape);
+        NdArray grad1 = computePartialGrad(yGrad, inputValue0, inputValue1.getShape(), yGradShape);
         return Arrays.asList(grad0, grad1);
+    }
+
+    /** 计算 z = x * y 中某一输入的偏导：grad = yGrad * otherInput，再 sumTo 回 targetShape */
+    private NdArray computePartialGrad(NdArray yGrad, NdArray otherInput, Shape targetShape, Shape yGradShape) {
+        NdArray grad;
+        Shape otherShape = otherInput.getShape();
+        if (otherShape.size() == 1) {
+            grad = yGrad.mulNum(otherInput.getNumber().floatValue());
+        } else if (otherShape.equals(yGradShape)) {
+            grad = yGrad.mul(otherInput);
+        } else {
+            grad = yGrad.mul(otherInput.broadcastTo(yGradShape));
+        }
+        if (!targetShape.equals(yGradShape)) {
+            grad = BroadcastUtils.sumToShape(grad, targetShape, yGradShape);
+        }
+        return grad;
     }
     
 

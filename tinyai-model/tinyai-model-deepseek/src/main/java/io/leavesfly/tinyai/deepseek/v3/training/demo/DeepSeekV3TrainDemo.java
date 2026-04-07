@@ -10,7 +10,7 @@ import java.util.*;
 
 /**
  * DeepSeek-V3 完整训练演示
- *
+ * <p>
  * 提供完整的 DeepSeek-V3 训练流程编排：
  * 1. 数据准备阶段 - 委托 {@link DeepSeekV3DatasetGenerator} 生成训练数据集
  * 2. 预训练阶段 - 因果语言建模（MoE 负载均衡）
@@ -18,12 +18,12 @@ import java.util.*;
  * 4. 代码专项后训练阶段 - 强化 MoE 专家代码特化
  * 5. RLHF 训练阶段 - 人类反馈强化学习（奖励加权回归）
  * 6. 推理测试阶段 - 多种生成策略演示
- *
+ * <p>
  * 架构说明：
  * - 数据生成逻辑拆分到 {@link DeepSeekV3DatasetGenerator}
  * - 分词工具提取到 {@link DeepSeekV3TokenizerUtil}
  * - 本类专注训练流程编排和数据集组装
- *
+ * <p>
  * 数据格式对比：
  * - 预训练：纯文本 → 全序列 CLM loss
  * - 后训练：ChatML 对话模板 → Answer-Only loss（只对 assistant 回答计算损失）
@@ -86,9 +86,9 @@ public class DeepSeekV3TrainDemo {
 
         // 1. 读取全部数据以构建完整词汇表
         System.out.println("\n📝 加载所有数据以构建词汇表...");
-        List<String> pretrainTexts      = DeepSeekV3DatasetGenerator.readFromFile(DATA_DIR + "/pretrain.txt");
+        List<String> pretrainTexts = DeepSeekV3DatasetGenerator.readFromFile(DATA_DIR + "/pretrain.txt");
         List<String> posttrainTrainTexts = DeepSeekV3DatasetGenerator.readFromFile(DATA_DIR + "/posttrain_train.txt");
-        List<String> posttrainValTexts   = DeepSeekV3DatasetGenerator.readFromFile(DATA_DIR + "/posttrain_val.txt");
+        List<String> posttrainValTexts = DeepSeekV3DatasetGenerator.readFromFile(DATA_DIR + "/posttrain_val.txt");
 
         System.out.println("  ✓ 预训练数据: " + pretrainTexts.size() + " 条");
         System.out.println("  ✓ 后训练训练数据: " + posttrainTrainTexts.size() + " 条");
@@ -126,16 +126,16 @@ public class DeepSeekV3TrainDemo {
         // 4. 准备数据集
         System.out.println("\n📝 准备训练数据集...");
         DeepSeekV3Dataset dataset = createDatasetFromTexts(
-            pretrainTexts, config.getNPositions(), 4, config.getVocabSize(), false
+                pretrainTexts, config.getNPositions(), 4, config.getVocabSize(), false
         );
         System.out.println("  ✓ 训练样本: " + dataset.getSampleCount());
         System.out.println("  ✓ 批次大小: 4, 序列长度: " + config.getNPositions());
 
         // 5. 配置并运行预训练器
         System.out.println("\n📝 配置预训练器...");
-        DeepSeekV3Pretrain trainer = new DeepSeekV3Pretrain(model, dataset);
+        DeepSeekV3Pretrainer trainer = new DeepSeekV3Pretrainer(model, dataset);
         trainer.configure(30, 2e-3f, 10, 1.0f)
-               .setCheckpoint(CHECKPOINT_DIR + "/pretrain", 500);
+                .setCheckpoint(CHECKPOINT_DIR + "/pretrain", 500);
 
         System.out.println("  ✓ 最大轮次: 30  ✓ 学习率: 2e-3  ✓ Warmup步数: 10");
         System.out.println("  ✓ MoE负载均衡权重: " + config.getLoadBalanceLossWeight());
@@ -166,16 +166,16 @@ public class DeepSeekV3TrainDemo {
         System.out.println("=".repeat(80));
 
         List<String> trainTexts = DeepSeekV3DatasetGenerator.readFromFile(DATA_DIR + "/posttrain_train.txt");
-        List<String> valTexts   = DeepSeekV3DatasetGenerator.readFromFile(DATA_DIR + "/posttrain_val.txt");
+        List<String> valTexts = DeepSeekV3DatasetGenerator.readFromFile(DATA_DIR + "/posttrain_val.txt");
         System.out.println("\n📝 加载后训练数据... 训练集: " + trainTexts.size() + " 条, 验证集: " + valTexts.size() + " 条");
 
         DeepSeekV3Config config = pretrainedModel.getConfig();
 
         DeepSeekV3Dataset trainDataset = createDatasetFromTexts(
-            trainTexts, config.getNPositions(), 4, config.getVocabSize(), true
+                trainTexts, config.getNPositions(), 4, config.getVocabSize(), true
         );
         DeepSeekV3Dataset valDataset = createDatasetFromTexts(
-            valTexts, config.getNPositions(), 1, config.getVocabSize(), true
+                valTexts, config.getNPositions(), 1, config.getVocabSize(), true
         );
 
         System.out.println("  ✓ 训练样本: " + trainDataset.getSampleCount());
@@ -183,7 +183,7 @@ public class DeepSeekV3TrainDemo {
         System.out.println("  ✓ 数据格式: ChatML 对话模板 (<|im_start|>user/assistant<|im_end|>)");
         System.out.println("  ✓ Loss策略: Answer-Only (仅对 assistant 回答部分计算 loss)");
 
-        DeepSeekV3Posttrain posttrain = new DeepSeekV3Posttrain(pretrainedModel, trainDataset, valDataset);
+        DeepSeekV3SFTrainer posttrain = new DeepSeekV3SFTrainer(pretrainedModel, trainDataset, valDataset);
         posttrain.configure(10, 3e-4f, 3);
 
         System.out.println("\n📝 开始后训练...");
@@ -212,16 +212,16 @@ public class DeepSeekV3TrainDemo {
         System.out.println("💡 目标：强化MoE专家对代码任务的特化能力");
 
         List<String> codeTrainTexts = DeepSeekV3DatasetGenerator.readFromFile(DATA_DIR + "/code_posttrain_train.txt");
-        List<String> codeValTexts   = DeepSeekV3DatasetGenerator.readFromFile(DATA_DIR + "/code_posttrain_val.txt");
+        List<String> codeValTexts = DeepSeekV3DatasetGenerator.readFromFile(DATA_DIR + "/code_posttrain_val.txt");
         System.out.println("\n📝 加载代码专项数据... 训练集: " + codeTrainTexts.size() + " 条, 验证集: " + codeValTexts.size() + " 条");
 
         DeepSeekV3Config config = finetunedModel.getConfig();
 
         DeepSeekV3Dataset codeTrainDataset = createDatasetFromTexts(
-            codeTrainTexts, config.getNPositions(), 4, config.getVocabSize(), true
+                codeTrainTexts, config.getNPositions(), 4, config.getVocabSize(), true
         );
         DeepSeekV3Dataset codeValDataset = createDatasetFromTexts(
-            codeValTexts, config.getNPositions(), 1, config.getVocabSize(), true
+                codeValTexts, config.getNPositions(), 1, config.getVocabSize(), true
         );
 
         System.out.println("  ✓ 训练样本: " + codeTrainDataset.getSampleCount());
@@ -229,8 +229,8 @@ public class DeepSeekV3TrainDemo {
         System.out.println("  ✓ 任务类型: 纯CODING (Python/Java/JS/C++)");
         System.out.println("  ✓ 数据格式: ChatML 对话模板 + Answer-Only Loss");
 
-        DeepSeekV3Posttrain codePosttrain = new DeepSeekV3Posttrain(finetunedModel, codeTrainDataset, codeValDataset);
-        codePosttrain.configure(20, 2e-4f, 3);
+        DeepSeekV3SFTrainer codePosttrain = new DeepSeekV3SFTrainer(finetunedModel, codeTrainDataset, codeValDataset);
+        codePosttrain.configure(30, 2e-4f, 3);
 
         System.out.println("\n📝 开始代码生成专项后训练...");
         System.out.println("-".repeat(80));
@@ -262,7 +262,7 @@ public class DeepSeekV3TrainDemo {
 
         DeepSeekV3Config config = model.getConfig();
         DeepSeekV3Dataset rlhfDataset = createRLHFDatasetFromTexts(
-            rlhfTexts, config.getNPositions(), 4, config.getVocabSize()
+                rlhfTexts, config.getNPositions(), 4, config.getVocabSize()
         );
 
         System.out.println("  ✓ RLHF训练样本: " + rlhfDataset.getSampleCount());
@@ -300,10 +300,10 @@ public class DeepSeekV3TrainDemo {
         System.out.println("  ✓ 推理器准备完成");
 
         TestCase[] testCases = {
-            new TestCase("Mixture of Experts is"),
-            new TestCase("DeepSeek V3 combines"),
-            new TestCase("Python is used for"),
-            new TestCase("Self attention computes")
+                new TestCase("Mixture of Experts is"),
+                new TestCase("DeepSeek V3 combines"),
+                new TestCase("Python is used for"),
+                new TestCase("Self attention computes")
         };
 
         System.out.println("\n📝 执行文本生成测试...\n");
@@ -343,7 +343,7 @@ public class DeepSeekV3TrainDemo {
 
     /**
      * 从文本列表创建数据集
-     *
+     * <p>
      * useTaskLabels=true 时解析 ChatML 格式并生成 answer-only loss mask；
      * useTaskLabels=false 时（预训练模式）所有 token 位置都参与 loss 计算。
      */
@@ -363,10 +363,10 @@ public class DeepSeekV3TrainDemo {
                     sequences.add(padSequence(sharedTokenizer.encode(cleanText), maxSeqLength));
                     continue;
                 }
-                String userPart      = cleanText.substring(0, assistantStart);
+                String userPart = cleanText.substring(0, assistantStart);
                 String assistantPart = cleanText.substring(assistantStart);
 
-                List<Integer> userTokens      = sharedTokenizer.encode(userPart);
+                List<Integer> userTokens = sharedTokenizer.encode(userPart);
                 List<Integer> assistantTokens = sharedTokenizer.encode(assistantPart);
 
                 List<Integer> allTokens = new ArrayList<>(userTokens);
@@ -388,7 +388,7 @@ public class DeepSeekV3TrainDemo {
 
         if (!lossMasks.isEmpty()) {
             return new DeepSeekV3Dataset(sequences, new ArrayList<>(), lossMasks,
-                maxSeqLength, batchSize, true, true);
+                    maxSeqLength, batchSize, true, true);
         }
         return new DeepSeekV3Dataset(sequences, maxSeqLength, batchSize, true);
     }
@@ -423,10 +423,10 @@ public class DeepSeekV3TrainDemo {
 
             if (content.contains("<|im_start|>assistant")) {
                 int assistantStart = content.indexOf("<|im_start|>assistant");
-                String userPart      = content.substring(0, assistantStart);
+                String userPart = content.substring(0, assistantStart);
                 String assistantPart = content.substring(assistantStart);
 
-                List<Integer> userTokens      = sharedTokenizer.encode(userPart);
+                List<Integer> userTokens = sharedTokenizer.encode(userPart);
                 List<Integer> assistantTokens = sharedTokenizer.encode(assistantPart);
 
                 List<Integer> allTokens = new ArrayList<>(userTokens);
@@ -472,6 +472,9 @@ public class DeepSeekV3TrainDemo {
      */
     private static class TestCase {
         final String prompt;
-        TestCase(String prompt) { this.prompt = prompt; }
+
+        TestCase(String prompt) {
+            this.prompt = prompt;
+        }
     }
 }

@@ -53,23 +53,14 @@ public class Clip extends Function {
     @Override
     public List<NdArray> backward(NdArray yGrad) {
         NdArray x = inputs[0].getValue();
-        // 直接创建一个新的数组来存储结果
-        float[][] xMatrix = x.getMatrix();
-        float[][] yGradMatrix = yGrad.getMatrix();
-        float[][] result = new float[xMatrix.length][xMatrix[0].length];
-        
-        for (int i = 0; i < xMatrix.length; i++) {
-            for (int j = 0; j < xMatrix[i].length; j++) {
-                // 只有在范围内的值才保留梯度
-                if (xMatrix[i][j] >= min && xMatrix[i][j] <= max) {
-                    result[i][j] = yGradMatrix[i][j];
-                } else {
-                    result[i][j] = 0f;
-                }
-            }
-        }
-        
-        return Collections.singletonList(NdArray.of(result));
+        // 向量化：在 [min, max] 范围内的位置梯度为1，否则为0
+        NdArray minArray = NdArray.like(x.getShape(), min);
+        NdArray maxArray = NdArray.like(x.getShape(), max);
+        // x >= min: gt(min) + eq(min); x <= max: lt(max) + eq(max)
+        NdArray gteMin = x.gt(minArray).add(x.eq(minArray));
+        NdArray lteMax = maxArray.gt(x).add(x.eq(maxArray));
+        NdArray inRange = gteMin.mul(lteMax);
+        return Collections.singletonList(inRange.mul(yGrad));
     }
 
     /**

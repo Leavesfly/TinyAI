@@ -351,6 +351,7 @@ public class Variable implements Serializable {
      * 迭代式反向传播
      *
      * 使用栈模拟递归，避免深层网络栈溢出。
+     * 通过 visited 集合防止共享节点被重复处理导致梯度重复累加。
      */
     public void backwardIterative() {
         if (!requireGrad) {
@@ -362,6 +363,7 @@ public class Variable implements Serializable {
             setGrad(NdArray.ones(value.getShape()));
         }
 
+        Set<Function> visited = new HashSet<>();
         Stack<Variable> stack = new Stack<>();
         stack.push(this);
 
@@ -369,9 +371,10 @@ public class Variable implements Serializable {
             Variable current = stack.pop();
             Function func = current.getCreator();
 
-            if (func == null) {
+            if (func == null || visited.contains(func)) {
                 continue;
             }
+            visited.add(func);
 
             Variable[] funcInputs = func.getInputs();
             List<NdArray> grads = func.isMultiOutput()

@@ -36,6 +36,18 @@ public class MathFunctions {
     }
 
     /**
+     * 符号函数，返回每个元素的符号
+     *
+     * 正数返回1.0，负数返回-1.0，零返回0.0
+     *
+     * @param array 数组
+     * @return 符号数组
+     */
+    public static NdArrayCpu sign(NdArrayCpu array) {
+        return unaryOperation(array, x -> x > 0 ? 1.0f : (x < 0 ? -1.0f : 0.0f));
+    }
+
+    /**
      * 幂运算，对数组每个元素进行幂运算
      *
      * @param array    数组

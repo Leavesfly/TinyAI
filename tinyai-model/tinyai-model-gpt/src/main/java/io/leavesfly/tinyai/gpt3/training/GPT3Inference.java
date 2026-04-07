@@ -33,6 +33,9 @@ public class GPT3Inference {
      */
     private final int eosTokenId;
 
+    /** 需要在推理时抑制的特殊 token ID（<PAD>=0, <UNK>=1, <BOS>=2） */
+    private static final int[] SUPPRESSED_TOKEN_IDS = {0, 1, 2};
+
     /**
      * 构造函数
      *
@@ -42,6 +45,18 @@ public class GPT3Inference {
         this.model = model;
         this.maxSeqLen = model.getConfig().getNPositions();
         this.eosTokenId = model.getConfig().getVocabSize() - 1;
+    }
+
+    /**
+     * 将特殊 token（PAD/UNK/BOS）的 logits 设为负无穷，
+     * 防止生成过程中选中这些无意义的 token。
+     */
+    private void suppressSpecialTokens(float[] logits) {
+        for (int id : SUPPRESSED_TOKEN_IDS) {
+            if (id < logits.length) {
+                logits[id] = Float.NEGATIVE_INFINITY;
+            }
+        }
     }
 
     /**
@@ -62,7 +77,12 @@ public class GPT3Inference {
             NdArray logitsArray = logits.getValue();
 
             int lastPos = currentSeq.length - 1;
-            int nextToken = argmax(logitsArray, 0, lastPos);
+            int vocabSize = logitsArray.getShape().getDimension(2);
+
+            float[] logitsArr = extractLogits(logitsArray, lastPos, vocabSize);
+            suppressSpecialTokens(logitsArr);
+
+            int nextToken = argmaxFromArray(logitsArr);
             generated.add(nextToken);
 
             if (nextToken == eosTokenId) break;
@@ -116,16 +136,19 @@ public class GPT3Inference {
             int lastPos  = currentSeq.length - 1;
             int vocabSize = logitsArray.getShape().getDimension(2);
 
-            float[] probs = new float[vocabSize];
+            float[] logitsArr = extractLogits(logitsArray, lastPos, vocabSize);
+            suppressSpecialTokens(logitsArr);
+
             float maxLogit = Float.NEGATIVE_INFINITY;
             for (int j = 0; j < vocabSize; j++) {
-                probs[j] = logitsArray.get(0, lastPos, j) / temperature;
-                maxLogit = Math.max(maxLogit, probs[j]);
+                logitsArr[j] /= temperature;
+                maxLogit = Math.max(maxLogit, logitsArr[j]);
             }
 
+            float[] probs = new float[vocabSize];
             float sum = 0.0f;
             for (int j = 0; j < vocabSize; j++) {
-                probs[j] = (float) Math.exp(probs[j] - maxLogit);
+                probs[j] = (float) Math.exp(logitsArr[j] - maxLogit);
                 sum += probs[j];
             }
             for (int j = 0; j < vocabSize; j++) probs[j] /= sum;
@@ -162,9 +185,10 @@ public class GPT3Inference {
             int lastPos   = currentSeq.length - 1;
             int vocabSize = logitsArray.getShape().getDimension(2);
 
-            float[] logitsArr = new float[vocabSize];
+            float[] logitsArr = extractLogits(logitsArray, lastPos, vocabSize);
+            suppressSpecialTokens(logitsArr);
             for (int j = 0; j < vocabSize; j++) {
-                logitsArr[j] = logitsArray.get(0, lastPos, j) / temperature;
+                logitsArr[j] /= temperature;
             }
 
             int[] topKIndices = getTopKIndices(logitsArr, topK);
@@ -216,9 +240,10 @@ public class GPT3Inference {
             int lastPos   = currentSeq.length - 1;
             int vocabSize = logitsArray.getShape().getDimension(2);
 
-            float[] logitsArr = new float[vocabSize];
+            float[] logitsArr = extractLogits(logitsArray, lastPos, vocabSize);
+            suppressSpecialTokens(logitsArr);
             for (int j = 0; j < vocabSize; j++) {
-                logitsArr[j] = logitsArray.get(0, lastPos, j) / temperature;
+                logitsArr[j] /= temperature;
             }
 
             // 计算softmax概率
@@ -302,10 +327,10 @@ public class GPT3Inference {
                 int vocabSize = logitsArray.getShape().getDimension(2);
 
                 // 计算log概率
-                float[] logProbs = new float[vocabSize];
+                float[] logProbs = extractLogits(logitsArray, lastPos, vocabSize);
+                suppressSpecialTokens(logProbs);
                 float maxLogit = Float.NEGATIVE_INFINITY;
                 for (int j = 0; j < vocabSize; j++) {
-                    logProbs[j] = logitsArray.get(0, lastPos, j);
                     maxLogit = Math.max(maxLogit, logProbs[j]);
                 }
 
@@ -351,6 +376,32 @@ public class GPT3Inference {
      */
     private int argmax(NdArray logits, int batchIdx, int seqIdx) {
         return GPT3Model.argmax(logits, batchIdx, seqIdx);
+    }
+
+    /**
+     * 从 NdArray 中提取指定位置的 logits 到 float 数组
+     */
+    private float[] extractLogits(NdArray logitsArray, int seqPos, int vocabSize) {
+        float[] logits = new float[vocabSize];
+        for (int j = 0; j < vocabSize; j++) {
+            logits[j] = logitsArray.get(0, seqPos, j);
+        }
+        return logits;
+    }
+
+    /**
+     * 从 float 数组中找到最大值的索引
+     */
+    private int argmaxFromArray(float[] values) {
+        int bestIdx = 0;
+        float bestVal = values[0];
+        for (int i = 1; i < values.length; i++) {
+            if (values[i] > bestVal) {
+                bestVal = values[i];
+                bestIdx = i;
+            }
+        }
+        return bestIdx;
     }
 
     /**

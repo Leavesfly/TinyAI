@@ -62,34 +62,21 @@ public class AccumulationOperations {
      * 当行索引和列索引数量相等时的累加操作
      */
     private static void addAtEqualLength(NdArrayCpu result, int[] rowSlices, int[] colSlices, NdArrayCpu other) {
+        int resultCols = result.shape.getColumn();
+        int resultRows = result.shape.getRow();
+        int otherLength = other.buffer.length;
+
         for (int i = 0; i < rowSlices.length; i++) {
             int row = rowSlices[i];
             int col = colSlices[i];
 
-            // 边界检查
-            if (row < 0 || row >= result.shape.getRow() || col < 0 || col >= result.shape.getColumn()) {
+            if (row < 0 || row >= resultRows || col < 0 || col >= resultCols) {
                 throw new IllegalArgumentException(
                         String.format("索引超出范围：位置(%d, %d)，数组形状%s", row, col, result.shape)
                 );
             }
 
-            // 计算要累加的值
-            float valueToAdd;
-            if (other.shape.isMatrix() && other.shape.getRow() == 1) {
-                valueToAdd = other.buffer[i % other.buffer.length];
-            } else if (other.shape.isMatrix() && other.shape.getColumn() == 1) {
-                valueToAdd = other.buffer[i % other.buffer.length];
-            } else if (other.shape.isMatrix()) {
-                if (i < other.shape.getRow() * other.shape.getColumn()) {
-                    valueToAdd = other.buffer[i];
-                } else {
-                    valueToAdd = other.buffer[i % other.buffer.length];
-                }
-            } else {
-                valueToAdd = other.buffer[i % other.buffer.length];
-            }
-
-            result.buffer[row * result.shape.getColumn() + col] += valueToAdd;
+            result.buffer[row * resultCols + col] += other.buffer[i % otherLength];
         }
     }
 
@@ -97,41 +84,31 @@ public class AccumulationOperations {
      * 当行索引和列索引数量不等时的累加操作
      */
     private static void addAtDifferentLength(NdArrayCpu result, int[] rowSlices, int[] colSlices, NdArrayCpu other) {
+        int resultCols = result.shape.getColumn();
+        int resultRows = result.shape.getRow();
+        int colSlicesLength = colSlices.length;
+        int otherLength = other.buffer.length;
+
         for (int i = 0; i < rowSlices.length; i++) {
             int row = rowSlices[i];
 
-            // 边界检查
-            if (row < 0 || row >= result.shape.getRow()) {
+            if (row < 0 || row >= resultRows) {
                 throw new IllegalArgumentException(
-                        String.format("行索引超出范围：%d，最大行索引%d", row, result.shape.getRow() - 1)
+                        String.format("行索引超出范围：%d，最大行索引%d", row, resultRows - 1)
                 );
             }
 
-            for (int j = 0; j < colSlices.length; j++) {
+            for (int j = 0; j < colSlicesLength; j++) {
                 int col = colSlices[j];
 
-                // 边界检查
-                if (col < 0 || col >= result.shape.getColumn()) {
+                if (col < 0 || col >= resultCols) {
                     throw new IllegalArgumentException(
-                            String.format("列索引超出范围：%d，最大列索引%d", col, result.shape.getColumn() - 1)
+                            String.format("列索引超出范围：%d，最大列索引%d", col, resultCols - 1)
                     );
                 }
 
-                // 计算other数组中的对应位置
-                int otherIndex;
-                if (other.shape.isMatrix()) {
-                    otherIndex = i * colSlices.length + j;
-                    if (otherIndex >= other.buffer.length) {
-                        otherIndex = otherIndex % other.buffer.length;
-                    }
-                } else {
-                    otherIndex = i * colSlices.length + j;
-                    if (otherIndex >= other.buffer.length) {
-                        otherIndex = otherIndex % other.buffer.length;
-                    }
-                }
-
-                result.buffer[row * result.shape.getColumn() + col] += other.buffer[otherIndex];
+                int otherIndex = (i * colSlicesLength + j) % otherLength;
+                result.buffer[row * resultCols + col] += other.buffer[otherIndex];
             }
         }
     }

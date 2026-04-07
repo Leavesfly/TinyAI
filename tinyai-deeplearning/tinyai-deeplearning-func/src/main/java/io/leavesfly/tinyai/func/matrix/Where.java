@@ -111,42 +111,6 @@ public class Where extends Function {
         return Shape.of(broadcastDims);
     }
 
-    /**
-     * 计算步长
-     */
-    private int[] computeStrides(Shape shape) {
-        int[] dims = shape.getShapeDims();
-        int[] strides = new int[dims.length];
-        strides[dims.length - 1] = 1;
-        for (int i = dims.length - 2; i >= 0; i--) {
-            strides[i] = strides[i + 1] * dims[i + 1];
-        }
-        return strides;
-    }
-
-    /**
-     * 获取广播后的索引
-     */
-    private int getBroadcastIndex(int[] outputIdx, Shape inputShape, int[] inputStrides) {
-        int[] inputDims = inputShape.getShapeDims();
-        int[] inputIdx = new int[inputDims.length];
-
-        int offset = outputIdx.length - inputDims.length;
-        for (int i = 0; i < inputDims.length; i++) {
-            if (inputDims[i] == 1) {
-                inputIdx[i] = 0; // 广播维度
-            } else {
-                inputIdx[i] = outputIdx[offset + i];
-            }
-        }
-
-        int index = 0;
-        for (int i = 0; i < inputIdx.length; i++) {
-            index += inputIdx[i] * inputStrides[i];
-        }
-        return index;
-    }
-
     @Override
     public int requireInputNum() {
         return 3;

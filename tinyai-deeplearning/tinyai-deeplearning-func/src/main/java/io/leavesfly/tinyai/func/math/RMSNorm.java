@@ -62,30 +62,33 @@ public class RMSNorm extends Function {
 
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        // 梯度计算（简化实现）
-        // dX = weight * (dY / rms - x * mean(dY * x) / rms³)
+        // 完整梯度计算：
+        // dX = weight / rms * (dY - normalized * mean(dY * normalized))
         // dWeight = sum(dY * normalized)
-        
+
         NdArray x = inputs[0].getValue();
         NdArray weight = inputs[1].getValue();
-        
-        // 计算normalized（用于dWeight）
-        NdArray normalized = x.div(normFactor.broadcastTo(inputShape));
-        
-        // dWeight: sum(dY * normalized) 在归一化维度上
-        NdArray dWeight = yGrad.mul(normalized);
-        dWeight = sumOverNormalizedDims(dWeight, normalizedShape);
-        
-        // dX: 复杂的梯度计算（简化版本）
-        // 完整实现需要计算: dX = weight * (dY / rms - x * mean(dY * x) / rms³)
+
         NdArray rmsBroadcast = normFactor.broadcastTo(inputShape);
-        NdArray dYDivRms = yGrad.div(rmsBroadcast);
-        
-        NdArray dX = dYDivRms.mul(weight.broadcastTo(inputShape));
-        
-        // 修正项（简化，完整实现需要更复杂的计算）
-        // dX -= x * mean(dY * x * weight) / rms³
-        
+        NdArray weightBroadcast = weight.broadcastTo(inputShape);
+
+        // normalized = x / rms
+        NdArray normalized = x.div(rmsBroadcast);
+
+        // dWeight: sum(dY * normalized) 在归一化维度上
+        NdArray dWeight = sumOverNormalizedDims(yGrad.mul(normalized), normalizedShape);
+
+        // dX 完整公式：weight / rms * (dY - normalized * mean(dY * normalized))
+        // 1. 计算 dY * normalized 在归一化维度上的均值
+        NdArray dYTimesNorm = yGrad.mul(normalized);
+        NdArray meanDYTimesNorm = computeMean(dYTimesNorm, normalizedShape);
+
+        // 2. 修正项: normalized * mean(dY * normalized)
+        NdArray correction = normalized.mul(meanDYTimesNorm.broadcastTo(inputShape));
+
+        // 3. dX = weight / rms * (dY - correction)
+        NdArray dX = weightBroadcast.div(rmsBroadcast).mul(yGrad.sub(correction));
+
         return java.util.Arrays.asList(dX, dWeight);
     }
 

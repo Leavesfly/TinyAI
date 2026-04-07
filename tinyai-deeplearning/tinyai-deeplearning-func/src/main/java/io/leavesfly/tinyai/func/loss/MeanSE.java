@@ -28,7 +28,10 @@ public class MeanSE extends Function {
         NdArray predict = inputs[0];
         NdArray labelY = inputs[1];
 
-        int size = predict.getShape().size(); // 使用总元素数而不是行数
+        int size = predict.getShape().size();
+        if (size == 0) {
+            throw new IllegalArgumentException("MeanSE input cannot be empty (size=0)");
+        }
         return predict.sub(labelY).square().sum().divNum(size);
     }
 

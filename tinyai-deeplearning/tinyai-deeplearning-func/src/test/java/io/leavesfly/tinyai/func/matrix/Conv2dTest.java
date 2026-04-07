@@ -571,4 +571,190 @@ public class Conv2dTest {
         Conv2d conv = new Conv2d(1, 0);
         assertEquals(2, conv.requireInputNum());
     }
+
+    // =============================================================================
+    // 修复验证测试 - 验证kernel梯度在多通道场景下的正确性
+    // =============================================================================
+
+    @Test
+    public void testKernelGradientMultiOutputChannel() {
+        // 验证多输出通道时kernel梯度的数值正确性
+        // 此测试可暴露之前 im2col^T @ yGradFlat 矩阵乘法方向错误的bug
+        Conv2d conv = new Conv2d(1, 0);
+
+        // 输入: [1, 1, 3, 3]，值为1-9
+        float[][][][] inputData = {{{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}}};
+        NdArray inputNd = NdArray.of(inputData);
+
+        // 卷积核: [2, 1, 2, 2]，两个输出通道
+        // 第一个通道全1，第二个通道全2
+        float[][][][] kernelData = {
+            {{{1, 1}, {1, 1}}},
+            {{{2, 2}, {2, 2}}}
+        };
+        NdArray kernelNd = NdArray.of(kernelData);
+
+        Variable input = new Variable(inputNd);
+        Variable kernel = new Variable(kernelNd);
+
+        // 前向传播 -> sum，使所有输出元素的梯度为1
+        Variable output = conv.call(input, kernel);
+        Variable sum = output.sum();
+        sum.backward();
+
+        // 验证kernel梯度形状
+        NdArray kernelGrad = kernel.getGrad();
+        assertEquals(Shape.of(2, 1, 2, 2), kernelGrad.getShape());
+
+        // 手工计算kernel梯度:
+        // output shape: [1, 2, 2, 2]
+        // yGrad = ones([1, 2, 2, 2])（来自sum的反向传播）
+        //
+        // 对于kernel[oc, ic, kh, kw]的梯度 = sum over (b, oh, ow) of input[b, ic, oh*s+kh, ow*s+kw] * yGrad[b, oc, oh, ow]
+        // yGrad全为1，所以:
+        // kernelGrad[oc, 0, kh, kw] = sum over (oh, ow) of input[0, 0, oh+kh, ow+kw]
+        // 与oc无关（因为yGrad全为1），所以两个输出通道的kernel梯度应该相同
+        //
+        // kernelGrad[*, 0, 0, 0] = input[0,0,0,0]+input[0,0,0,1]+input[0,0,1,0]+input[0,0,1,1] = 1+2+4+5 = 12
+        // kernelGrad[*, 0, 0, 1] = input[0,0,0,1]+input[0,0,0,2]+input[0,0,1,1]+input[0,0,1,2] = 2+3+5+6 = 16
+        // kernelGrad[*, 0, 1, 0] = input[0,0,1,0]+input[0,0,1,1]+input[0,0,2,0]+input[0,0,2,1] = 4+5+7+8 = 24
+        // kernelGrad[*, 0, 1, 1] = input[0,0,1,1]+input[0,0,1,2]+input[0,0,2,1]+input[0,0,2,2] = 5+6+8+9 = 28
+        float[][] expectedKernelGrad = {{12, 16}, {24, 28}};
+        for (int oc = 0; oc < 2; oc++) {
+            for (int kh = 0; kh < 2; kh++) {
+                for (int kw = 0; kw < 2; kw++) {
+                    assertEquals(
+                        "kernelGrad[" + oc + ",0," + kh + "," + kw + "] mismatch",
+                        expectedKernelGrad[kh][kw],
+                        kernelGrad.get(oc, 0, kh, kw), 1e-5);
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testKernelGradientWithPadding() {
+        // 验证带padding时kernel梯度的正确性
+        Conv2d conv = new Conv2d(1, 1);
+
+        // 输入: [1, 1, 2, 2]
+        float[][][][] inputData = {{{{1, 2}, {3, 4}}}};
+        NdArray inputNd = NdArray.of(inputData);
+
+        // 卷积核: [1, 1, 2, 2]
+        float[][][][] kernelData = {{{{1, 1}, {1, 1}}}};
+        NdArray kernelNd = NdArray.of(kernelData);
+
+        Variable input = new Variable(inputNd);
+        Variable kernel = new Variable(kernelNd);
+
+        // padding=1时，输出尺寸 = (2+2*1-2)/1+1 = 3
+        Variable output = conv.call(input, kernel);
+        assertEquals(Shape.of(1, 1, 3, 3), output.getValue().getShape());
+
+        Variable sum = output.sum();
+        sum.backward();
+
+        // 验证kernel梯度
+        // 带padding的输入（0填充后）:
+        // 0 0 0 0
+        // 0 1 2 0
+        // 0 3 4 0
+        // 0 0 0 0
+        //
+        // kernelGrad[0,0,kh,kw] = sum over (oh,ow) of padded_input[oh+kh, ow+kw]
+        // 9个输出位置(3x3)，每个位置取2x2窗口
+        // kernelGrad[0,0,0,0] = sum of padded[oh,ow] for oh=0..2, ow=0..2
+        //   = 0+0+0 + 0+1+2 + 0+3+4 = 10
+        // kernelGrad[0,0,0,1] = sum of padded[oh,ow+1] for oh=0..2, ow=0..2
+        //   = 0+0+0 + 1+2+0 + 3+4+0 = 10
+        // kernelGrad[0,0,1,0] = sum of padded[oh+1,ow] for oh=0..2, ow=0..2
+        //   = 0+1+2 + 0+3+4 + 0+0+0 = 10
+        // kernelGrad[0,0,1,1] = sum of padded[oh+1,ow+1] for oh=0..2, ow=0..2
+        //   = 1+2+0 + 3+4+0 + 0+0+0 = 10
+        NdArray kernelGrad = kernel.getGrad();
+        for (int kh = 0; kh < 2; kh++) {
+            for (int kw = 0; kw < 2; kw++) {
+                assertEquals(
+                    "kernelGrad[0,0," + kh + "," + kw + "] mismatch",
+                    10f, kernelGrad.get(0, 0, kh, kw), 1e-5);
+            }
+        }
+    }
+
+    @Test
+    public void testInputGradientWithStride() {
+        // 验证带stride时输入梯度的正确性
+        Conv2d conv = new Conv2d(2, 0);
+
+        // 输入: [1, 1, 4, 4]
+        NdArray inputNd = NdArray.ones(Shape.of(1, 1, 4, 4));
+
+        // 卷积核: [1, 1, 2, 2]，值为[1,2,3,4]
+        float[][][][] kernelData = {{{{1, 2}, {3, 4}}}};
+        NdArray kernelNd = NdArray.of(kernelData);
+
+        Variable input = new Variable(inputNd);
+        Variable kernel = new Variable(kernelNd);
+
+        // stride=2时，输出尺寸 = (4-2)/2+1 = 2
+        Variable output = conv.call(input, kernel);
+        assertEquals(Shape.of(1, 1, 2, 2), output.getValue().getShape());
+
+        Variable sum = output.sum();
+        sum.backward();
+
+        // 验证输入梯度形状
+        NdArray inputGrad = input.getGrad();
+        assertEquals(Shape.of(1, 1, 4, 4), inputGrad.getShape());
+
+        // stride=2时，每个输入位置最多只被一个输出窗口覆盖（无重叠）
+        // 输出位置(0,0)覆盖输入[0:2, 0:2]，梯度=kernel值
+        // 输出位置(0,1)覆盖输入[0:2, 2:4]，梯度=kernel值
+        // 输出位置(1,0)覆盖输入[2:4, 0:2]，梯度=kernel值
+        // 输出位置(1,1)覆盖输入[2:4, 2:4]，梯度=kernel值
+        float[][] expectedGrad = {
+            {1, 2, 1, 2},
+            {3, 4, 3, 4},
+            {1, 2, 1, 2},
+            {3, 4, 3, 4}
+        };
+        for (int h = 0; h < 4; h++) {
+            for (int w = 0; w < 4; w++) {
+                assertEquals(
+                    "inputGrad[0,0," + h + "," + w + "] mismatch",
+                    expectedGrad[h][w], inputGrad.get(0, 0, h, w), 1e-5);
+            }
+        }
+    }
+
+    @Test
+    public void testGradientMultiChannelMultiBatch() {
+        // 验证多通道+多batch场景下梯度的形状和非零性
+        Conv2d conv = new Conv2d(1, 0);
+
+        // 输入: [2, 3, 4, 4]
+        NdArray inputNd = NdArray.likeRandomN(Shape.of(2, 3, 4, 4));
+        // 卷积核: [2, 3, 3, 3]
+        NdArray kernelNd = NdArray.likeRandomN(Shape.of(2, 3, 3, 3));
+
+        Variable input = new Variable(inputNd);
+        Variable kernel = new Variable(kernelNd);
+
+        Variable output = conv.call(input, kernel);
+        Variable sum = output.sum();
+        sum.backward();
+
+        // 验证梯度形状
+        assertEquals(Shape.of(2, 3, 4, 4), input.getGrad().getShape());
+        assertEquals(Shape.of(2, 3, 3, 3), kernel.getGrad().getShape());
+
+        // 验证梯度非零（随机输入下梯度不应全为0）
+        float inputGradSum = input.getGrad().sum().getNumber().floatValue();
+        float kernelGradSum = kernel.getGrad().sum().getNumber().floatValue();
+        assertTrue("Input gradient should not be all zeros",
+            Math.abs(inputGradSum) > 1e-6);
+        assertTrue("Kernel gradient should not be all zeros",
+            Math.abs(kernelGradSum) > 1e-6);
+    }
 }

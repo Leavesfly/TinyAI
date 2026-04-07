@@ -25,7 +25,7 @@ import java.util.List;
  * @author leavesfly
  * @since 2024
  */
-public class MoELayer extends Module {
+public class MoEBlock extends Module {
     
     private final int inputDim;
     private final int hiddenDim;
@@ -50,7 +50,7 @@ public class MoELayer extends Module {
      * @param topK Top-K选择数量
      * @param noiseFactor 路由噪声因子
      */
-    public MoELayer(int inputDim, int hiddenDim, int outputDim, 
+    public MoEBlock(int inputDim, int hiddenDim, int outputDim,
                     int numExperts, int topK, float noiseFactor) {
         super("moe_layer");
         
@@ -317,7 +317,7 @@ public class MoELayer extends Module {
     
     @Override
     public String toString() {
-        return String.format("MoELayer(in=%d, hidden=%d, out=%d, experts=%d, topK=%d)",
+        return String.format("MoEBlock(in=%d, hidden=%d, out=%d, experts=%d, topK=%d)",
             inputDim, hiddenDim, outputDim, numExperts, topK);
     }
     

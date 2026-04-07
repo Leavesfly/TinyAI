@@ -170,8 +170,8 @@ public class Conv2d extends Function {
                                    kernelHeight, kernelWidth);
         
         // 2. 计算kernel梯度
-        // [C*KH*KW, B*OH*OW]^T @ [B*OH*OW, OC] = [C*KH*KW, OC]^T = [OC, C*KH*KW]
-        NdArray kernelGradFlat = im2colMatrix.transpose().dot(yGradFlat);
+        // [OC, B*OH*OW] @ [B*OH*OW, C*KH*KW] = [OC, C*KH*KW]
+        NdArray kernelGradFlat = yGradFlat.transpose().dot(im2colMatrix);
         
         // Reshape: [OC, C*KH*KW] -> [OC, C, KH, KW]
         NdArray kernelGrad = kernelGradFlat.reshape(
@@ -208,28 +208,39 @@ public class Conv2d extends Function {
         int outputCols = channels * kernelHeight * kernelWidth;
         
         float[] outputData = new float[outputRows * outputCols];
+        float[] inputData = input.getArray();
+        
+        // 预计算输入张量各维度的步幅，避免在内层循环中重复计算
+        int inputStrideB = channels * height * width;
+        int inputStrideC = height * width;
         
         int outputRowIndex = 0;
         for (int b = 0; b < batchSize; b++) {
+            int inputBaseB = b * inputStrideB;
             for (int oh = 0; oh < outHeight; oh++) {
+                int ihBase = oh * stride - padding;
                 for (int ow = 0; ow < outWidth; ow++) {
+                    int iwBase = ow * stride - padding;
+                    int outputBase = outputRowIndex * outputCols;
                     int colIndex = 0;
                     
                     for (int c = 0; c < channels; c++) {
+                        int inputBaseBC = inputBaseB + c * inputStrideC;
                         for (int kh = 0; kh < kernelHeight; kh++) {
-                            int ih = oh * stride + kh - padding;
-                            for (int kw = 0; kw < kernelWidth; kw++) {
-                                int iw = ow * stride + kw - padding;
-                                
-                                // 处理padding区域
-                                if (ih >= 0 && ih < height && iw >= 0 && iw < width) {
-                                    outputData[outputRowIndex * outputCols + colIndex] =
-                                        input.get(b, c, ih, iw);
-                                } else {
-                                    // 填充区域为0
-                                    outputData[outputRowIndex * outputCols + colIndex] = 0.0f;
+                            int ih = ihBase + kh;
+                            if (ih >= 0 && ih < height) {
+                                int inputBaseRow = inputBaseBC + ih * width;
+                                for (int kw = 0; kw < kernelWidth; kw++) {
+                                    int iw = iwBase + kw;
+                                    if (iw >= 0 && iw < width) {
+                                        outputData[outputBase + colIndex] = inputData[inputBaseRow + iw];
+                                    }
+                                    // padding区域默认为0（float[]初始值）
+                                    colIndex++;
                                 }
-                                colIndex++;
+                            } else {
+                                // 整行都在padding区域，跳过（默认为0）
+                                colIndex += kernelWidth;
                             }
                         }
                     }
@@ -262,27 +273,40 @@ public class Conv2d extends Function {
         NdArray inputGrad = NdArray.zeros(Shape.of(batchSize, channels, height, width));
         
         int outputCols = channels * kernelHeight * kernelWidth;
-        int outputRowIndex = 0;
+        float[] gradColData = gradCol.getArray();
+        float[] gradData = inputGrad.getArray();
         
+        // 预计算输出张量各维度的步幅
+        int gradStrideB = channels * height * width;
+        int gradStrideC = height * width;
+        
+        int outputRowIndex = 0;
         for (int b = 0; b < batchSize; b++) {
+            int gradBaseB = b * gradStrideB;
             for (int oh = 0; oh < outHeight; oh++) {
+                int ihBase = oh * stride - padding;
                 for (int ow = 0; ow < outWidth; ow++) {
+                    int iwBase = ow * stride - padding;
+                    int colBase = outputRowIndex * outputCols;
                     int colIndex = 0;
                     
                     for (int c = 0; c < channels; c++) {
+                        int gradBaseBC = gradBaseB + c * gradStrideC;
                         for (int kh = 0; kh < kernelHeight; kh++) {
-                            int ih = oh * stride + kh - padding;
-                            for (int kw = 0; kw < kernelWidth; kw++) {
-                                int iw = ow * stride + kw - padding;
-                                
-                                // 只处理有效区域（非padding）
-                                if (ih >= 0 && ih < height && iw >= 0 && iw < width) {
-                                    float gradValue = gradCol.get(outputRowIndex, colIndex);
-                                    float currentGrad = inputGrad.get(b, c, ih, iw);
-                                    // 累加梯度（处理重叠区域）
-                                    inputGrad.set(currentGrad + gradValue, b, c, ih, iw);
+                            int ih = ihBase + kh;
+                            if (ih >= 0 && ih < height) {
+                                int gradBaseRow = gradBaseBC + ih * width;
+                                for (int kw = 0; kw < kernelWidth; kw++) {
+                                    int iw = iwBase + kw;
+                                    if (iw >= 0 && iw < width) {
+                                        // 直接操作底层数组，累加梯度
+                                        gradData[gradBaseRow + iw] += gradColData[colBase + colIndex];
+                                    }
+                                    colIndex++;
                                 }
-                                colIndex++;
+                            } else {
+                                // 整行都在padding区域，跳过
+                                colIndex += kernelWidth;
                             }
                         }
                     }

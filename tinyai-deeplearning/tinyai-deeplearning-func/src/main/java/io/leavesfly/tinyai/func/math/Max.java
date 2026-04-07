@@ -2,6 +2,7 @@ package io.leavesfly.tinyai.func.math;
 
 import io.leavesfly.tinyai.func.Function;
 import io.leavesfly.tinyai.ndarr.NdArray;
+import io.leavesfly.tinyai.ndarr.Shape;
 
 import java.util.Collections;
 import java.util.List;
@@ -60,7 +61,17 @@ public class Max extends Function {
             yGrad = yGrad.broadcastTo(x.getShape());
             y = y.broadcastTo(x.getShape());
         }
-        return Collections.singletonList(x.eq(y).mul(yGrad));
+
+        // 当多个元素同时为最大值时，将梯度平均分配到这些位置
+        NdArray mask = x.eq(y);
+
+        // sum(axis) 会移除指定轴（降维），需要先 reshape 恢复维度再广播
+        NdArray maskSum = mask.sum(axis);
+        int[] keepDimsShape = x.getShape().getShapeDims().clone();
+        keepDimsShape[axis] = 1;
+        NdArray maskCount = maskSum.reshape(Shape.of(keepDimsShape)).broadcastTo(x.getShape());
+        NdArray safeMaskCount = maskCount.clip(1f, Float.MAX_VALUE);
+        return Collections.singletonList(mask.div(safeMaskCount).mul(yGrad));
     }
 
     /**

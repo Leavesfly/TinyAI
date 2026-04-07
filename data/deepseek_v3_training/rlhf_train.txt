@@ -163,22 +163,10 @@ Batch normalization normalizes the inputs of each layer to improve training stab
 What is dropout?<|im_end|>
 <|im_start|>assistant
 Dropout randomly disables some neurons during training to prevent overfitting and improve generalization.<|im_end|>
-[REWARD:0.48] <|im_start|>user
-What is gradient clipping?<|im_end|>
-<|im_start|>assistant
-Gradient clipping limits the maximum value of gradients during training to prevent exploding gradients.<|im_end|>
 [REWARD:0.47] <|im_start|>user
 What is learning rate?<|im_end|>
 <|im_start|>assistant
 Learning rate controls how much the model parameters are updated during training. Too high can cause divergence, too slow can cause slow convergence.<|im_end|>
-[REWARD:0.46] <|im_start|>user
-What is an epoch?<|im_end|>
-<|im_start|>assistant
-An epoch is one complete pass through the entire training dataset during model training.<|im_end|>
-[REWARD:0.45] <|im_start|>user
-What is a batch?<|im_end|>
-<|im_start|>assistant
-A batch is a subset of the training data used in one iteration of training. Batch size affects memory usage and training stability.<|im_end|>
 [REWARD:0.25] <|im_start|>user
 What is Mixture of Experts?<|im_end|>
 <|im_start|>assistant

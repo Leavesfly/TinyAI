@@ -1,4 +1,6 @@
-package io.leavesfly.tinyai.minimind.model.sampling;
+package io.leavesfly.tinyai.minimind.model;
+
+import java.util.Arrays;
 
 /**
  * 文本采样工具类
@@ -230,7 +232,7 @@ public class TextSampler {
         }
 
         // 降序排序
-        java.util.Arrays.sort(indices, (a, b) -> Float.compare(array[b], array[a]));
+        Arrays.sort(indices, (a, b) -> Float.compare(array[b], array[a]));
 
         // 转换为 int[]
         int[] result = new int[array.length];

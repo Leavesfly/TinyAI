@@ -58,7 +58,11 @@ public class Min extends Max {
             yGrad = yGrad.broadcastTo(x.getShape());
             y = y.broadcastTo(x.getShape());
         }
-        // 与 Max 的区别：这里用 x.eq(y) 比较的是最小值位置
-        return Collections.singletonList(x.eq(y).mul(yGrad));
+
+        // 当多个元素同时为最小值时，将梯度平均分配到这些位置
+        NdArray mask = x.eq(y);
+        NdArray maskCount = mask.sum(axis).broadcastTo(x.getShape());
+        NdArray safeMaskCount = maskCount.clip(1f, Float.MAX_VALUE);
+        return Collections.singletonList(mask.div(safeMaskCount).mul(yGrad));
     }
 }

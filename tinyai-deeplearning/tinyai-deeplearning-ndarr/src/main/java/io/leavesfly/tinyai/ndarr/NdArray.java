@@ -402,6 +402,15 @@ public interface NdArray {
     NdArray abs();
 
     /**
+     * 符号函数，返回每个元素的符号
+     *
+     * 正数返回1.0，负数返回-1.0，零返回0.0
+     *
+     * @return 符号数组
+     */
+    NdArray sign();
+
+    /**
      * 相等比较运算，比较两个数组对应元素是否相等
      *
      * @param other 另一个操作数数组
@@ -749,6 +758,18 @@ public interface NdArray {
      * @throws IllegalArgumentException 当数组不是矩阵或轴参数无效时抛出
      */
     NdArray argMax(int axis);
+
+    /**
+     * 沿最后一个轴选取 Top-K 最大值及其索引
+     * <p>
+     * 输入形状 [..., N]，输出 indices 和 values 形状均为 [..., K]。
+     * 结果按值从大到小排列。
+     *
+     * @param k 选取的最大值个数
+     * @return 长度为 2 的数组：[indices, values]，indices 中的索引以 float 存储
+     * @throws IllegalArgumentException 当 k 无效时抛出
+     */
+    NdArray[] topk(int k);
 
     /**
      * 矩阵内积运算（矩阵乘法）- 深度学习的核心操作

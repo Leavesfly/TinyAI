@@ -164,7 +164,7 @@ public class DeepSeekV3MTPHead extends Module {
     /**
      * 计算 MTP 总损失
      * 
-     * 与 DeepSeekV3Pretrain.reshapeForLoss 保持一致的格式：
+     * 与 DeepSeekV3Pretrainer.reshapeForLoss 保持一致的格式：
      * - logits reshape 为 [N, vocabSize]
      * - targets reshape 为 [N, 1]
      * 

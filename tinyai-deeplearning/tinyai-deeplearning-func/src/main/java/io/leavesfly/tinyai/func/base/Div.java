@@ -75,42 +75,41 @@ public class Div extends Function {
      */
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        NdArray ndArray0 = inputs[0].getValue();
-        NdArray ndArray1 = inputs[1].getValue();
-        
-        Shape shape0 = ndArray0.getShape();
-        Shape shape1 = ndArray1.getShape();
+        NdArray numerator = inputs[0].getValue();
+        NdArray denominator = inputs[1].getValue();
         Shape yGradShape = yGrad.getShape();
-        
-        // 计算 dx = yGrad / y，需要处理广播（添加除零保护）
-        NdArray grad0;
-        if (shape1.equals(yGradShape)) {
-            grad0 = yGrad.div(safeDiv(ndArray1));
-        } else {
-            grad0 = yGrad.div(safeDiv(ndArray1.broadcastTo(yGradShape)));
-        }
-        // 如果 x 的形状与 yGrad 不同，需要 sumTo 回原始形状
-        if (!shape0.equals(yGradShape)) {
-            grad0 = BroadcastUtils.sumToShape(grad0, shape0, yGradShape);
-        }
-        
-        // 计算 dy = yGrad * (-x / y²)，需要处理广播
-        NdArray y2 = safeDiv(ndArray1.square());
-        NdArray negX = ndArray0.neg();
-        NdArray grad1;
-        if (shape0.equals(yGradShape) && shape1.equals(yGradShape)) {
-            grad1 = yGrad.mul(negX.div(y2));
-        } else {
-            NdArray negXBroadcast = shape0.equals(yGradShape) ? negX : negX.broadcastTo(yGradShape);
-            NdArray y2Broadcast = shape1.equals(yGradShape) ? y2 : y2.broadcastTo(yGradShape);
-            grad1 = yGrad.mul(negXBroadcast.div(y2Broadcast));
-        }
-        // 如果 y 的形状与 yGrad 不同，需要 sumTo 回原始形状
-        if (!shape1.equals(yGradShape)) {
-            grad1 = BroadcastUtils.sumToShape(grad1, shape1, yGradShape);
-        }
-        
+
+        NdArray grad0 = computeNumeratorGrad(yGrad, denominator, numerator.getShape(), yGradShape);
+        NdArray grad1 = computeDenominatorGrad(yGrad, numerator, denominator, yGradShape);
         return Arrays.asList(grad0, grad1);
+    }
+
+    /** 计算 ∂(x/y)/∂x = 1/y 的梯度 */
+    private NdArray computeNumeratorGrad(NdArray yGrad, NdArray denominator, Shape targetShape, Shape yGradShape) {
+        NdArray safeDenom = safeDiv(denominator);
+        NdArray grad = denominator.getShape().equals(yGradShape)
+                ? yGrad.div(safeDenom)
+                : yGrad.div(safeDiv(denominator.broadcastTo(yGradShape)));
+        if (!targetShape.equals(yGradShape)) {
+            grad = BroadcastUtils.sumToShape(grad, targetShape, yGradShape);
+        }
+        return grad;
+    }
+
+    /** 计算 ∂(x/y)/∂y = -x/y² 的梯度 */
+    private NdArray computeDenominatorGrad(NdArray yGrad, NdArray numerator, NdArray denominator, Shape yGradShape) {
+        Shape denominatorShape = denominator.getShape();
+        NdArray safeY2 = safeDiv(denominator.square());
+        NdArray negNumerator = numerator.neg();
+
+        NdArray negNumBroadcast = numerator.getShape().equals(yGradShape) ? negNumerator : negNumerator.broadcastTo(yGradShape);
+        NdArray y2Broadcast = denominatorShape.equals(yGradShape) ? safeY2 : safeY2.broadcastTo(yGradShape);
+        NdArray grad = yGrad.mul(negNumBroadcast.div(y2Broadcast));
+
+        if (!denominatorShape.equals(yGradShape)) {
+            grad = BroadcastUtils.sumToShape(grad, denominatorShape, yGradShape);
+        }
+        return grad;
     }
     
 

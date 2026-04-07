@@ -70,27 +70,34 @@ public class ExpertRouter extends Module {
     }
     
     /**
-     * 前向传播(Variable版本,Module接口要求)
+     * 前向传播(Variable版本)
+     * 
+     * 委托到forwardRouter，将topKWeights打包为NdArray返回。
+     * 如需完整路由信息(indices等)，请直接调用forwardRouter。
      */
     @Override
     public Variable forward(Variable... inputs) {
-        // RouterOutput无法封装为Variable,返回原始输入
-        // 实际使用应调用forwardRouter
-        return inputs[0];
+        RouterOutput routerOutput = forwardRouter(inputs[0]);
+        float[][] topKWeights = routerOutput.getTopKWeights();
+        int batchSize = routerOutput.getBatchSize();
+        int topKSize = routerOutput.getTopK();
+        float[] flatWeights = new float[batchSize * topKSize];
+        for (int b = 0; b < batchSize; b++) {
+            System.arraycopy(topKWeights[b], 0, flatWeights, b * topKSize, topKSize);
+        }
+        NdArray weightsArray = NdArray.of(flatWeights, Shape.of(batchSize, topKSize));
+        return new Variable(weightsArray);
     }
     
     /**
-     * 前向传播(Function接口)
+     * 前向传播(NdArray版本)
      * 
-     * @param inputs 输入数组
-     * @return 路由结果 RouterOutput(packed in NdArray)
+     * 委托到forward(Variable...)，将输入包装为Variable后调用。
      */
     @Override
     public NdArray forward(NdArray... inputs) {
         Variable input = new Variable(inputs[0]);
-        // Note: RouterOutput不能直接返回NdArray,这里仅为满足Module的接口
-        // 实际使用时应调用forwardRouter
-        return input.getValue(); // placeholder
+        return forward(input).getValue();
     }
     
     /**

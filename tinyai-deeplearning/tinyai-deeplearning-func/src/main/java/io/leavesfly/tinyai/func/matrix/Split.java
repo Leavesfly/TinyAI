@@ -53,29 +53,32 @@ public class Split extends Function {
 
     @Override
     public List<NdArray> backward(NdArray yGrad) {
-        // 梯度回传需要 padding 0 到原形状
-        // 这是一个反向切片操作。
-        // dy_whole = zeros(shape)
-        // dy_whole[start:end] = yGrad
-        
         NdArray x = inputs[0].getValue();
-        NdArray grad = NdArray.zeros(x.getShape());
-        
         Shape shape = x.getShape();
         int rank = shape.getDimNum();
         int actualDim = dim < 0 ? rank + dim : dim;
         int start = index * splitSize;
         int end = Math.min(start + splitSize, shape.getDimension(actualDim));
 
-        // 模拟 setItem (仅支持 2D)
+        NdArray grad = NdArray.zeros(shape);
+
         if (rank == 2) {
-             int rows = shape.getRow();
-             int cols = shape.getColumn();
-             // 构造索引
-             // 效率极低，仅示意
-             // 实际应在 NdArray 实现 slice set
-             // 这里略过具体实现，避免代码过于复杂
+            float[][] gradMatrix = grad.getMatrix();
+            float[][] yGradMatrix = yGrad.getMatrix();
+
+            if (actualDim == 0) {
+                for (int i = start; i < end; i++) {
+                    System.arraycopy(yGradMatrix[i - start], 0, gradMatrix[i], 0, shape.getColumn());
+                }
+            } else {
+                for (int i = 0; i < shape.getRow(); i++) {
+                    System.arraycopy(yGradMatrix[i], 0, gradMatrix[i], start, end - start);
+                }
+            }
+        } else {
+            throw new UnsupportedOperationException("Split backward currently only supports 2D tensors.");
         }
+
         return Collections.singletonList(grad);
     }
 

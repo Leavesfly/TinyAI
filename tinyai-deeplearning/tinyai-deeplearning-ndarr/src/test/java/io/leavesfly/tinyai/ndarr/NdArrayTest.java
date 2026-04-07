@@ -939,4 +939,92 @@ public class NdArrayTest {
         float[][] expectedGt = {{0, 1}, {0, 0}}; // 1<2, 5>3, 3=3, 2<4
         assertArrayEquals(expectedGt, gtResult.getMatrix());
     }
+
+    @Test
+    public void testTopKBasic() {
+        // 测试 2D 矩阵的 topk
+        NdArray data = NdArray.of(new float[][]{{5f, 2f, 8f, 1f}, {3f, 9f, 4f, 7f}});
+        NdArray[] result = data.topk(2);
+        NdArray indices = result[0];
+        NdArray values = result[1];
+
+        // 第一行：最大值是 8(idx=2), 次大是 5(idx=0)
+        // 第二行：最大值是 9(idx=1), 次大是 7(idx=3)
+        float[][] expectedIndices = {{2f, 0f}, {1f, 3f}};
+        float[][] expectedValues = {{8f, 5f}, {9f, 7f}};
+
+        assertArrayEquals(expectedIndices, indices.getMatrix());
+        assertArrayEquals(expectedValues, values.getMatrix());
+    }
+
+    @Test
+    public void testTopKWithNegativeValues() {
+        // 测试包含负值的 topk
+        NdArray data = NdArray.of(new float[][]{{-5f, -2f, -8f, -1f}});
+        NdArray[] result = data.topk(2);
+        NdArray indices = result[0];
+        NdArray values = result[1];
+
+        // 最大值是 -1(idx=3), 次大是 -2(idx=1)
+        float[][] expectedIndices = {{3f, 1f}};
+        float[][] expectedValues = {{-1f, -2f}};
+
+        assertArrayEquals(expectedIndices, indices.getMatrix());
+        assertArrayEquals(expectedValues, values.getMatrix());
+    }
+
+    @Test
+    public void testTopKKGreaterThanDim() {
+        // 测试 k 大于维度大小的情况（应返回所有元素）
+        NdArray data = NdArray.of(new float[][]{{3f, 1f, 2f}});
+        NdArray[] result = data.topk(5); // k=5 > 实际维度 3
+        NdArray indices = result[0];
+        NdArray values = result[1];
+
+        // 应返回全部 3 个元素，按从大到小排列
+        float[][] expectedIndices = {{0f, 2f, 1f}};
+        float[][] expectedValues = {{3f, 2f, 1f}};
+
+        assertArrayEquals(expectedIndices, indices.getMatrix());
+        assertArrayEquals(expectedValues, values.getMatrix());
+    }
+
+    @Test
+    public void testTopK3DTensor() {
+        // 测试 3D 张量的 topk（模拟 MoE 场景 [batch=2, seq=2, experts=4]）
+        float[][][] data3d = {
+                {{5f, 2f, 8f, 1f}, {3f, 9f, 4f, 7f}},
+                {{6f, 1f, 3f, 8f}, {2f, 7f, 5f, 4f}}
+        };
+        NdArray data = NdArray.of(data3d);
+        NdArray[] result = data.topk(2);
+        NdArray indices = result[0];
+        NdArray values = result[1];
+
+        // 验证形状：[2, 2, 2]
+        assertEquals(Shape.of(2, 2, 2), indices.getShape());
+        assertEquals(Shape.of(2, 2, 2), values.getShape());
+
+        // 验证第一个 batch 的第一个序列位置：最大值 8(idx=2), 次大 5(idx=0)
+        float[][][] indicesArray = indices.get3dArray();
+        float[][][] valuesArray = values.get3dArray();
+
+        assertEquals(2f, indicesArray[0][0][0], 1e-6); // 第一行最大值的索引
+        assertEquals(8f, valuesArray[0][0][0], 1e-6);  // 第一行最大值
+        assertEquals(0f, indicesArray[0][0][1], 1e-6); // 第一行次大值的索引
+        assertEquals(5f, valuesArray[0][0][1], 1e-6);  // 第一行次大值
+
+        // 验证第二个 batch 的第二个序列位置：最大值 7(idx=1), 次大 5(idx=2)
+        assertEquals(1f, indicesArray[1][1][0], 1e-6);
+        assertEquals(7f, valuesArray[1][1][0], 1e-6);
+        assertEquals(2f, indicesArray[1][1][1], 1e-6);
+        assertEquals(5f, valuesArray[1][1][1], 1e-6);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testTopKInvalidK() {
+        // 测试 k <= 0 的异常情况
+        NdArray data = NdArray.of(new float[][]{{1f, 2f, 3f}});
+        data.topk(0); // 应抛出异常
+    }
 }

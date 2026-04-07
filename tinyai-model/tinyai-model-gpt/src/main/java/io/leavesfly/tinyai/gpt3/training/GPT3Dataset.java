@@ -400,7 +400,7 @@ public class GPT3Dataset {
                 if (!token.startsWith("<") && sb.length() > 0) {
                     sb.append(" ");
                 }
-                if (!token.equals("<PAD>") && !token.equals("<BOS>") && !token.equals("<EOS>")) {
+                if (!token.equals("<PAD>") && !token.equals("<BOS>") && !token.equals("<EOS>") && !token.equals("<UNK>")) {
                     sb.append(token);
                 }
             }

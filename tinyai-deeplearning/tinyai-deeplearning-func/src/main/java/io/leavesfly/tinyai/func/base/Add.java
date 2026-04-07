@@ -17,8 +17,8 @@ import java.util.List;
  */
 public class Add extends Function {
 
-    private Shape x0Shape;
-    private Shape x1Shape;
+    private Shape input0Shape;
+    private Shape input1Shape;
 
     /**
      * 前向传播计算加法
@@ -31,27 +31,18 @@ public class Add extends Function {
      */
     @Override
     public NdArray forward(NdArray... inputs) {
-        x0Shape = inputs[0].getShape();
-        x1Shape = inputs[1].getShape();
-        
-        // 检查是否需要广播
-        if (x0Shape.equals(x1Shape)) {
-            // 形状相同，直接相加
+        input0Shape = inputs[0].getShape();
+        input1Shape = inputs[1].getShape();
+
+        if (input0Shape.equals(input1Shape)) {
             return inputs[0].add(inputs[1]);
+        } else if (BroadcastUtils.isBroadcastable(input1Shape, input0Shape)) {
+            return inputs[0].add(inputs[1].broadcastTo(input0Shape));
+        } else if (BroadcastUtils.isBroadcastable(input0Shape, input1Shape)) {
+            return inputs[0].broadcastTo(input1Shape).add(inputs[1]);
         } else {
-            // 需要广播
-            // 判断广播方向
-            if (BroadcastUtils.isBroadcastable(x1Shape, x0Shape)) {
-                // input1 需要广播到 input0 的形状
-                return inputs[0].add(inputs[1].broadcastTo(x0Shape));
-            } else if (BroadcastUtils.isBroadcastable(x0Shape, x1Shape)) {
-                // input0 需要广播到 input1 的形状
-                return inputs[0].broadcastTo(x1Shape).add(inputs[1]);
-            } else {
-                throw new IllegalArgumentException(
-                    String.format("加法操作的形状不兼容：%s vs %s", x0Shape, x1Shape)
-                );
-            }
+            throw new IllegalArgumentException(
+                    String.format("加法操作的形状不兼容：%s vs %s", input0Shape, input1Shape));
         }
     }
 
@@ -67,9 +58,9 @@ public class Add extends Function {
     @Override
     public List<NdArray> backward(NdArray yGrad) {
         Shape yGradShape = yGrad.getShape();
-        NdArray gx0 = x0Shape.equals(yGradShape) ? yGrad : BroadcastUtils.sumToShape(yGrad, x0Shape, yGradShape);
-        NdArray gx1 = x1Shape.equals(yGradShape) ? yGrad : BroadcastUtils.sumToShape(yGrad, x1Shape, yGradShape);
-        return Arrays.asList(gx0, gx1);
+        NdArray grad0 = input0Shape.equals(yGradShape) ? yGrad : BroadcastUtils.sumToShape(yGrad, input0Shape, yGradShape);
+        NdArray grad1 = input1Shape.equals(yGradShape) ? yGrad : BroadcastUtils.sumToShape(yGrad, input1Shape, yGradShape);
+        return Arrays.asList(grad0, grad1);
     }
 
     /**

@@ -224,9 +224,9 @@ public class GPT3TrainDemo {
         // 学习率提高到3e-4（nano模型参数少，需要更大学习率驱动收敛）
         // warmup设为5步（数据量小，每epoch仅约12步，warmup不宜过长）
         GPT3Finetune finetune = new GPT3Finetune(pretrainedModel, trainDataset, valDataset)
-                .configure(15, 5e-4f, 4)
+                .configure(30, 5e-4f, 4)
                 .setWarmupSteps(5)
-                .setCheckpoint(CHECKPOINT_DIR + "/finetune", 10);
+                .setCheckpoint(CHECKPOINT_DIR + "/finetune", 20);
 
         finetune.train();
 

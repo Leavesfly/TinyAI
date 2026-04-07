@@ -31,7 +31,7 @@ public class DeepSeekV3MoELayerPlantUMLTest {
     @Test
     public void generateMoELayerModuleDiagram() {
         DeepSeekV3Config config = DeepSeekV3Config.createMicroConfig();
-        DeepSeekV3MoELayer moeLayer = new DeepSeekV3MoELayer("moe_layer", config);
+        DeepSeekV3MoEBlock moeLayer = new DeepSeekV3MoEBlock("moe_layer", config);
 
         System.out.println("========== DeepSeek-V3 MoE Layer 模块图 (PlantUML) ==========");
         System.out.println("配置: nEmbd=" + config.getNEmbd()
@@ -52,7 +52,7 @@ public class DeepSeekV3MoELayerPlantUMLTest {
     @Test
     public void generateMoELayerComputationDiagram() {
         DeepSeekV3Config config = DeepSeekV3Config.createMicroConfig();
-        DeepSeekV3MoELayer moeLayer = new DeepSeekV3MoELayer("moe_layer", config);
+        DeepSeekV3MoEBlock moeLayer = new DeepSeekV3MoEBlock("moe_layer", config);
         moeLayer.eval();
 
         // 构造输入: [batch_size=1, seq_len=4, nEmbd=64]

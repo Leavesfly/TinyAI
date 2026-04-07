@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 public class MiniMindTransformerLayerTest {
     
-    private MiniMindTransformerLayer layer;
+    private TransformerBlock layer;
     private final int hiddenSize = 64;
     private final int numHeads = 4;
     private final int ffnHiddenSize = 128;
@@ -27,7 +27,7 @@ public class MiniMindTransformerLayerTest {
     
     @BeforeEach
     public void setUp() {
-        layer = new MiniMindTransformerLayer(
+        layer = new TransformerBlock(
             "test_layer",
             hiddenSize,
             numHeads,
@@ -175,7 +175,7 @@ public class MiniMindTransformerLayerTest {
 
     @Test
     public void testMiniMindTransformerLayerGradientCheck() {
-        MiniMindTransformerLayer layer = new MiniMindTransformerLayer(
+        TransformerBlock layer = new TransformerBlock(
             "test_layer",
             hiddenSize,
             numHeads,

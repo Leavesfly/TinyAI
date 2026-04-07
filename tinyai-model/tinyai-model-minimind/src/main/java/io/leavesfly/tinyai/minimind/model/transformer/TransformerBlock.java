@@ -28,7 +28,7 @@ import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
  * @author leavesfly
  * @version 1.0
  */
-public class MiniMindTransformerLayer extends Module {
+public class TransformerBlock extends Module {
 
     /**
      * 注意力层前的 LayerNorm
@@ -98,10 +98,10 @@ public class MiniMindTransformerLayer extends Module {
      * @param activationFunction 激活函数类型 ("silu" 或 "relu")
      * @param preLayerNorm      是否使用 Pre-LayerNorm
      */
-    public MiniMindTransformerLayer(String name, int hiddenSize, int numHeads, 
-                                    int ffnHiddenSize, int maxSeqLen, 
-                                    float dropoutRate, float epsilon,
-                                    String activationFunction, boolean preLayerNorm) {
+    public TransformerBlock(String name, int hiddenSize, int numHeads,
+                            int ffnHiddenSize, int maxSeqLen,
+                            float dropoutRate, float epsilon,
+                            String activationFunction, boolean preLayerNorm) {
         super(name);
 
         this.hiddenSize = hiddenSize;

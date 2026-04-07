@@ -44,9 +44,16 @@ public class Concat extends Function {
             
             // 校验其他维度是否一致
             if (i > 0) {
-                // 简单校验维度数
                 if (inputShapes[i].getDimNum() != baseShape.getDimNum()) {
                     throw new IllegalArgumentException("Input shapes must have same rank");
+                }
+                // 校验非拼接维度的尺寸是否匹配
+                for (int d = 0; d < baseShape.getDimNum(); d++) {
+                    if (d != targetDim && inputShapes[i].getDimension(d) != baseShape.getDimension(d)) {
+                        throw new IllegalArgumentException(String.format(
+                                "Non-concat dimension %d mismatch: expected %d but got %d at input %d",
+                                d, baseShape.getDimension(d), inputShapes[i].getDimension(d), i));
+                    }
                 }
             }
         }

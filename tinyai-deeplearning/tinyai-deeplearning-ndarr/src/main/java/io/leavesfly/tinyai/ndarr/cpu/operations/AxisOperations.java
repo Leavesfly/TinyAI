@@ -4,6 +4,10 @@ import io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu;
 import io.leavesfly.tinyai.ndarr.cpu.ShapeCpu;
 import io.leavesfly.tinyai.ndarr.cpu.utils.ArrayValidator;
 
+import java.util.PriorityQueue;
+
+import java.util.PriorityQueue;
+
 /**
  * 轴操作类，提供沿指定轴的最大值、最小值、argMax 等操作。
  * 当前实现主要优化最后两个轴。
@@ -106,6 +110,71 @@ public class AxisOperations {
             }
         }
         return result;
+    }
+
+    /**
+     * 沿最后一个轴选取 Top-K 最大值及其索引（最小堆实现，O(n·log k)）
+     * <p>
+     * 输入形状 [..., N]，输出 indices 和 values 形状均为 [..., K]。
+     * 结果按值从大到小排列。
+     *
+     * @param array 输入数组，至少 1 维
+     * @param k     选取的最大值个数
+     * @return 包含 indices（int 存为 float）和 values 的数组，长度为 2：[indices, values]
+     * @throws IllegalArgumentException 当 k 无效时抛出
+     */
+    public static NdArrayCpu[] topk(NdArrayCpu array, int k) {
+        int dimNum = array.shape.getDimNum();
+        int lastDimSize = array.shape.getDimension(dimNum - 1);
+        int effectiveK = Math.min(k, lastDimSize);
+
+        if (effectiveK <= 0) {
+            throw new IllegalArgumentException("k 必须大于 0，当前 k=" + k);
+        }
+
+        // 计算批次数量（最后一个维度之前的所有维度的乘积）
+        int batchSize = array.shape.size() / lastDimSize;
+
+        // 构建结果形状：将最后一个维度从 N 替换为 K
+        int[] resultDims = new int[dimNum];
+        for (int i = 0; i < dimNum - 1; i++) {
+            resultDims[i] = array.shape.getDimension(i);
+        }
+        resultDims[dimNum - 1] = effectiveK;
+
+        NdArrayCpu indices = new NdArrayCpu(ShapeCpu.of(resultDims));
+        NdArrayCpu values = new NdArrayCpu(ShapeCpu.of(resultDims));
+
+        float[] srcBuffer = array.buffer;
+        float[] idxBuffer = indices.buffer;
+        float[] valBuffer = values.buffer;
+
+        for (int batch = 0; batch < batchSize; batch++) {
+            int srcOffset = batch * lastDimSize;
+            int dstOffset = batch * effectiveK;
+
+            // 最小堆：堆元素为 [原始索引]，比较依据为 srcBuffer 中的值
+            PriorityQueue<int[]> minHeap = new PriorityQueue<>(
+                    effectiveK + 1,
+                    (a, b) -> Float.compare(srcBuffer[srcOffset + a[0]], srcBuffer[srcOffset + b[0]])
+            );
+
+            for (int j = 0; j < lastDimSize; j++) {
+                minHeap.offer(new int[]{j});
+                if (minHeap.size() > effectiveK) {
+                    minHeap.poll();
+                }
+            }
+
+            // 从堆中取出，按值从大到小排列
+            for (int i = effectiveK - 1; i >= 0; i--) {
+                int idx = minHeap.poll()[0];
+                idxBuffer[dstOffset + i] = idx;
+                valBuffer[dstOffset + i] = srcBuffer[srcOffset + idx];
+            }
+        }
+
+        return new NdArrayCpu[]{indices, values};
     }
 
     /**

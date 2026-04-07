@@ -40,7 +40,7 @@ import java.util.List;
  * @author leavesfly
  * @version 3.0
  */
-public class DeepSeekV3MoELayer extends Module {
+public class DeepSeekV3MoEBlock extends Module {
 
     /**
      * 权重 mask 为零的判断阈值
@@ -76,7 +76,7 @@ public class DeepSeekV3MoELayer extends Module {
      * @param name   模块名称
      * @param config V3配置对象
      */
-    public DeepSeekV3MoELayer(String name, DeepSeekBaseConfig config) {
+    public DeepSeekV3MoEBlock(String name, DeepSeekBaseConfig config) {
         super(name);
         this.config = config;
         initializeComponents();
@@ -175,8 +175,7 @@ public class DeepSeekV3MoELayer extends Module {
         Variable routingScores = sigmoidProbs.add(biasExpanded);
 
         // 4. Top-K 选择（基于 routingScores），但权重用 sigmoidProbs（不含 bias）
-        TopKResult topKResult = selectTopKWithSeparateWeights(
-                routingScores, sigmoidProbs, config.getTopK());
+        TopKResult topKResult = selectTopKWithSeparateWeights(routingScores, sigmoidProbs, config.getTopK());
 
         // 5. 共享专家计算（每次必激活）
         Variable sharedOutput = computeSharedExpertsOutput(input);
@@ -217,7 +216,7 @@ public class DeepSeekV3MoELayer extends Module {
      * 选择 Top-K 专家（Sigmoid 路由版本）
      * <p>
      * 对标 DeepSeek-V3 论文：
-     * - 基于 routingScores（sigmoid + bias）选择 Top-K 专家
+     * - 基于 routingScores（sigmoid + bias）通过 topk 算子选择 Top-K 专家索引
      * - 但最终权重使用 sigmoidProbs（不含 bias），确保 bias 不影响梯度
      * - Top-K 权重归一化使概率和为 1
      *
@@ -227,64 +226,36 @@ public class DeepSeekV3MoELayer extends Module {
      * @return Top-K 选择结果（索引和归一化权重）
      */
     private TopKResult selectTopKWithSeparateWeights(Variable routingScores, Variable sigmoidProbs, int k) {
-        NdArray scoresArray = routingScores.getValue();
+        // 1. 使用 topk 算子基于 routingScores（含 bias）选择 Top-K 专家索引
+        NdArray[] topkResult = routingScores.getValue().topk(k);
+        NdArray topkIndicesArray = topkResult[0];  // [..., K]，索引以 float 存储
+
+        // 2. 用 topk 索引从 sigmoidProbs（不含 bias）中取值并归一化
         NdArray probsArray = sigmoidProbs.getValue();
-        int batchSize = scoresArray.getShape().getDimension(0);
-        int seqLen = scoresArray.getShape().getDimension(1);
-        int numExperts = scoresArray.getShape().getDimension(2);
+        int batchSize = probsArray.getShape().getDimension(0);
+        int seqLen = probsArray.getShape().getDimension(1);
 
         int[][][] topKIndices = new int[batchSize][seqLen][k];
         float[][][] topKWeights = new float[batchSize][seqLen][k];
 
         for (int b = 0; b < batchSize; b++) {
             for (int t = 0; t < seqLen; t++) {
-                // 基于 routingScores（含 bias）选择 Top-K 专家
-                float[] scores = new float[numExperts];
-                for (int e = 0; e < numExperts; e++) {
-                    scores[e] = scoresArray.get(b, t, e);
-                }
-                int[] topK = getTopKIndices(scores, k);
-
-                // 使用 sigmoidProbs（不含 bias）计算最终权重并归一化
+                // 从 topk 结果中取出索引，并用 sigmoidProbs 计算归一化权重
                 float sumProbs = 0.0f;
                 for (int i = 0; i < k; i++) {
-                    sumProbs += probsArray.get(b, t, topK[i]);
+                    int expertIdx = (int) topkIndicesArray.get(b, t, i);
+                    topKIndices[b][t][i] = expertIdx;
+                    sumProbs += probsArray.get(b, t, expertIdx);
                 }
 
                 for (int i = 0; i < k; i++) {
-                    topKIndices[b][t][i] = topK[i];
-                    float prob = probsArray.get(b, t, topK[i]);
+                    float prob = probsArray.get(b, t, topKIndices[b][t][i]);
                     topKWeights[b][t][i] = sumProbs > ZERO_THRESHOLD ? prob / sumProbs : 1.0f / k;
                 }
             }
         }
 
         return new TopKResult(topKIndices, topKWeights);
-    }
-
-    /**
-     * 获取Top-K索引（最小堆实现，O(n·log k) 优于原 O(n·k) 选择排序）
-     */
-    private int[] getTopKIndices(float[] values, int k) {
-        int effectiveK = Math.min(k, values.length);
-
-        // 最小堆：堆顶是当前Top-K中最小的，方便淘汰
-        java.util.PriorityQueue<int[]> minHeap = new java.util.PriorityQueue<>(
-                effectiveK + 1, (a, b) -> Float.compare(values[a[0]], values[b[0]]));
-
-        for (int i = 0; i < values.length; i++) {
-            minHeap.offer(new int[]{i});
-            if (minHeap.size() > effectiveK) {
-                minHeap.poll();
-            }
-        }
-
-        // 按值从大到小排列
-        int[] result = new int[effectiveK];
-        for (int i = effectiveK - 1; i >= 0; i--) {
-            result[i] = minHeap.poll()[0];
-        }
-        return result;
     }
 
     /**

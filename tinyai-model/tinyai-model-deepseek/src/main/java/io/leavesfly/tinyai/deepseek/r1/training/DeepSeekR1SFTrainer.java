@@ -10,15 +10,9 @@ import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
 import io.leavesfly.tinyai.ml.optimize.SGD;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * DeepSeek-R1后训练器(Posttrain/Finetune)
@@ -33,7 +27,7 @@ import java.util.Map;
  * @author leavesfly
  * @version 2.0
  */
-public class DeepSeekR1Posttrain extends DeepSeekTrainerBase {
+public class DeepSeekR1SFTrainer extends DeepSeekTrainerBase {
     
     private final DeepSeekR1Model model;
     private final DeepSeekR1Config config;
@@ -55,7 +49,7 @@ public class DeepSeekR1Posttrain extends DeepSeekTrainerBase {
     private float bestValLoss;
     private int stepsWithoutImprovement;
     
-    public DeepSeekR1Posttrain(DeepSeekR1Model model, 
+    public DeepSeekR1SFTrainer(DeepSeekR1Model model,
                                DeepSeekR1Dataset trainDataset,
                                DeepSeekR1Dataset valDataset) {
         super(model, 5, 1.0f, 5, "./checkpoints/deepseek_r1/posttrain");
@@ -82,7 +76,7 @@ public class DeepSeekR1Posttrain extends DeepSeekTrainerBase {
         this.stepsWithoutImprovement = 0;
     }
     
-    public DeepSeekR1Posttrain configure(int maxEpochs, float learningRate, int patience) {
+    public DeepSeekR1SFTrainer configure(int maxEpochs, float learningRate, int patience) {
         this.maxEpochs = maxEpochs;
         this.learningRate = learningRate;
         this.patience = patience;

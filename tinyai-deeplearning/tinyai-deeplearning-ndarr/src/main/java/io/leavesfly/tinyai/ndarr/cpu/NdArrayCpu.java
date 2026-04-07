@@ -363,6 +363,17 @@ public class NdArrayCpu implements NdArray, Serializable {
     }
 
     /**
+     * 符号函数，返回每个元素的符号
+     *
+     * 正数返回1.0，负数返回-1.0，零返回0.0
+     *
+     * @return 符号数组
+     */
+    public NdArrayCpu sign() {
+        return MathFunctions.sign(this);
+    }
+
+    /**
      * 相等比较运算，比较两个数组对应元素是否相等
      *
      * @param other 另一个操作数数组
@@ -693,6 +704,17 @@ public class NdArrayCpu implements NdArray, Serializable {
     }
 
     /**
+     * 沿最后一个轴选取 Top-K 最大值及其索引
+     *
+     * @param k 选取的最大值个数
+     * @return 长度为 2 的数组：[indices, values]
+     */
+    @Override
+    public NdArrayCpu[] topk(int k) {
+        return AxisOperations.topk(this, k);
+    }
+
+    /**
      * 矩阵内积运算（矩阵乘法）。
      * 执行标准矩阵乘法，要求第一个矩阵的列数等于第二个矩阵的行数。
      *
@@ -872,6 +894,9 @@ public class NdArrayCpu implements NdArray, Serializable {
      * @return 第一个元素值
      */
     public Number getNumber() {
+        if (buffer == null || buffer.length == 0) {
+            throw new IllegalStateException("数组为空，无法获取标量值");
+        }
         return this.buffer[0];
     }
 
@@ -1046,12 +1071,25 @@ public class NdArrayCpu implements NdArray, Serializable {
         return String.format("%.4f", value);
     }
     
+    // 格式化显示的最大元素数量常量
+    private static final int MAX_1D_DISPLAY_ELEMENTS = 10;
+    private static final int MAX_2D_DISPLAY_ROWS = 10;
+    private static final int MAX_2D_DISPLAY_COLS = 10;
+    private static final int MAX_3D_DISPLAY_BATCH = 3;
+    private static final int MAX_3D_DISPLAY_ROWS = 5;
+    private static final int MAX_3D_DISPLAY_COLS = 8;
+    private static final int MAX_4D_DISPLAY_DIM0 = 2;
+    private static final int MAX_4D_DISPLAY_DIM1 = 3;
+    private static final int MAX_4D_DISPLAY_DIM2 = 4;
+    private static final int MAX_4D_DISPLAY_DIM3 = 6;
+    private static final int MAX_HIGH_DIM_PREVIEW = 20;
+
     /**
      * 格式化1维数组
      */
     private void format1DArray(StringBuilder sb, int start, int length) {
         sb.append("[");
-        int displayCount = Math.min(length, 10);  // 最多显示10个元素
+        int displayCount = Math.min(length, MAX_1D_DISPLAY_ELEMENTS);
         
         for (int i = 0; i < displayCount; i++) {
             if (i > 0) sb.append(", ");
@@ -1072,8 +1110,8 @@ public class NdArrayCpu implements NdArray, Serializable {
         int cols = shape.dimension[1];
         
         sb.append("[");
-        int displayRows = Math.min(rows, 10);  // 最多显示10行
-        int displayCols = Math.min(cols, 10);  // 最多显示10列
+        int displayRows = Math.min(rows, MAX_2D_DISPLAY_ROWS);
+        int displayCols = Math.min(cols, MAX_2D_DISPLAY_COLS);
         
         for (int i = 0; i < displayRows; i++) {
             if (i > 0) sb.append("\n ");
@@ -1101,42 +1139,42 @@ public class NdArrayCpu implements NdArray, Serializable {
      * 格式化3维数组
      */
     private void format3DArray(StringBuilder sb) {
-        int dim0 = shape.dimension[0];
-        int dim1 = shape.dimension[1];
-        int dim2 = shape.dimension[2];
+        int batchSize = shape.dimension[0];
+        int rowCount = shape.dimension[1];
+        int colCount = shape.dimension[2];
         
         sb.append("[");
-        int displayDim0 = Math.min(dim0, 3);  // 最多显示3个
+        int displayBatch = Math.min(batchSize, MAX_3D_DISPLAY_BATCH);
         
-        for (int i = 0; i < displayDim0; i++) {
+        for (int i = 0; i < displayBatch; i++) {
             if (i > 0) sb.append("\n\n ");
             sb.append("[");
             
-            int displayDim1 = Math.min(dim1, 5);  // 最多显示5行
-            for (int j = 0; j < displayDim1; j++) {
+            int displayRows = Math.min(rowCount, MAX_3D_DISPLAY_ROWS);
+            for (int j = 0; j < displayRows; j++) {
                 if (j > 0) sb.append("\n  ");
                 sb.append("[");
                 
-                int displayDim2 = Math.min(dim2, 8);  // 最多显示8列
-                for (int k = 0; k < displayDim2; k++) {
+                int displayCols = Math.min(colCount, MAX_3D_DISPLAY_COLS);
+                for (int k = 0; k < displayCols; k++) {
                     if (k > 0) sb.append(", ");
-                    int idx = i * dim1 * dim2 + j * dim2 + k;
+                    int idx = i * rowCount * colCount + j * colCount + k;
                     sb.append(formatFloat(buffer[idx]));
                 }
                 
-                if (dim2 > displayDim2) {
+                if (colCount > displayCols) {
                     sb.append(", ...");
                 }
                 sb.append("]");
             }
             
-            if (dim1 > displayDim1) {
+            if (rowCount > displayRows) {
                 sb.append("\n  ...");
             }
             sb.append("]");
         }
         
-        if (dim0 > displayDim0) {
+        if (batchSize > displayBatch) {
             sb.append("\n ...");
         }
         sb.append("]");
@@ -1146,54 +1184,54 @@ public class NdArrayCpu implements NdArray, Serializable {
      * 格式化4维数组
      */
     private void format4DArray(StringBuilder sb) {
-        int dim0 = shape.dimension[0];
-        int dim1 = shape.dimension[1];
-        int dim2 = shape.dimension[2];
-        int dim3 = shape.dimension[3];
+        int outerBatch = shape.dimension[0];
+        int innerBatch = shape.dimension[1];
+        int rowCount = shape.dimension[2];
+        int colCount = shape.dimension[3];
         
         sb.append("[");
-        int displayDim0 = Math.min(dim0, 2);  // 最多显示2个
+        int displayDim0 = Math.min(outerBatch, MAX_4D_DISPLAY_DIM0);
         
         for (int i = 0; i < displayDim0; i++) {
             if (i > 0) sb.append("\n\n\n ");
             sb.append("[");
             
-            int displayDim1 = Math.min(dim1, 3);
+            int displayDim1 = Math.min(innerBatch, MAX_4D_DISPLAY_DIM1);
             for (int j = 0; j < displayDim1; j++) {
                 if (j > 0) sb.append("\n\n  ");
                 sb.append("[");
                 
-                int displayDim2 = Math.min(dim2, 4);
+                int displayDim2 = Math.min(rowCount, MAX_4D_DISPLAY_DIM2);
                 for (int k = 0; k < displayDim2; k++) {
                     if (k > 0) sb.append("\n   ");
                     sb.append("[");
                     
-                    int displayDim3 = Math.min(dim3, 6);
+                    int displayDim3 = Math.min(colCount, MAX_4D_DISPLAY_DIM3);
                     for (int l = 0; l < displayDim3; l++) {
                         if (l > 0) sb.append(", ");
-                        int idx = i * dim1 * dim2 * dim3 + j * dim2 * dim3 + k * dim3 + l;
+                        int idx = i * innerBatch * rowCount * colCount + j * rowCount * colCount + k * colCount + l;
                         sb.append(formatFloat(buffer[idx]));
                     }
                     
-                    if (dim3 > displayDim3) {
+                    if (colCount > displayDim3) {
                         sb.append(", ...");
                     }
                     sb.append("]");
                 }
                 
-                if (dim2 > displayDim2) {
+                if (rowCount > displayDim2) {
                     sb.append("\n   ...");
                 }
                 sb.append("]");
             }
             
-            if (dim1 > displayDim1) {
+            if (innerBatch > displayDim1) {
                 sb.append("\n  ...");
             }
             sb.append("]");
         }
         
-        if (dim0 > displayDim0) {
+        if (outerBatch > displayDim0) {
             sb.append("\n ...");
         }
         sb.append("]");
@@ -1204,8 +1242,8 @@ public class NdArrayCpu implements NdArray, Serializable {
      */
     private void formatHighDimArray(StringBuilder sb) {
         sb.append("[high-dimensional array with ").append(buffer.length).append(" elements]\n");
-        sb.append("First 20 elements: ");
-        format1DArray(sb, 0, Math.min(20, buffer.length));
+        sb.append("First ").append(MAX_HIGH_DIM_PREVIEW).append(" elements: ");
+        format1DArray(sb, 0, Math.min(MAX_HIGH_DIM_PREVIEW, buffer.length));
     }
 
     /**

@@ -56,6 +56,11 @@ public class NdArrayTpu implements NdArray {
     }
 
     @Override
+    public NdArray sign() {
+        return null;
+    }
+
+    @Override
     public NdArray eq(NdArray other) {
         return null;
     }
@@ -203,6 +208,11 @@ public class NdArrayTpu implements NdArray {
     @Override
     public NdArray argMax(int axis) {
         return null;
+    }
+
+    @Override
+    public NdArray[] topk(int k) {
+        throw new UnsupportedOperationException("TPU backend not implemented");
     }
 
     @Override

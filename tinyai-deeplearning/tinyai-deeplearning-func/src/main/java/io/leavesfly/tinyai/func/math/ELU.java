@@ -49,12 +49,14 @@ public class ELU extends Function {
         this(1.0f);
     }
 
+    /** 缓存前向传播的 ELU 输出，用于 backward 的等价形式 */
+    private NdArray cachedOutput;
+
     /**
      * 前向传播计算ELU
      * <p>
-     * 计算公式：
-     * x >= 0: x
-     * x < 0:  alpha * (exp(x) - 1)
+     * 使用向量化操作：
+     * ELU(x) = x * (x >= 0) + alpha * (exp(x) - 1) * (x < 0)
      *
      * @param inputs 输入的NdArray数组，长度为1
      * @return ELU函数值的NdArray
@@ -62,26 +64,22 @@ public class ELU extends Function {
     @Override
     public NdArray forward(NdArray... inputs) {
         NdArray x = inputs[0];
-        float[] data = x.getArray();
-        float[] result = new float[data.length];
-
-        for (int i = 0; i < data.length; i++) {
-            if (data[i] >= 0) {
-                result[i] = data[i];
-            } else {
-                result[i] = alpha * ((float) Math.exp(data[i]) - 1);
-            }
-        }
-
-        return NdArray.of(result, x.getShape());
+        NdArray zero = NdArray.zeros(x.getShape());
+        // positiveMask: x >= 0 → gt(0) + eq(0)
+        NdArray positiveMask = x.gt(zero).add(x.eq(zero));
+        NdArray positivePart = x.mul(positiveMask);
+        // negativeMask: x < 0
+        NdArray negativeMask = zero.gt(x);
+        NdArray negativePart = x.exp().sub(NdArray.ones(x.getShape())).mulNum(alpha).mul(negativeMask);
+        cachedOutput = positivePart.add(negativePart);
+        return cachedOutput;
     }
 
     /**
      * 反向传播计算梯度
      * <p>
-     * ELU'(x) = 1,                      if x >= 0
-     *         = alpha * exp(x),         if x < 0
-     *         = ELU(x) + alpha,         if x < 0 (等价形式)
+     * 使用向量化操作和等价形式：
+     * ELU'(x) = 1 (x >= 0), ELU(x) + alpha (x < 0)
      *
      * @param yGrad 输出变量的梯度
      * @return 输入变量的梯度列表
@@ -89,20 +87,13 @@ public class ELU extends Function {
     @Override
     public List<NdArray> backward(NdArray yGrad) {
         NdArray x = inputs[0].getValue();
-        float[] data = x.getArray();
-        float[] gradData = yGrad.getArray();
-        float[] result = new float[data.length];
-
-        for (int i = 0; i < data.length; i++) {
-            if (data[i] >= 0) {
-                result[i] = gradData[i];
-            } else {
-                // ELU'(x) = alpha * exp(x) for x < 0
-                result[i] = gradData[i] * alpha * (float) Math.exp(data[i]);
-            }
-        }
-
-        return Collections.singletonList(NdArray.of(result, x.getShape()));
+        NdArray zero = NdArray.zeros(x.getShape());
+        NdArray positiveMask = x.gt(zero).add(x.eq(zero));
+        NdArray negativeMask = zero.gt(x);
+        // x >= 0: grad = 1; x < 0: grad = ELU(x) + alpha
+        NdArray gradMultiplier = positiveMask.add(
+                cachedOutput.add(NdArray.like(cachedOutput.getShape(), alpha)).mul(negativeMask));
+        return Collections.singletonList(yGrad.mul(gradMultiplier));
     }
 
     /**

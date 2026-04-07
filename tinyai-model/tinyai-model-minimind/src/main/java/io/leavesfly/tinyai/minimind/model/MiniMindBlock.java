@@ -1,10 +1,10 @@
 package io.leavesfly.tinyai.minimind.model;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.minimind.model.moe.MoETransformerBlock;
 import io.leavesfly.tinyai.minimind.model.transformer.attention.KVCache;
 import io.leavesfly.tinyai.minimind.model.embedding.TokenEmbedding;
-import io.leavesfly.tinyai.minimind.model.moe.MiniMindMoETransformerLayer;
-import io.leavesfly.tinyai.minimind.model.transformer.MiniMindTransformerLayer;
+import io.leavesfly.tinyai.minimind.model.transformer.TransformerBlock;
 import io.leavesfly.tinyai.nnet.v2.core.Module;
 import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
 import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
@@ -42,12 +42,12 @@ public class MiniMindBlock extends Module {
     /**
      * 标准 Transformer 层列表（非 MoE 模式使用）
      */
-    private final List<MiniMindTransformerLayer> layers;
+    private final List<TransformerBlock> layers;
 
     /**
      * MoE Transformer 层列表（MoE 模式使用）
      */
-    private final List<MiniMindMoETransformerLayer> moeLayers;
+    private final List<MoETransformerBlock> moeLayers;
 
     /**
      * 最终归一化层
@@ -87,7 +87,7 @@ public class MiniMindBlock extends Module {
             this.layers = null;
             this.moeLayers = new ArrayList<>();
             for (int i = 0; i < config.getNumLayers(); i++) {
-                MiniMindMoETransformerLayer layer = new MiniMindMoETransformerLayer(
+                MoETransformerBlock layer = new MoETransformerBlock(
                     "moe_layer_" + i, config);
                 moeLayers.add(layer);
                 registerModule("moe_layer_" + i, layer);
@@ -96,7 +96,7 @@ public class MiniMindBlock extends Module {
             this.moeLayers = null;
             this.layers = new ArrayList<>();
             for (int i = 0; i < config.getNumLayers(); i++) {
-                MiniMindTransformerLayer layer = new MiniMindTransformerLayer(
+                TransformerBlock layer = new TransformerBlock(
                     "layer_" + i,
                     config.getHiddenSize(),
                     config.getNumHeads(),
@@ -156,9 +156,9 @@ public class MiniMindBlock extends Module {
                 throw new IllegalStateException("MoE模式配置为true，但moeLayers为null");
             }
             for (int i = 0; i < moeLayers.size(); i++) {
-                MiniMindMoETransformerLayer layer = moeLayers.get(i);
+                MoETransformerBlock layer = moeLayers.get(i);
                 KVCache kvCache = (kvCaches != null && i < kvCaches.size()) ? kvCaches.get(i) : null;
-                MiniMindMoETransformerLayer.LayerOutput layerOutput =
+                MoETransformerBlock.LayerOutput layerOutput =
                     layer.forwardWithCache(x, kvCache, startPos);
                 x = layerOutput.getOutput();
                 totalBalanceLoss += layerOutput.getBalanceLoss();
@@ -168,7 +168,7 @@ public class MiniMindBlock extends Module {
                 throw new IllegalStateException("标准模式配置为false，但layers为null");
             }
             for (int i = 0; i < layers.size(); i++) {
-                MiniMindTransformerLayer layer = layers.get(i);
+                TransformerBlock layer = layers.get(i);
                 KVCache kvCache = (kvCaches != null && i < kvCaches.size()) ? kvCaches.get(i) : null;
                 x = layer.forwardWithCache(x, kvCache, startPos);
             }
@@ -234,11 +234,11 @@ public class MiniMindBlock extends Module {
     public void setTraining(boolean training) {
         this.training = training;
         if (config.isUseMoE()) {
-            for (MiniMindMoETransformerLayer layer : moeLayers) {
+            for (MoETransformerBlock layer : moeLayers) {
                 layer.setTraining(training);
             }
         } else {
-            for (MiniMindTransformerLayer layer : layers) {
+            for (TransformerBlock layer : layers) {
                 layer.setTraining(training);
             }
         }
@@ -254,14 +254,14 @@ public class MiniMindBlock extends Module {
     /**
      * 获取标准 Transformer 层列表（非 MoE 模式）
      */
-    public List<MiniMindTransformerLayer> getLayers() {
+    public List<TransformerBlock> getLayers() {
         return layers;
     }
 
     /**
      * 获取 MoE Transformer 层列表（MoE 模式）
      */
-    public List<MiniMindMoETransformerLayer> getMoeLayers() {
+    public List<MoETransformerBlock> getMoeLayers() {
         return moeLayers;
     }
 
@@ -292,7 +292,7 @@ public class MiniMindBlock extends Module {
      */
     public void resetStats() {
         if (config.isUseMoE()) {
-            for (MiniMindMoETransformerLayer layer : moeLayers) {
+            for (MoETransformerBlock layer : moeLayers) {
                 layer.resetStats();
             }
         }
@@ -379,7 +379,7 @@ public class MiniMindBlock extends Module {
             if (useMoE) {
                 int numExperts = config.getNumExperts();
                 int numExpertsPerToken = config.getNumExpertsPerToken();
-                System.out.printf("%s  └── MoELayer              [experts=%d, top_k=%d]%n",
+                System.out.printf("%s  └── MoEBlock              [experts=%d, top_k=%d]%n",
                     childConnector, numExperts, numExpertsPerToken);
                 System.out.printf("%s        ├── Router           [hidden=%d → %d experts]%n",
                     childConnector, hiddenSize, numExperts);

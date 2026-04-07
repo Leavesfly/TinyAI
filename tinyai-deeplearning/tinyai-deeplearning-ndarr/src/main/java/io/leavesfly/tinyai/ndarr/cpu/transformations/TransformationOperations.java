@@ -83,9 +83,12 @@ public class TransformationOperations {
     /**
      * 数组变形操作，改变数组形状但保持元素总数不变
      *
+     * 注意：返回的数组与原数组共享底层 buffer（视图语义），
+     * 修改任一数组的元素会影响另一个。如需独立副本，请先调用 copy()。
+     *
      * @param array    数组
      * @param newShape 新的数组形状
-     * @return 变形后的数组
+     * @return 变形后的数组（与原数组共享数据）
      * @throws IllegalArgumentException 当新形状大小与原形状不匹配时抛出
      */
     public static NdArrayCpu reshape(NdArrayCpu array, Shape newShape) {
@@ -93,7 +96,6 @@ public class TransformationOperations {
             throw new IllegalArgumentException(String.format("形状大小不匹配：%d vs %d", array.shape.size(), newShape.size()));
         }
 
-        // 使用共享数据的视图，避免数据复制
         return new NdArrayCpu(array.buffer, newShape);
     }
 

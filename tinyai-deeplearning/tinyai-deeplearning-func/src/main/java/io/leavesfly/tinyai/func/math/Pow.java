@@ -14,6 +14,8 @@ import java.util.List;
  */
 public class Pow extends Function {
 
+    private static final float EPSILON = 1e-12f;
+
     private float pow = 1f;
 
     /**
@@ -43,6 +45,9 @@ public class Pow extends Function {
      * <p>
      * 对于幂函数，梯度计算公式为：
      * ∂x^pow/∂x = pow * x^(pow-1)
+     * <p>
+     * 当 pow <= 1 且 x 接近 0 时，x^(pow-1) 可能溢出，
+     * 通过 clip 对 |x| 添加下界保护数值稳定性。
      *
      * @param yGrad 输出变量的梯度
      * @return 输入变量的梯度列表
@@ -50,7 +55,11 @@ public class Pow extends Function {
     @Override
     public List<NdArray> backward(NdArray yGrad) {
         NdArray x0 = inputs[0].getValue();
-        return Collections.singletonList(x0.pow(pow - 1f).mulNum(pow).mul(yGrad));
+        if (pow == 0f) {
+            return Collections.singletonList(NdArray.zeros(x0.getShape()));
+        }
+        NdArray safeX = x0.abs().clip(EPSILON, Float.MAX_VALUE).mul(x0.sign());
+        return Collections.singletonList(safeX.pow(pow - 1f).mulNum(pow).mul(yGrad));
     }
 
     /**

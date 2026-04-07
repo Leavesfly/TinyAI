@@ -18,18 +18,16 @@ public class ArrayConverter {
     public static float[][] toMatrix(NdArrayCpu ndArray) {
         ShapeCpu shape = ndArray.shape;
         if (shape.isMatrix()) {
-            float[][] matrix = new float[shape.dimension[0]][shape.dimension[1]];
-            int k = 0;
-            for (int i = 0; i < shape.dimension[0]; i++) {
-                for (int j = 0; j < shape.dimension[1]; j++) {
-                    matrix[i][j] = ndArray.buffer[k];
-                    k++;
-                }
+            int rows = shape.dimension[0];
+            int cols = shape.dimension[1];
+            float[][] matrix = new float[rows][cols];
+            for (int i = 0; i < rows; i++) {
+                System.arraycopy(ndArray.buffer, i * cols, matrix[i], 0, cols);
             }
             return matrix;
         } else if (shape.dimension.length == 1) {
             float[][] matrix = new float[1][shape.dimension[0]];
-            matrix[0] = ndArray.buffer;
+            System.arraycopy(ndArray.buffer, 0, matrix[0], 0, shape.dimension[0]);
             return matrix;
         } else {
             throw new IllegalArgumentException("不支持维度大于2");

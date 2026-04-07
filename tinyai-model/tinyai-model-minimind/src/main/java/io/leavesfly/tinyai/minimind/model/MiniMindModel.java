@@ -4,8 +4,7 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.model.Model;
 import io.leavesfly.tinyai.minimind.model.transformer.attention.KVCache;
 import io.leavesfly.tinyai.minimind.model.transformer.attention.MultiHeadAttention;
-import io.leavesfly.tinyai.minimind.model.sampling.TextSampler;
-import io.leavesfly.tinyai.minimind.model.transformer.MiniMindTransformerLayer;
+import io.leavesfly.tinyai.minimind.model.transformer.TransformerBlock;
 import io.leavesfly.tinyai.minimind.training.lora.LoRAConfig;
 import io.leavesfly.tinyai.minimind.training.lora.LoRALinear;
 import io.leavesfly.tinyai.ndarr.NdArray;
@@ -326,7 +325,7 @@ public class MiniMindModel extends Model {
         int injectedCount = 0;
         List<String> targetModules = Arrays.asList(loraConfig.getTargetModules());
         
-        for (MiniMindTransformerLayer layer : miniMindBlock.getLayers()) {
+        for (TransformerBlock layer : miniMindBlock.getLayers()) {
             MultiHeadAttention attention = layer.getAttention();
             int hiddenSize = attention.getHiddenSize();
             
@@ -390,7 +389,7 @@ public class MiniMindModel extends Model {
 
         int mergedCount = 0;
 
-        for (MiniMindTransformerLayer layer : miniMindBlock.getLayers()) {
+        for (TransformerBlock layer : miniMindBlock.getLayers()) {
             MultiHeadAttention attention = layer.getAttention();
 
             if (attention.getQueryProj() instanceof LoRALinear) {
@@ -456,7 +455,7 @@ public class MiniMindModel extends Model {
         int totalParams = 0;
         int loraLayers = 0;
         
-        for (MiniMindTransformerLayer layer : miniMindBlock.getLayers()) {
+        for (TransformerBlock layer : miniMindBlock.getLayers()) {
             MultiHeadAttention attention = layer.getAttention();
             
             if (attention.getQueryProj() instanceof LoRALinear) {

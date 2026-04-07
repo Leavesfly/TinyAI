@@ -34,7 +34,7 @@ public class DeepSeekV3TransformerBlock extends Module {
     private final Dropout residDropout;
 
     // MoE 子层（替代传统 FFN）
-    private final DeepSeekV3MoELayer moeLayer;
+    private final DeepSeekV3MoEBlock moeLayer;
     private final RMSNorm layerNorm2;
 
     // 因果掩码缓存（避免每次 forward 都重新生成）
@@ -63,7 +63,7 @@ public class DeepSeekV3TransformerBlock extends Module {
         this.residDropout = new Dropout("resid_dropout", dropoutRate);
 
         // 初始化 MoE 子层
-        this.moeLayer = new DeepSeekV3MoELayer(name + "_moe", config);
+        this.moeLayer = new DeepSeekV3MoEBlock(name + "_moe", config);
         this.layerNorm2 = new RMSNorm("ln2", dModel, (float) config.getLayerNormEpsilon());
 
         // 注册所有子模块
@@ -151,7 +151,7 @@ public class DeepSeekV3TransformerBlock extends Module {
 
         // ===== MoE 子层（获取详细结果） =====
         Variable normalized2 = layerNorm2.forward(residual1);
-        DeepSeekV3MoELayer.MoEOutput moeResult = moeLayer.computeMoE(normalized2);
+        DeepSeekV3MoEBlock.MoEOutput moeResult = moeLayer.computeMoE(normalized2);
         Variable output = residual1.add(moeResult.output);
 
         return new DetailedForwardResult(output, moeResult);
@@ -178,7 +178,7 @@ public class DeepSeekV3TransformerBlock extends Module {
     /**
      * 获取 MoE 层
      */
-    public DeepSeekV3MoELayer getMoeLayer() {
+    public DeepSeekV3MoEBlock getMoeLayer() {
         return moeLayer;
     }
 
@@ -189,9 +189,9 @@ public class DeepSeekV3TransformerBlock extends Module {
         /** Transformer 块的输出 */
         public final Variable output;
         /** MoE 层的详细结果 */
-        public final DeepSeekV3MoELayer.MoEOutput moeOutput;
+        public final DeepSeekV3MoEBlock.MoEOutput moeOutput;
 
-        public DetailedForwardResult(Variable output, DeepSeekV3MoELayer.MoEOutput moeOutput) {
+        public DetailedForwardResult(Variable output, DeepSeekV3MoEBlock.MoEOutput moeOutput) {
             this.output = output;
             this.moeOutput = moeOutput;
         }

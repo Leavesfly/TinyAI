@@ -25,7 +25,7 @@ public class SlicingOperations {
             int lastDimSize = array.shape.getDimension(array.shape.getDimNum() - 1);
             int secondLastDimSize = array.shape.getDimension(array.shape.getDimNum() - 2);
 
-            // 边界校验：越界时报错而非静默修正，避免掩盖调用者的逻辑错误
+            // 边界校验
             if (startRow < 0 || startCol < 0) {
                 throw new IllegalArgumentException(
                         String.format("起始索引不能为负数: startRow=%d, startCol=%d", startRow, startCol));
@@ -34,17 +34,18 @@ public class SlicingOperations {
                 throw new IllegalArgumentException(
                         String.format("起始索引必须小于结束索引: rows=[%d,%d), cols=[%d,%d)", startRow, endRow, startCol, endCol));
             }
-            endRow = Math.min(secondLastDimSize, endRow);
-            endCol = Math.min(lastDimSize, endCol);
+            if (endRow > secondLastDimSize || endCol > lastDimSize) {
+                throw new IllegalArgumentException(
+                        String.format("结束索引超出边界: endRow=%d (max=%d), endCol=%d (max=%d)",
+                                endRow, secondLastDimSize, endCol, lastDimSize));
+            }
 
-            NdArrayCpu result = new NdArrayCpu(ShapeCpu.of(endRow - startRow, endCol - startCol));
+            int resultCols = endCol - startCol;
+            NdArrayCpu result = new NdArrayCpu(ShapeCpu.of(endRow - startRow, resultCols));
             for (int i = startRow; i < endRow; i++) {
-                for (int j = startCol; j < endCol; j++) {
-                    // 计算多维索引（简化处理）
-                    int srcIndex = i * lastDimSize + j;
-                    int dstIndex = result.shape.getColumn() * (i - startRow) + j - startCol;
-                    result.buffer[dstIndex] = array.buffer[srcIndex];
-                }
+                int srcOffset = i * lastDimSize + startCol;
+                int dstOffset = (i - startRow) * resultCols;
+                System.arraycopy(array.buffer, srcOffset, result.buffer, dstOffset, resultCols);
             }
             return result;
         }

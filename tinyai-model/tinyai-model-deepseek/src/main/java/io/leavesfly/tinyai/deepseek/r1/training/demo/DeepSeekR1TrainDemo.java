@@ -231,7 +231,7 @@ public class DeepSeekR1TrainDemo {
         
         // 3. 配置后训练器
         System.out.println("\n📝 配置后训练器...");
-        DeepSeekR1Posttrain posttrain = new DeepSeekR1Posttrain(
+        DeepSeekR1SFTrainer posttrain = new DeepSeekR1SFTrainer(
             pretrainedModel,
             trainDataset,
             valDataset

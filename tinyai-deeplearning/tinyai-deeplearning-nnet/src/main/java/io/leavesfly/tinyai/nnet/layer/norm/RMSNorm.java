@@ -48,6 +48,20 @@ public class RMSNorm extends Module {
      */
     private final float eps;
 
+    /** 缓存的 eps 常量 Variable，避免每次 forward 都创建新对象，且不参与梯度计算 */
+    private transient Variable cachedEpsVar;
+
+    /**
+     * 获取 eps 常量 Variable（懒初始化，兼容反序列化场景）
+     */
+    private Variable getEpsVar() {
+        if (cachedEpsVar == null) {
+            cachedEpsVar = new Variable(NdArray.of(new float[]{eps}, Shape.of(1)));
+            cachedEpsVar.setRequireGrad(false);
+        }
+        return cachedEpsVar;
+    }
+
     /**
      * 构造函数
      *
@@ -63,6 +77,10 @@ public class RMSNorm extends Module {
         // 创建可训练参数（只有weight，没有bias）
         NdArray weightData = NdArray.of(Shape.of(normalizedShape));
         this.weight = registerParameter("weight", new Parameter(weightData));
+
+        // 初始化 eps 常量缓存
+        this.cachedEpsVar = new Variable(NdArray.of(new float[]{eps}, Shape.of(1)));
+        this.cachedEpsVar.setRequireGrad(false);
 
         // 初始化参数
         init();
@@ -104,7 +122,7 @@ public class RMSNorm extends Module {
         Variable meanSquared = xSquared.mean(-1, true);
 
         // 计算 RMS = sqrt(mean(x^2) + eps)
-        Variable rms = meanSquared.add(new Variable(eps)).sqrt();
+        Variable rms = meanSquared.add(getEpsVar()).sqrt();
 
         // 归一化: x / RMS
         Variable normalized = x.div(rms);

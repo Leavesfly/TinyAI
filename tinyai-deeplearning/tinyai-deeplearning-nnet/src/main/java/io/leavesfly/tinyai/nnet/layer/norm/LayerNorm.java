@@ -28,6 +28,20 @@ public class LayerNorm extends Module {
     private final int normalizedShape;
     private final float eps;
 
+    /** 缓存的 eps 常量 Variable，避免每次 forward 都创建新对象，且不参与梯度计算 */
+    private transient Variable cachedEpsVar;
+
+    /**
+     * 获取 eps 常量 Variable（懒初始化，兼容反序列化场景）
+     */
+    private Variable getEpsVar() {
+        if (cachedEpsVar == null) {
+            cachedEpsVar = new Variable(NdArray.of(new float[]{eps}, Shape.of(1)));
+            cachedEpsVar.setRequireGrad(false);
+        }
+        return cachedEpsVar;
+    }
+
     /**
      * 构造函数
      *
@@ -46,6 +60,10 @@ public class LayerNorm extends Module {
 
         this.gamma = registerParameter("gamma", new Parameter(gammaData));
         this.beta = registerParameter("beta", new Parameter(betaData));
+
+        // 初始化 eps 常量缓存
+        this.cachedEpsVar = new Variable(NdArray.of(new float[]{eps}, Shape.of(1)));
+        this.cachedEpsVar.setRequireGrad(false);
 
         // 初始化参数
         init();
@@ -78,7 +96,7 @@ public class LayerNorm extends Module {
         Variable variance = x.var(-1, true);
 
         // 归一化
-        Variable normalized = x.sub(mean).div(variance.add(new Variable(eps)).sqrt());
+        Variable normalized = x.sub(mean).div(variance.add(getEpsVar()).sqrt());
 
         // 应用缩放和偏移
         return normalized.mul(gamma).add(beta);

@@ -210,6 +210,12 @@ public class DPOTrainer extends BaseTrainer {
     /**
      * 训练一步（私有实现，返回loss和accuracy）
      * 
+     * 计算图设计要点：
+     * 1. 参考模型使用独立的 NdArray 副本，避免与策略模型共享输入导致数据污染
+     * 2. 策略模型的 chosen 和 rejected 拼接为一次前向传播，避免两次 predict 导致
+     *    模型内部中间状态被覆盖、计算图断裂（共享参数的中间节点被第二次前向传播冲掉）
+     * 3. clearGrads 在前向传播之前调用，确保梯度从干净状态开始累积
+     * 
      * @return [loss, accuracy]
      */
     private float[] trainStepImpl(Object batch) {
@@ -222,56 +228,71 @@ public class DPOTrainer extends BaseTrainer {
         NdArray rejectedLabels = dpoBatch.getRejectedLabels();
         NdArray promptMask = dpoBatch.getPromptMask();
         
-        Variable chosenInputVar = new Variable(chosenInput);
-        Variable rejectedInputVar = new Variable(rejectedInput);
+        // ========== 1. 参考模型前向传播 (不需要梯度) ==========
+        // 使用 NdArray 的深拷贝作为参考模型输入，避免与策略模型共享底层数据
+        referenceModel.setTraining(false);
+        Variable refChosenLogits = referenceModel.predict(new Variable(chosenInput.copy()));
+        Variable refRejectedLogits = referenceModel.predict(new Variable(rejectedInput.copy()));
+        
+        // detach 确保参考模型输出不参与梯度计算
+        refChosenLogits = refChosenLogits.detach();
+        refRejectedLogits = refRejectedLogits.detach();
+        
         Variable chosenLabelsVar = new Variable(chosenLabels);
         Variable rejectedLabelsVar = new Variable(rejectedLabels);
         Variable maskVar = new Variable(promptMask);
         
-        // 1. 参考模型前向传播 (不需要梯度，使用 detached 计算)
-        // 修复：在参考模型前向传播前设置training=false，确保不计算梯度
-        referenceModel.setTraining(false);
-        Variable refChosenLogits = referenceModel.predict(new Variable(chosenInput));
-        Variable refRejectedLogits = referenceModel.predict(new Variable(rejectedInput));
-        
-        // 确保参考模型的输出不参与梯度计算
-        refChosenLogits = refChosenLogits.detach();
-        refRejectedLogits = refRejectedLogits.detach();
-        
         float refChosenLogProb = dpoLoss.computeLogProbsDetached(refChosenLogits, chosenLabelsVar, maskVar);
         float refRejectedLogProb = dpoLoss.computeLogProbsDetached(refRejectedLogits, rejectedLabelsVar, maskVar);
         
-        // 2. 策略模型前向传播 (保持计算图，支持反向传播)
-        model.setTraining(true);
-        Variable policyChosenLogits = model.predict(chosenInputVar);
-        Variable policyRejectedLogits = model.predict(rejectedInputVar);
+        // 释放参考模型的计算图，节省内存
+        refChosenLogits.unChainBackward();
+        refRejectedLogits.unChainBackward();
         
-        // 3. 计算策略模型的 log 概率 (在计算图中)
+        // ========== 2. 策略模型前向传播 (保持计算图) ==========
+        // 关键修复：将 chosen 和 rejected 拼接为一个 batch 做一次前向传播，
+        // 避免两次 predict 共享参数导致第一次前向传播的中间计算图被覆盖断裂
+        model.setTraining(true);
+        model.clearGrads();  // 在前向传播前清零梯度，确保干净状态
+        
+        // 沿 batch 维度拼接: [chosen_batch; rejected_batch] -> [2*batch, seq_len]
+        Variable combinedInput = Variable.cat(
+            new Variable[]{new Variable(chosenInput), new Variable(rejectedInput)}, 0);
+        
+        // 单次前向传播，计算图完整连贯
+        Variable combinedLogits = model.predict(combinedInput);
+        
+        // 沿 batch 维度拆分回 chosen 和 rejected
+        int batchSize = chosenInput.getShape().getShapeDims()[0];
+        Variable[] splitLogits = combinedLogits.split(batchSize, 0);
+        Variable policyChosenLogits = splitLogits[0];
+        Variable policyRejectedLogits = splitLogits[1];
+        
+        // ========== 3. 计算策略模型的 log 概率 (在计算图中) ==========
         Variable policyChosenLogProbs = dpoLoss.computeLogProbs(policyChosenLogits, chosenLabelsVar, maskVar);
         Variable policyRejectedLogProbs = dpoLoss.computeLogProbs(policyRejectedLogits, rejectedLabelsVar, maskVar);
         
-        // 4. 计算 DPO 损失 (参考模型的 log prob 作为常量传入)
+        // ========== 4. 计算 DPO 损失 ==========
         Variable loss = dpoLoss.loss(policyChosenLogProbs, policyRejectedLogProbs,
                                      refChosenLogProb, refRejectedLogProb);
         
         float lossValue = loss.getValue().getNumber().floatValue();
         
-        // 5. 计算准确率 (chosen 的 log 概率是否 > rejected)
+        // ========== 5. 计算准确率 ==========
         float chosenProb = policyChosenLogProbs.getValue().getNumber().floatValue();
         float rejectedProb = policyRejectedLogProbs.getValue().getNumber().floatValue();
         float accuracy = chosenProb > rejectedProb ? 1.0f : 0.0f;
         
-        // 6. 反向传播
-        model.clearGrads();
+        // ========== 6. 反向传播 ==========
         loss.backward();
         
-        // 7. 梯度裁剪 (继承自 BaseTrainer)
+        // ========== 7. 梯度裁剪 ==========
         clipGradients();
         
-        // 8. 参数更新
+        // ========== 8. 参数更新 ==========
         optimizer.update();
         
-        // 9. 断开计算图，释放内存
+        // ========== 9. 释放计算图 ==========
         loss.unChainBackward();
         
         return new float[]{lossValue, accuracy};

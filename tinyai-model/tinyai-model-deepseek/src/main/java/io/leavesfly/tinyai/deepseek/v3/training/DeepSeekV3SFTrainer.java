@@ -216,8 +216,9 @@ public class DeepSeekV3SFTrainer extends DeepSeekTrainerBase {
         NdArray targetIds = batch.getTargetIds();
 
         // 前向传播
+        Variable inputVar = new Variable(inputIds);
         DeepSeekV3Block.DetailedForwardResult result =
-            model.predictWithDetails(new Variable(inputIds));
+            model.predictWithDetails(inputVar);
 
         // 计算损失（支持 answer-only loss masking）
         Variable lmLoss = computeMaskedLoss(batch, result.logits);
@@ -230,7 +231,11 @@ public class DeepSeekV3SFTrainer extends DeepSeekTrainerBase {
         totalLoss.backward();
         clipGradients();
         optimizer.update();
+
+        // 彻底断开计算图，释放内存
         totalLoss.unChainBackward();
+        result.logits.unChainBackward();
+        inputVar.unChainBackward();
 
         return new StepResult(lossValue, moeLoss);
     }
@@ -246,12 +251,17 @@ public class DeepSeekV3SFTrainer extends DeepSeekTrainerBase {
         while (valDataset.hasNext()) {
             DeepSeekV3Dataset.Batch batch = valDataset.nextBatch();
 
-            Variable logits = model.predict(new Variable(batch.getInputIds()));
+            Variable inputVar = new Variable(batch.getInputIds());
+            Variable logits = model.predict(inputVar);
             Variable loss = computeMaskedLoss(batch, logits);
 
             totalLoss += loss.getValue().getNumber().floatValue();
             count++;
+
+            // 验证时也需要释放计算图，防止内存泄漏
             loss.unChainBackward();
+            logits.unChainBackward();
+            inputVar.unChainBackward();
         }
 
         valDataset.reset();

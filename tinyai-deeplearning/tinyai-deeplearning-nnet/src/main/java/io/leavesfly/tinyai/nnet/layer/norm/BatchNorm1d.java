@@ -40,6 +40,43 @@ public class BatchNorm1d extends Module {
     /** 缓存的 eps 常量 Variable，避免每次 forward 都创建新对象，且不参与梯度计算 */
     private transient Variable cachedEpsVar;
 
+    /** 缓存的推理模式 running stats Variable，避免每次 forward 都创建新对象 */
+    private transient Variable cachedRunningMeanVar;
+    private transient Variable cachedRunningVarVar;
+
+    /**
+     * 获取 eps 常量 Variable（懒初始化，兼容反序列化场景）
+     */
+    private Variable getEpsVar() {
+        if (cachedEpsVar == null) {
+            cachedEpsVar = new Variable(NdArray.of(new float[]{eps}, Shape.of(1)));
+            cachedEpsVar.setRequireGrad(false);
+        }
+        return cachedEpsVar;
+    }
+
+    /**
+     * 获取 running mean Variable（懒初始化，兼容反序列化场景）
+     */
+    private Variable getRunningMeanVar() {
+        if (cachedRunningMeanVar == null && trackRunningStats) {
+            cachedRunningMeanVar = new Variable(getBuffer("running_mean"));
+            cachedRunningMeanVar.setRequireGrad(false);
+        }
+        return cachedRunningMeanVar;
+    }
+
+    /**
+     * 获取 running var Variable（懒初始化，兼容反序列化场景）
+     */
+    private Variable getRunningVarVar() {
+        if (cachedRunningVarVar == null && trackRunningStats) {
+            cachedRunningVarVar = new Variable(getBuffer("running_var"));
+            cachedRunningVarVar.setRequireGrad(false);
+        }
+        return cachedRunningVarVar;
+    }
+
     /**
      * 构造函数
      *
@@ -88,6 +125,14 @@ public class BatchNorm1d extends Module {
         // 初始化 eps 常量缓存（使用 1D shape 以兼容广播）
         this.cachedEpsVar = new Variable(NdArray.of(new float[]{eps}, Shape.of(1)));
         this.cachedEpsVar.setRequireGrad(false);
+
+        // 初始化推理模式 running stats 缓存
+        if (trackRunningStats) {
+            this.cachedRunningMeanVar = new Variable(getBuffer("running_mean"));
+            this.cachedRunningMeanVar.setRequireGrad(false);
+            this.cachedRunningVarVar = new Variable(getBuffer("running_var"));
+            this.cachedRunningVarVar.setRequireGrad(false);
+        }
 
         // 初始化参数
         init();
@@ -202,15 +247,12 @@ public class BatchNorm1d extends Module {
                     "Cannot use BatchNorm1d in eval mode without trackRunningStats=true");
         }
 
-        // 使用移动平均统计量
-        NdArray runningMean = getBuffer("running_mean");
-        NdArray runningVar = getBuffer("running_var");
-
-        Variable mean = new Variable(runningMean);
-        Variable var = new Variable(runningVar);
+        // 使用缓存的 running stats Variable（数据已通过 updateRunningStats 更新）
+        getRunningMeanVar().setValue(getBuffer("running_mean"));
+        getRunningVarVar().setValue(getBuffer("running_var"));
 
         // 归一化
-        Variable normalized = normalize(x, mean, var);
+        Variable normalized = normalize(x, getRunningMeanVar(), getRunningVarVar());
 
         // 应用缩放和平移
         return applyAffineTransform(normalized);
@@ -227,7 +269,7 @@ public class BatchNorm1d extends Module {
     private Variable normalize(Variable x, Variable mean, Variable var) {
         // normalized = (x - mean) / sqrt(var + eps)
         Variable centered = x.sub(mean);
-        Variable std = var.add(cachedEpsVar).sqrt();
+        Variable std = var.add(getEpsVar()).sqrt();
         return centered.div(std);
     }
 

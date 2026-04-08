@@ -87,72 +87,21 @@ public class AvgPool2d extends Module {
     @Override
     public Variable forward(Variable... inputs) {
         Variable x = inputs[0];
-        // 获取形状信息用于控制流和验证，这是允许的
-        NdArray inputData = x.getValue();
 
-        // 检查输入形状
-        int[] dims = inputData.getShape().getShapeDims();
-        if (dims.length != 4) {
+        // 验证输入维度
+        int dim = x.ndim();
+        if (dim != 4) {
             throw new IllegalArgumentException(
-                    String.format("Expected 4D input (batch, channels, height, width), but got %dD", dims.length));
+                    String.format("Expected 4D input (batch, channels, height, width), but got %dD", dim));
         }
 
-        int batchSize = dims[0];
-        int channels = dims[1];
-        int height = dims[2];
-        int width = dims[3];
-
-        // 计算输出尺寸
-        int outputHeight = (height + 2 * padding - kernelHeight) / stride + 1;
-        int outputWidth = (width + 2 * padding - kernelWidth) / stride + 1;
-
-        // 执行平均池化（这里需要直接操作NdArray，因为池化是复杂的索引操作）
-        NdArray output = performAvgPooling(inputData, batchSize, channels,
-                                          height, width, outputHeight, outputWidth);
-
-        // 返回新的Variable
-        Variable result = new Variable(output);
-        result.setRequireGrad(x.isRequireGrad());  // 继承梯度设置
-        return result;
+        // 创建池化 Function 并通过 call 自动构建计算图
+        io.leavesfly.tinyai.func.matrix.AvgPool2d poolFunc =
+            new io.leavesfly.tinyai.func.matrix.AvgPool2d(kernelHeight, kernelWidth, stride, padding);
+        return poolFunc.call(x);
     }
 
-    /**
-     * 执行平均池化操作
-     */
-    private NdArray performAvgPooling(NdArray inputData, int batchSize, int channels,
-                                      int height, int width, int outHeight, int outWidth) {
-        Shape outputShape = Shape.of(batchSize, channels, outHeight, outWidth);
-        float[] outputData = new float[batchSize * channels * outHeight * outWidth];
 
-        for (int n = 0; n < batchSize; n++) {
-            for (int c = 0; c < channels; c++) {
-                for (int oh = 0; oh < outHeight; oh++) {
-                    for (int ow = 0; ow < outWidth; ow++) {
-                        float sum = 0.0f;
-                        int count = 0;
-
-                        // 在池化窗口内计算平均值
-                        for (int ph = 0; ph < kernelHeight; ph++) {
-                            for (int pw = 0; pw < kernelWidth; pw++) {
-                                int ih = oh * stride + ph - padding;
-                                int iw = ow * stride + pw - padding;
-
-                                if (ih >= 0 && ih < height && iw >= 0 && iw < width) {
-                                    sum += inputData.get(n, c, ih, iw);
-                                    count++;
-                                }
-                            }
-                        }
-
-                        int outputIndex = ((n * channels + c) * outHeight + oh) * outWidth + ow;
-                        outputData[outputIndex] = count > 0 ? sum / count : 0.0f;
-                    }
-                }
-            }
-        }
-
-        return NdArray.of(outputData, outputShape);
-    }
 
     public int getKernelHeight() {
         return kernelHeight;

@@ -185,6 +185,9 @@ public class DeepSeekR1RLVRTrainer extends DeepSeekTrainerBase {
             BatchResult br = processBatch(batch, result);
     
             if (br.totalLoss == null || br.validSamples == 0) {
+                // 即使跳过更新，也需要释放计算图，防止内存泄漏
+                result.logits.unChainBackward();
+                inputVar.unChainBackward();
                 globalStep++;
                 continue;
             }
@@ -198,6 +201,11 @@ public class DeepSeekR1RLVRTrainer extends DeepSeekTrainerBase {
             avgLoss.backward();
             clipGradients();
             optimizer.update();
+    
+            // 彻底断开计算图，释放内存（与 SFTrainer/Pretrain 保持一致）
+            avgLoss.unChainBackward();
+            result.logits.unChainBackward();
+            inputVar.unChainBackward();
     
             // 记录统计
             correctnessHistory.add(batchAvgReward);

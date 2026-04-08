@@ -15,6 +15,12 @@ import io.leavesfly.tinyai.ndarr.NdArray;
  * 
  * 无需Critic网络,直接使用奖励信号优化策略
  * 
+ * 计算图完整性保证:
+ * - 所有可微操作均通过Variable API完成,保持计算图连通
+ * - 奖励/优势作为外部信号,使用detach()标记为不需要梯度的常量
+ * - logSoftmax/softmax使用框架内置实现,避免手写导致的维度错误
+ * - 通过softmaxCrossEntropy正确计算token级别的对数概率
+ * 
  * @author leavesfly
  * @since 2024
  */
@@ -34,22 +40,25 @@ public class SPOLoss {
     /**
      * 计算SPO损失
      * 
+     * 计算图流向: logits → softmaxCrossEntropy(labels) → logProb → weighted by advantage → policyLoss
+     *            logits → logSoftmax → softMax(detach) → entropy → entropyLoss
+     *            totalLoss = policyLoss - entropyCoef * entropyLoss
+     * 
      * @param logits 模型输出的logits [K, batch_size, seq_len, vocab_size]
      * @param labels 标签 [K, batch_size, seq_len]
-     * @param rewards 奖励 [batch_size, K]
+     * @param rewards 奖励 [batch_size, K] (外部信号,不参与反向传播)
      * @return SPO损失
      */
     public Variable computeLoss(Variable[] logits, Variable[] labels, float[][] rewards) {
         int numCandidates = logits.length;
-        int batchSize = rewards.length;
         
-        // 1. 归一化奖励
+        // 1. 归一化奖励(纯数值计算,不进入计算图)
         float[][] normalizedRewards = normalizeRewards(rewards);
         
         // 2. 计算优势函数: A(y_i) = R(y_i) - mean(R)
         float[][] advantages = computeAdvantages(normalizedRewards);
         
-        // 3. 计算每个候选的对数概率
+        // 3. 计算每个候选的对数概率(通过softmaxCrossEntropy保持计算图连通)
         Variable[] logProbs = new Variable[numCandidates];
         for (int k = 0; k < numCandidates; k++) {
             logProbs[k] = computeLogProb(logits[k], labels[k]);
@@ -62,15 +71,15 @@ public class SPOLoss {
         Variable entropyLoss = computeEntropyLoss(logits);
         
         // 6. 总损失 = 策略损失 - 熵系数 * 熵损失
-        Variable totalLoss = policyLoss.sub(
-            entropyLoss.mul(new Variable(NdArray.of(config.getEntropyCoef())))
-        );
+        Variable entropyCoef = new Variable(NdArray.of(config.getEntropyCoef()));
+        entropyCoef.setRequireGrad(false);
+        Variable totalLoss = policyLoss.sub(entropyLoss.mul(entropyCoef));
         
         return totalLoss;
     }
     
     /**
-     * 归一化奖励
+     * 归一化奖励(纯数值计算,不进入计算图)
      */
     private float[][] normalizeRewards(float[][] rewards) {
         int batchSize = rewards.length;
@@ -79,27 +88,15 @@ public class SPOLoss {
         
         switch (config.getRewardNormalization()) {
             case NONE:
-                // 不归一化,直接返回
                 for (int i = 0; i < batchSize; i++) {
                     System.arraycopy(rewards[i], 0, normalized[i], 0, numCandidates);
                 }
                 break;
                 
             case STANDARDIZE:
-                // 标准化: (r - mean) / std
                 for (int i = 0; i < batchSize; i++) {
-                    float mean = 0.0f;
-                    for (float r : rewards[i]) {
-                        mean += r;
-                    }
-                    mean /= numCandidates;
-                    
-                    float std = 0.0f;
-                    for (float r : rewards[i]) {
-                        std += (r - mean) * (r - mean);
-                    }
-                    std = (float) Math.sqrt(std / numCandidates + 1e-8f);
-                    
+                    float mean = computeMean(rewards[i]);
+                    float std = computeStd(rewards[i], mean);
                     for (int k = 0; k < numCandidates; k++) {
                         normalized[i][k] = (rewards[i][k] - mean) / std;
                     }
@@ -107,15 +104,13 @@ public class SPOLoss {
                 break;
                 
             case NORMALIZE:
-                // 归一化到[0,1]: (r - min) / (max - min)
                 for (int i = 0; i < batchSize; i++) {
                     float min = Float.MAX_VALUE;
-                    float max = Float.MIN_VALUE;
+                    float max = -Float.MAX_VALUE;
                     for (float r : rewards[i]) {
                         min = Math.min(min, r);
                         max = Math.max(max, r);
                     }
-                    
                     float range = max - min + 1e-8f;
                     for (int k = 0; k < numCandidates; k++) {
                         normalized[i][k] = (rewards[i][k] - min) / range;
@@ -124,23 +119,11 @@ public class SPOLoss {
                 break;
                 
             case WHITENING:
-                // 白化: standardize + clip
                 for (int i = 0; i < batchSize; i++) {
-                    float mean = 0.0f;
-                    for (float r : rewards[i]) {
-                        mean += r;
-                    }
-                    mean /= numCandidates;
-                    
-                    float std = 0.0f;
-                    for (float r : rewards[i]) {
-                        std += (r - mean) * (r - mean);
-                    }
-                    std = (float) Math.sqrt(std / numCandidates + 1e-8f);
-                    
+                    float mean = computeMean(rewards[i]);
+                    float std = computeStd(rewards[i], mean);
                     for (int k = 0; k < numCandidates; k++) {
                         float value = (rewards[i][k] - mean) / std;
-                        // Clip到[-3, 3]范围
                         normalized[i][k] = Math.max(-3.0f, Math.min(3.0f, value));
                     }
                 }
@@ -159,19 +142,12 @@ public class SPOLoss {
         float[][] advantages = new float[batchSize][numCandidates];
         
         for (int i = 0; i < batchSize; i++) {
-            // 计算平均奖励
-            float meanReward = 0.0f;
-            for (float r : rewards[i]) {
-                meanReward += r;
-            }
-            meanReward /= numCandidates;
+            float meanReward = computeMean(rewards[i]);
             
-            // 计算优势
             for (int k = 0; k < numCandidates; k++) {
                 advantages[i][k] = rewards[i][k] - meanReward;
             }
             
-            // 可选: 归一化优势
             if (config.isNormalizeAdvantage()) {
                 float std = 0.0f;
                 for (float a : advantages[i]) {
@@ -190,21 +166,27 @@ public class SPOLoss {
     
     /**
      * 计算对数概率: log π(y|x)
+     * 
+     * 使用框架内置的softmaxCrossEntropy保持计算图完整连通:
+     * logits → softmaxCrossEntropy(labels) → 交叉熵损失(即NLL)
+     * 对数概率 = -交叉熵损失
+     * 
+     * @param logits 模型输出 [batch_size, seq_len, vocab_size]
+     * @param labels 目标标签 [batch_size, seq_len]
+     * @return 平均对数概率(标量Variable,保持计算图连通)
      */
     private Variable computeLogProb(Variable logits, Variable labels) {
-        // Log softmax
-        Variable logProbs = logSoftmax(logits);
-        
-        // 简化实现:使用交叉熵的负值
-        // 实际应该gather对应label的log概率
-        Variable nll = negativeLogLikelihood(logProbs, labels);
-        
-        // 返回平均对数概率
-        return nll.mul(new Variable(NdArray.of(-1.0f)));
+        // softmaxCrossEntropy内部完成: logSoftmax → gather(labels) → 取负均值
+        // 返回的是交叉熵损失(正值), 对数概率 = -crossEntropy
+        Variable crossEntropy = logits.softmaxCrossEntropy(labels);
+        return crossEntropy.neg();
     }
     
     /**
      * 计算策略梯度损失: L = -∑ A(y_i) * log π(y_i|x)
+     * 
+     * advantage作为外部奖励信号,不需要梯度回传,使用detach()标记。
+     * 梯度只通过logProbs流回模型参数。
      */
     private Variable computePolicyGradientLoss(Variable[] logProbs, float[][] advantages) {
         Variable totalLoss = null;
@@ -213,15 +195,15 @@ public class SPOLoss {
         int numCandidates = logProbs.length;
         
         for (int k = 0; k < numCandidates; k++) {
-            // 创建优势权重tensor
             float[] advantageWeights = new float[batchSize];
             for (int i = 0; i < batchSize; i++) {
                 advantageWeights[i] = advantages[i][k];
             }
             
+            // advantage是外部信号常量,不参与反向传播
             Variable advantageVar = new Variable(NdArray.of(advantageWeights));
+            advantageVar.setRequireGrad(false);
             
-            // L_k = A_k * log_prob_k
             Variable weightedLogProb = logProbs[k].mul(advantageVar);
             
             if (totalLoss == null) {
@@ -231,27 +213,36 @@ public class SPOLoss {
             }
         }
         
-        // 返回负值(因为要最大化奖励,等价于最小化负奖励)
-        return totalLoss.mul(new Variable(NdArray.of(-1.0f / numCandidates)));
+        // 取负均值: 最大化 A*logπ 等价于最小化 -A*logπ
+        Variable scale = new Variable(NdArray.of(-1.0f / numCandidates));
+        scale.setRequireGrad(false);
+        return totalLoss.mul(scale);
     }
     
     /**
-     * 计算熵损失(鼓励探索)
+     * 计算熵正则化损失(鼓励探索)
      * H = -∑ p * log(p)
+     * 
+     * 使用框架内置的logSoftmax和softMax,保持计算图连通。
+     * softMax结果用detach()阻断梯度,避免熵损失对概率分布产生双重梯度。
+     * 熵的梯度仅通过logSoftmax路径回传。
      */
     private Variable computeEntropyLoss(Variable[] logits) {
         Variable totalEntropy = null;
         
         for (Variable logit : logits) {
-            // Softmax概率
-            Variable probs = softmax(logit);
+            // 使用框架内置的logSoftmax,在vocab维度(axis=-1)上计算
+            Variable logProbs = logit.logSoftmax();
             
-            // Log softmax
-            Variable logProbs = logSoftmax(logit);
+            // softMax结果detach,避免梯度通过两条路径重复回传
+            Variable probs = logit.softMax().detach();
             
-            // 熵: H = -∑ p * log(p)
-            Variable entropy = probs.mul(logProbs).mul(new Variable(NdArray.of(-1.0f)));
-            Variable meanEntropy = entropy.mean(0, true);
+            // 熵: H = -∑ p * log(p), p已detach,梯度只通过logProbs流回
+            Variable negEntropy = probs.mul(logProbs);
+            Variable entropy = negEntropy.neg();
+            
+            // 沿vocab维度求均值
+            Variable meanEntropy = entropy.mean(-1, true);
             
             if (totalEntropy == null) {
                 totalEntropy = meanEntropy;
@@ -260,33 +251,26 @@ public class SPOLoss {
             }
         }
         
-        return totalEntropy.mul(new Variable(NdArray.of(1.0f / logits.length)));
+        Variable scale = new Variable(NdArray.of(1.0f / logits.length));
+        scale.setRequireGrad(false);
+        return totalEntropy.mul(scale);
     }
     
-    /**
-     * Log Softmax实现
-     */
-    private Variable logSoftmax(Variable x) {
-        Variable expX = x.exp();
-        Variable sumExp = expX.sum();
-        Variable logSumExp = sumExp.log();
-        return x.sub(logSumExp);
+    // ==================== 工具方法 ====================
+    
+    private float computeMean(float[] values) {
+        float sum = 0.0f;
+        for (float v : values) {
+            sum += v;
+        }
+        return sum / values.length;
     }
     
-    /**
-     * Softmax实现
-     */
-    private Variable softmax(Variable x) {
-        Variable expX = x.exp();
-        Variable sumExp = expX.sum();
-        return expX.div(sumExp);
-    }
-    
-    /**
-     * 负对数似然
-     */
-    private Variable negativeLogLikelihood(Variable logProbs, Variable labels) {
-        // 简化实现:使用交叉熵计算
-        return logProbs.mul(new Variable(NdArray.of(-1.0f)));
+    private float computeStd(float[] values, float mean) {
+        float variance = 0.0f;
+        for (float v : values) {
+            variance += (v - mean) * (v - mean);
+        }
+        return (float) Math.sqrt(variance / values.length + 1e-8f);
     }
 }

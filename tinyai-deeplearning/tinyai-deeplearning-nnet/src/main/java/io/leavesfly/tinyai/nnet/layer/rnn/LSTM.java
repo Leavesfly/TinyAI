@@ -54,6 +54,10 @@ public class LSTM extends Module {
     private NdArray hiddenState;  // 隐藏状态 h_t
     private NdArray cellState;    // 细胞状态 c_t
 
+    // Variable 状态（用于保持计算图）
+    private transient Variable hiddenStateVar;
+    private transient Variable cellStateVar;
+
     private final int inputSize;
     private final int hiddenSize;
     private final boolean bias;
@@ -146,6 +150,8 @@ public class LSTM extends Module {
     public void resetState() {
         hiddenState = null;
         cellState = null;
+        hiddenStateVar = null;
+        cellStateVar = null;
         _buffers.put("hidden_state", null);
         _buffers.put("cell_state", null);
     }
@@ -161,12 +167,22 @@ public class LSTM extends Module {
             cellState = NdArray.zeros(Shape.of(batchSize, hiddenSize));
             _buffers.put("hidden_state", hiddenState);
             _buffers.put("cell_state", cellState);
+            // 初始化 Variable 状态
+            this.hiddenStateVar = new Variable(hiddenState);
+            this.hiddenStateVar.setRequireGrad(false);
+            this.cellStateVar = new Variable(cellState);
+            this.cellStateVar.setRequireGrad(false);
         } else if (hiddenState.getShape().getDimension(0) != batchSize) {
             // batchSize 变化时重新初始化状态
             hiddenState = NdArray.zeros(Shape.of(batchSize, hiddenSize));
             cellState = NdArray.zeros(Shape.of(batchSize, hiddenSize));
             _buffers.put("hidden_state", hiddenState);
             _buffers.put("cell_state", cellState);
+            // 重新初始化 Variable 状态
+            this.hiddenStateVar = new Variable(hiddenState);
+            this.hiddenStateVar.setRequireGrad(false);
+            this.cellStateVar = new Variable(cellState);
+            this.cellStateVar.setRequireGrad(false);
         }
     }
 
@@ -178,8 +194,8 @@ public class LSTM extends Module {
         // 初始化状态
         initializeStateIfNeeded(batchSize);
 
-        Variable h = new Variable(hiddenState);
-        Variable c = new Variable(cellState);
+        Variable h = hiddenStateVar;
+        Variable c = cellStateVar;
 
         // 计算四个门
         // 输入门: i_t = sigmoid(W_ii @ x_t + W_hi @ h_{t-1} + b_i)
@@ -217,6 +233,8 @@ public class LSTM extends Module {
         Variable h_new = o_t.mul(c_new.tanh());
 
         // 更新缓冲区状态
+        hiddenStateVar = h_new.detach();
+        cellStateVar = c_new.detach();
         hiddenState = h_new.getValue();
         cellState = c_new.getValue();
         _buffers.put("hidden_state", hiddenState);

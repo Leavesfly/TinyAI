@@ -144,12 +144,13 @@ public class DeepSeekV3MTPHead extends Module {
 
         // 2. 获取偏移位置的 token 嵌入 embed[offset..seqLen-1]（保持计算图）
         Variable offsetTokenIds = tokenIds.sliceRange(1, offset, seqLen);
-        Variable embedParam = new Variable(sharedTokenEmbeddings.data());
+        // 直接使用 sharedTokenEmbeddings（Parameter 继承自 Variable），
+        // 避免通过 data() + new Variable() 断开计算图，确保 MTP 梯度能回传到共享嵌入参数
         // 将 [batch, validLen] 展平为 [batch*validLen]，做 indexSelect，再 reshape 回 [batch, validLen, nEmbd]
         int batchSize = offsetTokenIds.getValue().getShape().getDimension(0);
         int nEmbd = config.getNEmbd();
         Variable flatTokenIds = offsetTokenIds.reshape(Shape.of(batchSize * validLen));
-        Variable flatEmbeddings = embedParam.indexSelect(0, flatTokenIds);
+        Variable flatEmbeddings = sharedTokenEmbeddings.indexSelect(0, flatTokenIds);
         Variable offsetEmbeddings = flatEmbeddings.reshape(Shape.of(batchSize, validLen, nEmbd));
 
         // 3. 拼接 [h_i; embed_{i+offset}]，形状 [batch, validLen, 2*nEmbd]（保持计算图）

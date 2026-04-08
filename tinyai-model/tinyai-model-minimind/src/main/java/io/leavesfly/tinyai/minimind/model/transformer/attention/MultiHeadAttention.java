@@ -181,10 +181,14 @@ public class MultiHeadAttention extends Module {
         kSplit = rope.forward(kSplit, new Variable(NdArray.of(new float[]{startPos})));
 
         // 4. KV-Cache 处理
+        // 注意：KV-Cache 仅在推理（生成）阶段使用，此时不需要梯度回传，
+        // 因此这里用 new Variable 包装是安全的，不会影响训练时的计算图。
         if (kvCache != null) {
             NdArray[] updated = kvCache.update(kSplit.getValue(), vSplit.getValue());
             kSplit = new Variable(updated[0]);
+            kSplit.setRequireGrad(false);
             vSplit = new Variable(updated[1]);
+            vSplit.setRequireGrad(false);
         }
 
         int kvSeqLen = kSplit.getShape().getShapeDims()[2];
@@ -338,34 +342,29 @@ public class MultiHeadAttention extends Module {
     // =============================================================================
     
     /**
-     * 多头分割（使用 Variable.reshape）
+     * 多头分割（使用 Variable.reshape + permute，保持计算图连通）
      * [batch, seqLen, hiddenSize] -> [batch, numHeads, seqLen, headDim]
      */
     private Variable reshapeForMultiHead(Variable input, int batchSize, int seqLen) {
         // [batch, seqLen, hiddenSize] -> [batch, seqLen, numHeads, headDim]
-        Variable reshaped1 = input.reshape(Shape.of(batchSize, seqLen, numHeads, headDim));
-        // 转置为 [batch, numHeads, seqLen, headDim]
-        // 由于 Variable 暂不支持多维转置，使用 NdArray 操作
-        NdArray data = reshaped1.getValue();
-        NdArray transposed = transposeAxes(data, new int[]{0, 2, 1, 3});
-        return new Variable(transposed);
+        Variable reshaped = input.reshape(Shape.of(batchSize, seqLen, numHeads, headDim));
+        // 转置为 [batch, numHeads, seqLen, headDim]（通过 permute 保持计算图连通）
+        return reshaped.permute(0, 2, 1, 3);
     }
     
     /**
-     * 多头合并（使用 Variable.reshape）
+     * 多头合并（使用 Variable.permute + reshape，保持计算图连通）
      * [batch, numHeads, seqLen, headDim] -> [batch, seqLen, hiddenSize]
      */
     private Variable mergeMultiHead(Variable input, int batchSize, int seqLen) {
-        // [batch, numHeads, seqLen, headDim] -> [batch, seqLen, numHeads, headDim]
-        NdArray data = input.getValue();
-        NdArray transposed = transposeAxes(data, new int[]{0, 2, 1, 3});
-        Variable transposedVar = new Variable(transposed);
+        // [batch, numHeads, seqLen, headDim] -> [batch, seqLen, numHeads, headDim]（通过 permute 保持计算图连通）
+        Variable transposed = input.permute(0, 2, 1, 3);
         // [batch, seqLen, numHeads, headDim] -> [batch, seqLen, hiddenSize]
-        return transposedVar.reshape(Shape.of(batchSize, seqLen, hiddenSize));
+        return transposed.reshape(Shape.of(batchSize, seqLen, hiddenSize));
     }
     
     /**
-     * 转置张量的最后两个维度
+     * 转置张量的最后两个维度（通过 permute 保持计算图连通）
      */
     private Variable transposeLastTwoDims(Variable input) {
         int[] shape = input.getShape().getShapeDims();
@@ -376,9 +375,7 @@ public class MultiHeadAttention extends Module {
         }
         perm[ndim - 2] = ndim - 1;
         perm[ndim - 1] = ndim - 2;
-        
-        NdArray transposed = transposeAxes(input.getValue(), perm);
-        return new Variable(transposed);
+        return input.permute(perm);
     }
     
     /**
@@ -466,57 +463,5 @@ public class MultiHeadAttention extends Module {
         
         // Reshape 回 4D（使用实际形状）
         return softmaxed.reshape(Shape.of(actualShape[0], actualShape[1], actualShape[2], actualShape[3]));
-    }
-    
-    /**
-     * 转置张量的轴
-     */
-    private NdArray transposeAxes(NdArray input, int[] perm) {
-        int[] shape = input.getShape().getShapeDims();
-        int[] newShape = new int[perm.length];
-        for (int i = 0; i < perm.length; i++) {
-            newShape[i] = shape[perm[i]];
-        }
-        
-        float[] inputBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) input).buffer;
-        float[] outputBuffer = new float[inputBuffer.length];
-        
-        // 计算步长
-        int[] strides = new int[perm.length];
-        strides[perm.length - 1] = 1;
-        for (int i = perm.length - 2; i >= 0; i--) {
-            strides[i] = strides[i + 1] * shape[i + 1];
-        }
-        
-        int[] newStrides = new int[perm.length];
-        newStrides[perm.length - 1] = 1;
-        for (int i = perm.length - 2; i >= 0; i--) {
-            newStrides[i] = newStrides[i + 1] * newShape[i + 1];
-        }
-        
-        // 转置
-        int totalSize = inputBuffer.length;
-        for (int i = 0; i < totalSize; i++) {
-            int[] indices = new int[perm.length];
-            int remainder = i;
-            for (int j = 0; j < perm.length; j++) {
-                indices[j] = remainder / strides[j];
-                remainder %= strides[j];
-            }
-            
-            int[] newIndices = new int[perm.length];
-            for (int j = 0; j < perm.length; j++) {
-                newIndices[j] = indices[perm[j]];
-            }
-            
-            int newIdx = 0;
-            for (int j = 0; j < perm.length; j++) {
-                newIdx += newIndices[j] * newStrides[j];
-            }
-            
-            outputBuffer[newIdx] = inputBuffer[i];
-        }
-        
-        return NdArray.of(outputBuffer, Shape.of(newShape));
     }
 }

@@ -180,8 +180,8 @@ public class DeepSeekV3MoEBlock extends Module {
         // 5. 共享专家计算（每次必激活）
         Variable sharedOutput = computeSharedExpertsOutput(input);
 
-        // 6. 路由专家加权组合
-        Variable routedOutput = computeExpertOutputs(input, topKResult);
+        // 6. 路由专家加权组合（传入 sigmoidProbs 保持计算图连通）
+        Variable routedOutput = computeExpertOutputs(input, topKResult, sigmoidProbs);
 
         // 7. 共享专家输出 + 路由专家输出
         Variable expertOutputs = sharedOutput.add(routedOutput);
@@ -263,8 +263,16 @@ public class DeepSeekV3MoEBlock extends Module {
      * <p>
      * 优化：先收集哪些专家被选中，仅对被选中的专家执行 forward，
      * 避免未被选中的专家做无效计算，减少约 (1 - topK/numExperts) 的计算量。
+     * <p>
+     * 计算图保持：权重掩码通过 sigmoidProbs 的 Variable 操作构建，
+     * 确保门控网络的梯度可以通过加权组合回传。
+     *
+     * @param input        输入张量 [batch_size, seq_len, nEmbd]
+     * @param topKResult   Top-K 选择结果（索引和归一化权重，用于确定选中哪些专家）
+     * @param sigmoidProbs 门控网络的 sigmoid 概率 [batch_size, seq_len, numExperts]（保持计算图）
+     * @return 路由专家的加权组合输出
      */
-    private Variable computeExpertOutputs(Variable input, TopKResult topKResult) {
+    private Variable computeExpertOutputs(Variable input, TopKResult topKResult, Variable sigmoidProbs) {
         Shape inputShape = input.getValue().getShape();
         int batchSize = inputShape.getDimension(0);
         int seqLen = inputShape.getDimension(1);
@@ -288,14 +296,15 @@ public class DeepSeekV3MoEBlock extends Module {
             }
         }
 
-        // 加权组合
+        // 加权组合（通过 sigmoidProbs 的 Variable 操作保持计算图连通）
         Variable output = new Variable(NdArray.zeros(Shape.of(batchSize, seqLen, nEmbd)));
         for (int expertIdx = 0; expertIdx < routedExperts.size(); expertIdx++) {
             if (!selectedExperts[expertIdx]) {
                 continue;
             }
-            Variable weightMask = createExpertWeightMask(expertIdx, topKResult, batchSize, seqLen);
-            if (isZeroMask(weightMask)) {
+            // 从 sigmoidProbs 中通过 Variable 操作提取该专家的权重（保持计算图）
+            Variable weightMask = createExpertWeightMaskFromGraph(expertIdx, topKResult, sigmoidProbs, batchSize, seqLen);
+            if (weightMask == null) {
                 continue;
             }
             output = output.add(expertOutputCache[expertIdx].mul(weightMask));
@@ -305,38 +314,74 @@ public class DeepSeekV3MoEBlock extends Module {
     }
 
     /**
-     * 为指定专家创建权重mask
-     * 返回 [batch_size, seq_len, 1] 的权重矩阵
+     * 从 sigmoidProbs 的计算图中构建专家权重掩码（保持梯度流）
+     * <p>
+     * 通过 Variable.select 从 sigmoidProbs 中提取指定专家的概率，
+     * 再根据 Top-K 选择结果构建归一化的权重掩码。
+     * 整个过程基于 Variable 操作，梯度可以从权重回传到门控网络。
+     *
+     * @param expertIdx    专家索引
+     * @param topKResult   Top-K 选择结果
+     * @param sigmoidProbs 门控网络的 sigmoid 概率 [batch_size, seq_len, numExperts]
+     * @param batchSize    批次大小
+     * @param seqLen       序列长度
+     * @return 权重掩码 [batch_size, seq_len, 1]，如果该专家未被任何 token 选中则返回 null
      */
-    private Variable createExpertWeightMask(
+    private Variable createExpertWeightMaskFromGraph(
             int expertIdx,
             TopKResult topKResult,
+            Variable sigmoidProbs,
             int batchSize,
             int seqLen) {
 
-        float[][][] weights = new float[batchSize][seqLen][1];
-
+        // 构建选择掩码：标记哪些位置选中了该专家
+        float[][][] selectionMask = new float[batchSize][seqLen][1];
+        boolean hasSelection = false;
         for (int b = 0; b < batchSize; b++) {
             for (int t = 0; t < seqLen; t++) {
-                // 检查该位置的TopK中是否包含当前专家
                 for (int k = 0; k < config.getTopK(); k++) {
                     if (topKResult.indices[b][t][k] == expertIdx) {
-                        weights[b][t][0] = topKResult.weights[b][t][k];
+                        selectionMask[b][t][0] = 1.0f;
+                        hasSelection = true;
                         break;
                     }
                 }
             }
         }
+        if (!hasSelection) {
+            return null;
+        }
 
-        return new Variable(NdArray.of(weights));
-    }
+        // 从 sigmoidProbs 中提取该专家的概率（保持计算图）
+        // sigmoidProbs: [batch, seq, numExperts] → select dim=2, index=expertIdx → [batch, seq]
+        Variable expertProb = sigmoidProbs.select(2, expertIdx);  // [batch, seq]
+        Variable expertProbExpanded = expertProb.unsqueeze(2);     // [batch, seq, 1]
 
-    /**
-     * 检查权重 mask 是否全为零（未被任何 token 选中）
-     */
-    private boolean isZeroMask(Variable mask) {
-        float sum = mask.getValue().sum().getNumber().floatValue();
-        return Math.abs(sum) < ZERO_THRESHOLD;
+        // 计算 Top-K 归一化分母：每个位置被选中的 K 个专家的 sigmoid 概率之和
+        // 使用 topKResult.indices 从 sigmoidProbs 中提取并求和
+        float[][][] normFactors = new float[batchSize][seqLen][1];
+        NdArray probsData = sigmoidProbs.getValue();
+        for (int b = 0; b < batchSize; b++) {
+            for (int t = 0; t < seqLen; t++) {
+                float sumProbs = 0.0f;
+                for (int k = 0; k < config.getTopK(); k++) {
+                    sumProbs += probsData.get(b, t, topKResult.indices[b][t][k]);
+                }
+                normFactors[b][t][0] = sumProbs > ZERO_THRESHOLD ? 1.0f / sumProbs : 1.0f / config.getTopK();
+            }
+        }
+
+        // 选择掩码（不需要梯度）：标记该专家被选中的位置
+        Variable selectionVar = new Variable(NdArray.of(selectionMask));
+        selectionVar.setRequireGrad(false);
+
+        // 归一化因子（不需要梯度）：每个位置的 Top-K 概率和的倒数
+        Variable normVar = new Variable(NdArray.of(normFactors));
+        normVar.setRequireGrad(false);
+
+        // 权重 = expertProb * selectionMask * normFactor
+        // expertProb 保持在计算图中，梯度可以回传到门控网络
+        return expertProbExpanded.mul(selectionVar).mul(normVar);
     }
 
     /**

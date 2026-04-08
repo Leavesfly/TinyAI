@@ -38,10 +38,21 @@ public class SoftmaxCE extends Function {
 
         int[] colSlices = NdArrayUtil.toInt(labelY.transpose().getMatrix()[0]);
         NdArray logProb = predict.sub(logSumExp.broadcastTo(predict.getShape()));
-        NdArray picked = logProb.getItem(NdArrayUtil.getSeq(row), colSlices);
 
-        float sum = picked.sum().getNumber().floatValue();
-        return NdArray.of(-sum / (float) row);
+        // 过滤 ignore_index(-100)：只对有效 label 计算损失
+        int validCount = 0;
+        float sum = 0.0f;
+        float[][] logProbMatrix = logProb.getMatrix();
+        for (int i = 0; i < row; i++) {
+            if (colSlices[i] >= 0) {
+                sum += logProbMatrix[i][colSlices[i]];
+                validCount++;
+            }
+        }
+
+        // 避免除零
+        float divisor = validCount > 0 ? (float) validCount : 1.0f;
+        return NdArray.of(-sum / divisor);
     }
 
     /**
@@ -69,21 +80,37 @@ public class SoftmaxCE extends Function {
         NdArray exp = stabilized.exp();
         NdArray softmax = exp.div(exp.sumTo(Shape.of(batchSize, 1)).broadcastTo(predict.getShape()));
 
-        // one-hot labels - 带越界检查
+        // one-hot labels，ignore_index(-100) 的行梯度为 0
         int[] labelIndices = NdArrayUtil.toInt(label.transpose().getMatrix()[0]);
         float[][] oneHotData = new float[batchSize][numClasses];
+        int validCount = 0;
         for (int i = 0; i < batchSize; i++) {
             int labelIndex = labelIndices[i];
-            if (labelIndex < 0 || labelIndex >= numClasses) {
-                throw new IllegalArgumentException(String.format(
-                        "Label index %d out of range [0, %d) at batch %d", labelIndex, numClasses, i));
+            if (labelIndex >= 0 && labelIndex < numClasses) {
+                oneHotData[i][labelIndex] = 1.0f;
+                validCount++;
             }
-            oneHotData[i][labelIndex] = 1.0f;
+            // labelIndex < 0 (如 -100) 时，oneHot 全零，梯度 = softmax - 0 = softmax
+            // 但 ignore 的行不应贡献梯度，所以需要将这些行的 softmax 也置零
         }
         NdArray oneHot = NdArray.of(oneHotData);
 
-        float scale = yGrad.getNumber().floatValue() / (float) batchSize;
-        NdArray gradPredict = softmax.sub(oneHot).mulNum(scale);
+        float divisor = validCount > 0 ? (float) validCount : 1.0f;
+        float scale = yGrad.getNumber().floatValue() / divisor;
+
+        // 计算梯度：(softmax - oneHot) * scale
+        // 对于 ignore_index 的行，将梯度置零
+        float[][] softmaxMatrix = softmax.getMatrix();
+        float[][] gradData = new float[batchSize][numClasses];
+        for (int i = 0; i < batchSize; i++) {
+            if (labelIndices[i] >= 0) {
+                for (int j = 0; j < numClasses; j++) {
+                    gradData[i][j] = (softmaxMatrix[i][j] - oneHotData[i][j]) * scale;
+                }
+            }
+            // labelIndices[i] < 0 时 gradData[i] 保持全零
+        }
+        NdArray gradPredict = NdArray.of(gradData);
 
         return Arrays.asList(gradPredict, label.like(0));
     }

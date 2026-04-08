@@ -45,6 +45,8 @@ public class GRU extends Module {
 
     // 状态缓冲区
     private NdArray hiddenState;  // 隐藏状态 h_t
+    private transient Variable hiddenStateVar;  // 隐藏状态的 Variable 包装
+    private transient Variable cachedOneVar;  // 缓存常量 1.0
 
     private final int inputSize;
     private final int hiddenSize;
@@ -65,6 +67,8 @@ public class GRU extends Module {
         this.bias = bias;
 
         initializeParameters();
+        this.cachedOneVar = new Variable(1.0f);
+        this.cachedOneVar.setRequireGrad(false);
         init();
     }
 
@@ -139,6 +143,8 @@ public class GRU extends Module {
     private void initializeStateIfNeeded(int batchSize) {
         if (hiddenState == null || hiddenState.getShape().getDimension(0) != batchSize) {
             hiddenState = NdArray.zeros(Shape.of(batchSize, hiddenSize));
+            this.hiddenStateVar = new Variable(hiddenState);
+            this.hiddenStateVar.setRequireGrad(false);
             _buffers.put("hidden_state", hiddenState);
         }
     }
@@ -146,12 +152,12 @@ public class GRU extends Module {
     @Override
     public Variable forward(Variable... inputs) {
         Variable x = inputs[0];
-        int batchSize = x.getValue().getShape().getDimension(0);
+        int batchSize = x.size(0);
 
         // 初始化状态
         initializeStateIfNeeded(batchSize);
 
-        Variable h = new Variable(hiddenState);
+        Variable h = hiddenStateVar;
 
         // 重置门: r_t = sigmoid(W_ir @ x_t + W_hr @ h_{t-1} + b_r)
         Variable r_t = x.matMul(W_ir.transpose()).add(h.matMul(W_hr.transpose()));
@@ -175,10 +181,11 @@ public class GRU extends Module {
         n_t = n_t.tanh();
 
         // 新隐藏状态: h_t = (1 - z_t) * n_t + z_t * h_{t-1}
-        Variable oneMinusZ = new Variable(1.0f).sub(z_t);
+        Variable oneMinusZ = cachedOneVar.sub(z_t);
         Variable h_new = oneMinusZ.mul(n_t).add(z_t.mul(h));
 
         // 更新缓冲区状态
+        hiddenStateVar = h_new.detach();
         hiddenState = h_new.getValue();
         _buffers.put("hidden_state", hiddenState);
 

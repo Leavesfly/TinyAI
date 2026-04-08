@@ -2,6 +2,7 @@ package io.leavesfly.tinyai.gpt3;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.func.matrix.Permute;
+import io.leavesfly.tinyai.func.matrix.RotaryEmbedding;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.core.Module;
@@ -66,12 +67,10 @@ public class GPT3Attention extends Module {
     private final Dropout attnDropout;
 
     /**
-     * RoPE 预计算的 cos/sin 表
-     * 形状逻辑：[maxSeqLen, rotaryDim/2]（展平存储）
-     * 访问方式：cosTable[pos * halfRotary + i]
+     * RoPE 可微分算子（RotaryEmbedding Function），支持反向传播。
+     * 仅在 useRoPE=true 且 rotaryDim>0 时初始化。
      */
-    private final float[] cosTable;
-    private final float[] sinTable;
+    private final RotaryEmbedding ropeFunction;
 
     /**
      * 构造 GPT-3 增强注意力层
@@ -106,26 +105,13 @@ public class GPT3Attention extends Module {
         registerModule("o_proj", oProj);
         registerModule("attn_dropout", attnDropout);
 
-        // 预计算 RoPE 的 cos/sin 频率表
+        // 初始化 RoPE 可微分算子（使用 RotaryEmbedding Function，支持反向传播）
         if (useRoPE && rotaryDim > 0) {
-            int halfDim = rotaryDim / 2;
             int maxSeqLen = config.getNPositions();
             float base = (float) config.getRotaryBase();
-            cosTable = new float[maxSeqLen * halfDim];
-            sinTable = new float[maxSeqLen * halfDim];
-
-            for (int pos = 0; pos < maxSeqLen; pos++) {
-                for (int i = 0; i < halfDim; i++) {
-                    // freq[i] = 1 / (base ^ (2i / rotaryDim))
-                    float freq = (float) (1.0 / Math.pow(base, (2.0 * i) / rotaryDim));
-                    float angle = pos * freq;
-                    cosTable[pos * halfDim + i] = (float) Math.cos(angle);
-                    sinTable[pos * halfDim + i] = (float) Math.sin(angle);
-                }
-            }
+            ropeFunction = new RotaryEmbedding(rotaryDim, maxSeqLen, base);
         } else {
-            cosTable = null;
-            sinTable = null;
+            ropeFunction = null;
         }
 
         init();
@@ -251,13 +237,9 @@ public class GPT3Attention extends Module {
     /**
      * 对 Q 或 K 应用部分 RoPE（仅旋转前 rotaryDim 个维度）
      *
-     * 旋转公式（对每对相邻维度 [x0, x1]）：
-     *   x0' = x0 * cos(θ) - x1 * sin(θ)
-     *   x1' = x0 * sin(θ) + x1 * cos(θ)
-     * 其中 θ = position * freq[i]
-     *
-     * 说明：RoPE 旋转变换保持向量模长不变（是等距变换），
-     * 因此梯度近似（直接操作 NdArray）在训练中误差可忽略。
+     * 使用 RotaryEmbedding Function 实现，保持计算图连通，支持反向传播。
+     * 将 headDim 维度拆分为旋转部分 [0, rotaryDim) 和非旋转部分 [rotaryDim, headDim)，
+     * 对旋转部分应用 RoPE 后拼接回来。
      *
      * @param qk       Q 或 K 张量，Shape: (batch, numHeads, seq, headDim)
      * @param batchSize 批次大小
@@ -265,44 +247,25 @@ public class GPT3Attention extends Module {
      * @param startPos 在完整序列中的起始位置（KV Cache 增量推理时使用）
      */
     private Variable applyPartialRoPE(Variable qk, int batchSize, int seqLen, int startPos) {
-        float[] data = qk.getValue().getArray();
-        // 避免全量 clone：直接分配新数组，仅写入需要修改的部分，
-        // 未旋转的维度 [rotaryDim, headDim) 通过 System.arraycopy 批量复制
-        int totalElements = data.length;
-        float[] output = new float[totalElements];
-
-        int halfRotary = rotaryDim / 2;
-        int unrotatedDims = headDim - rotaryDim;
-
-        for (int b = 0; b < batchSize; b++) {
-            for (int h = 0; h < numHeads; h++) {
-                for (int s = 0; s < seqLen; s++) {
-                    int pos = startPos + s;
-                    int baseOffset = ((b * numHeads + h) * seqLen + s) * headDim;
-
-                    // 对前 rotaryDim 个维度做旋转
-                    for (int i = 0; i < halfRotary; i++) {
-                        float x0 = data[baseOffset + 2 * i];
-                        float x1 = data[baseOffset + 2 * i + 1];
-                        float cos = cosTable[pos * halfRotary + i];
-                        float sin = sinTable[pos * halfRotary + i];
-
-                        output[baseOffset + 2 * i]     = x0 * cos - x1 * sin;
-                        output[baseOffset + 2 * i + 1] = x0 * sin + x1 * cos;
-                    }
-
-                    // 批量复制未旋转的维度 [rotaryDim, headDim)
-                    if (unrotatedDims > 0) {
-                        System.arraycopy(data, baseOffset + rotaryDim,
-                                output, baseOffset + rotaryDim, unrotatedDims);
-                    }
-                }
-            }
+        if (rotaryDim == headDim) {
+            // 全维度旋转：直接对整个张量应用 RoPE
+            Variable startPosVar = new Variable(NdArray.of((float) startPos));
+            startPosVar.setRequireGrad(false);
+            return ropeFunction.call(qk, startPosVar);
         }
 
-        Variable result = new Variable(NdArray.of(output, qk.getValue().getShape()));
-        result.setRequireGrad(qk.isRequireGrad());
-        return result;
+        // 部分维度旋转：拆分 → 旋转 → 拼接
+        // 在最后一个维度（dim=3, headDim）上拆分
+        Variable rotaryPart = qk.sliceRange(3, 0, rotaryDim);
+        Variable passThrough = qk.sliceRange(3, rotaryDim, headDim);
+
+        // 对旋转部分应用 RoPE（通过 RotaryEmbedding Function，计算图安全）
+        Variable startPosVar = new Variable(NdArray.of((float) startPos));
+        startPosVar.setRequireGrad(false);
+        Variable rotated = ropeFunction.call(rotaryPart, startPosVar);
+
+        // 拼接旋转后的部分和未旋转的部分
+        return Variable.cat(new Variable[]{rotated, passThrough}, 3);
     }
 
     /**

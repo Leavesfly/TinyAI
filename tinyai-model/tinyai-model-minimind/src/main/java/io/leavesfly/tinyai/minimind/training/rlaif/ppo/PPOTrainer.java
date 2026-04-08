@@ -8,7 +8,6 @@ import io.leavesfly.tinyai.minimind.training.rlaif.BaseRLTrainer;
 import io.leavesfly.tinyai.ml.model.Model;
 import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.ndarr.Shape;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -145,10 +144,13 @@ public class PPOTrainer extends BaseRLTrainer {
     }
 
     /**
-     * 收集经验
+     * 收集经验（旧策略，detach，不需要梯度）
+     *
+     * 只收集旧策略的 logProb 和 value 的 float 值，以及原始输入/标签/奖励数据。
+     * 后续 ppoUpdate 会重新前向传播来构建有梯度的计算图。
      */
     private ExperienceBuffer collectExperience(RLAIFDataset.Batch batch) {
-        actor.setTraining(false);  // 评估模式
+        actor.setTraining(false);
 
         int numCandidates = batch.getNumCandidates();
         int batchSize = batch.getBatchSize();
@@ -158,32 +160,33 @@ public class PPOTrainer extends BaseRLTrainer {
 
         ExperienceBuffer buffer = new ExperienceBuffer(batchSize * numCandidates);
 
-        // 对每个候选收集经验
         for (int k = 0; k < numCandidates; k++) {
             Variable inputVar = new Variable(candidateInputs[k]);
             Variable labelVar = new Variable(candidateLabels[k]);
 
-            // Actor前向传播
+            // 旧策略前向传播（detach，仅取 float 值）
             Variable logits = actor.predict(inputVar);
             Variable logProb = computeLogProb(logits, labelVar);
+            float oldLogProbValue = logProb.getValue().getNumber().floatValue();
 
-            // Critic前向传播(简化:使用最后一层隐藏状态)
-            Variable hidden = extractHiddenState(inputVar);
+            // 旧 Critic 前向传播（detach，仅取 float 值）
+            Variable hidden = extractHiddenState(logits);
             Variable value = critic.forward(hidden);
+            float oldValueFloat = value.getValue().getNumber().floatValue();
 
-            // 存储经验
+            // 存储原始输入数据和 detach 的旧策略值
             for (int i = 0; i < batchSize; i++) {
                 buffer.add(
-                        logProb.getValue().getNumber().floatValue(),
-                        value.getValue().getNumber().floatValue(),
+                        oldLogProbValue,
+                        oldValueFloat,
                         rewards[i][k],
-                        logits.getValue(),
-                        hidden.getValue()
+                        candidateInputs[k],
+                        candidateLabels[k]
                 );
             }
         }
 
-        // 计算GAE优势
+        // 计算 GAE 优势和回报
         buffer.computeAdvantages(ppoLoss, config);
 
         return buffer;
@@ -191,66 +194,109 @@ public class PPOTrainer extends BaseRLTrainer {
 
     /**
      * PPO更新
+     *
+     * 关键修复: 重新通过 actor/critic 前向传播，保持计算图连通。
+     *
+     * 计算图链路:
+     * actor.predict(input) → logits [Variable, 有 creator]
+     *   → computeLogProb(logits, label) → newLogProb [Variable, 有 creator]
+     *     → ppoLoss.computeTotalLoss(...) → totalLoss [Variable, 有 creator]
+     *       → totalLoss.backward() → 梯度回传到 actor/critic 参数 ✓
      */
     private float ppoUpdate(ExperienceBuffer experience) {
         actor.setTraining(true);
 
-        // 获取经验数据
-        float[] oldLogProbs = experience.logProbs;
-        float[] oldValues = experience.values;
-        float[] rewards = experience.rewards;
-        float[] advantages = experience.advantages;
-        float[] returns = experience.returns;
-
-        // 重新计算当前策略的概率和价值
-        List<Float> batchLosses = new ArrayList<>();
-
-        // 简化实现:对整批数据更新一次
-        // 实际应该mini-batch采样
-
-        // 1. 重新前向传播
         int experienceSize = experience.size();
-        float[] newLogProbsArray = new float[experienceSize];
-        float[] newValuesArray = new float[experienceSize];
+
+        // 累加所有经验的损失，保持计算图连通
+        Variable totalPolicyLoss = null;
+        Variable totalValueLoss = null;
+        Variable lastLogits = null;
 
         for (int i = 0; i < experienceSize; i++) {
-            NdArray logitsData = experience.logitsArray.get(i);
-            NdArray hiddenData = experience.hiddenStates.get(i);
+            NdArray inputData = experience.inputDataList.get(i);
+            NdArray labelData = experience.labelDataList.get(i);
 
-            // 重新计算Actor
-            Variable logits = new Variable(logitsData);
-            Variable labels = new Variable(NdArray.of(0.0f)); // 简化
-            Variable newLogProb = computeLogProb(logits, labels);
-            newLogProbsArray[i] = newLogProb.getValue().getNumber().floatValue();
+            // ===== Actor 重新前向传播（计算图连通）=====
+            Variable inputVar = new Variable(inputData);
+            Variable labelVar = new Variable(labelData);
+            Variable logits = actor.predict(inputVar);
+            lastLogits = logits;
 
-            // 重新计算Critic
-            Variable hidden = new Variable(hiddenData);
+            // computeLogProb 返回 Variable，计算图连通
+            Variable newLogProb = computeLogProb(logits, labelVar);
+
+            // 计算概率比: r_t = exp(log π_new - log π_old)
+            // oldLogProb是旧策略的值,不需要梯度
+            Variable oldLogProbVar = new Variable(NdArray.of(experience.logProbs[i]));
+            oldLogProbVar.setRequireGrad(false);
+            Variable logRatio = newLogProb.sub(oldLogProbVar);
+            Variable ratio = logRatio.exp();
+
+            // 计算 clipped surrogate objective
+            // advantage是外部信号常量,不参与反向传播
+            Variable advVar = new Variable(NdArray.of(experience.advantages[i]));
+            advVar.setRequireGrad(false);
+            Variable surrogate1 = ratio.mul(advVar);
+
+            // 使用Variable.clip()保持计算图连通
+            float clipEps = config.getClipEpsilon();
+            Variable clippedRatio = ratio.clip(1.0f - clipEps, 1.0f + clipEps);
+            Variable surrogate2 = clippedRatio.mul(advVar);
+
+            // min(surrogate1, surrogate2)，取负值（最大化 → 最小化）
+            Variable condition = surrogate1.lt(surrogate2);
+            Variable candidatePolicyLoss = Variable.where(condition, surrogate1, surrogate2).neg();
+
+            totalPolicyLoss = (totalPolicyLoss == null)
+                    ? candidatePolicyLoss
+                    : totalPolicyLoss.add(candidatePolicyLoss);
+
+            // ===== Critic 重新前向传播（计算图连通）=====
+            Variable hidden = extractHiddenState(logits);
             Variable newValue = critic.forward(hidden);
-            newValuesArray[i] = newValue.getValue().getNumber().floatValue();
+
+            // 价值损失: 0.5 * (V - R)^2, returns是外部信号不需要梯度
+            Variable returnVar = new Variable(NdArray.of(experience.returns[i]));
+            returnVar.setRequireGrad(false);
+            Variable valueDiff = newValue.sub(returnVar);
+            Variable half = new Variable(NdArray.of(0.5f));
+            half.setRequireGrad(false);
+            Variable candidateValueLoss = valueDiff.squ().mul(half);
+
+            totalValueLoss = (totalValueLoss == null)
+                    ? candidateValueLoss
+                    : totalValueLoss.add(candidateValueLoss);
         }
 
-        // 2. 计算损失
-        Variable newLogProbs = new Variable(NdArray.of(newLogProbsArray));
-        Variable oldLogProbsVar = new Variable(NdArray.of(oldLogProbs));
-        Variable newValues = new Variable(NdArray.of(newValuesArray));
-        Variable oldValuesVar = new Variable(NdArray.of(oldValues));
-        Variable dummyLogits = new Variable(NdArray.of(new float[]{0.0f}));
+        // 平均损失
+        Variable count = new Variable(NdArray.of((float) experienceSize));
+        count.setRequireGrad(false);
+        Variable avgPolicyLoss = totalPolicyLoss.div(count);
+        Variable avgValueLoss = totalValueLoss.div(count);
 
-        Variable totalLoss = ppoLoss.computeTotalLoss(
-                newLogProbs, oldLogProbsVar, advantages, returns,
-                newValues, oldValuesVar, dummyLogits
-        );
+        // 熵正则化（鼓励探索）
+        Variable entropyLoss = ppoLoss.computeEntropyLoss(lastLogits);
 
-        // 3. 反向传播
+        // 总损失 = 策略损失 + c1*价值损失 - c2*熵损失
+        Variable valueLossCoef = new Variable(NdArray.of(config.getValueLossCoef()));
+        valueLossCoef.setRequireGrad(false);
+        Variable entropyCoef = new Variable(NdArray.of(config.getEntropyCoef()));
+        entropyCoef.setRequireGrad(false);
+        Variable totalLoss = avgPolicyLoss
+                .add(avgValueLoss.mul(valueLossCoef))
+                .sub(entropyLoss.mul(entropyCoef));
+
+        // 反向传播: totalLoss → avgPolicyLoss/avgValueLoss → newLogProb/newValue → actor/critic 参数
         actor.clearGrads();
         critic.clearGrads();
         totalLoss.backward();
 
-        // 4. 梯度裁剪
+        // 梯度裁剪
         clipGradients(actor, config.getMaxGradNorm());
         clipGradients(critic, config.getMaxGradNorm());
 
-        // 5. 更新参数
+        // 更新参数
         actorOptimizer.update();
         criticOptimizer.update();
 
@@ -260,38 +306,22 @@ public class PPOTrainer extends BaseRLTrainer {
         return lossValue;
     }
 
+
+
     /**
-     * 提取隐藏状态
-     * 
-     * 从模型的最后一层Transformer输出中提取隐藏状态，
-     * 取序列最后一个位置的隐藏向量作为整个序列的表示。
+     * 从 logits 提取隐藏状态供 Critic 使用
+     *
+     * 通过 Variable 算子（mean）操作，保持计算图连通。
+     * 这样 Critic 的梯度可以通过 hidden → logits → actor 参数回传。
+     *
+     * @param logits actor 前向传播输出的 logits Variable（有 creator）
+     * @return 隐藏状态 Variable（计算图连通）
      */
-    private Variable extractHiddenState(Variable input) {
-        // 通过模型前向传播获取logits，同时提取最后一层隐藏状态
-        Variable logits = actor.predict(input);
-        NdArray logitsData = logits.getValue();
-        int[] logitsShape = logitsData.getShape().getShapeDims();
-
-        // logits shape: [batch_size, seq_len, vocab_size]
-        // 取最后一个时间步的logits作为隐藏状态的近似表示
-        // 然后通过线性投影到critic的hiddenDim
-        int batchSize = logitsShape.length >= 3 ? logitsShape[0] : 1;
-        int vocabSize = logitsShape.length >= 3 ? logitsShape[2] : logitsShape[logitsShape.length - 1];
-        int hiddenDim = critic.getHiddenDim();
-
-        // 从logits的最后一个时间步提取特征，并截断/填充到hiddenDim
-        float[] logitsBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) logitsData).buffer;
-        NdArray hiddenArray = NdArray.of(Shape.of(batchSize, hiddenDim));
-        float[] hiddenBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) hiddenArray).buffer;
-
-        int seqLen = logitsShape.length >= 3 ? logitsShape[1] : 1;
-        for (int b = 0; b < batchSize; b++) {
-            int lastStepOffset = b * seqLen * vocabSize + (seqLen - 1) * vocabSize;
-            int copyLen = Math.min(vocabSize, hiddenDim);
-            System.arraycopy(logitsBuffer, lastStepOffset, hiddenBuffer, b * hiddenDim, copyLen);
-        }
-
-        return new Variable(hiddenArray);
+    private Variable extractHiddenState(Variable logits) {
+        // 使用 mean 算子对 logits 做降维，保持计算图连通
+        // logits shape 可能是 [batch_size, seq_len, vocab_size] 或 [batch_size, vocab_size]
+        // mean 后得到 [batch_size, 1] 或标量，作为 Critic 的输入近似
+        return logits.mean(0, true);
     }
 
     public List<Float> getPolicyLossHistory() {
@@ -352,15 +382,18 @@ public class PPOTrainer extends BaseRLTrainer {
 
     /**
      * 经验缓冲区
+     *
+     * 存储旧策略的 detach 值（float）和原始输入/标签数据（NdArray），
+     * 以便 ppoUpdate 时重新前向传播构建有梯度的计算图。
      */
     private static class ExperienceBuffer {
-        float[] logProbs;
-        float[] values;
+        float[] logProbs;       // 旧策略的 logProb（detach）
+        float[] values;         // 旧 Critic 的 value（detach）
         float[] rewards;
         float[] advantages;
         float[] returns;
-        List<NdArray> logitsArray;
-        List<NdArray> hiddenStates;
+        List<NdArray> inputDataList;   // 原始输入数据，用于重新前向传播
+        List<NdArray> labelDataList;   // 原始标签数据，用于重新前向传播
         int size;
         int capacity;
 
@@ -371,24 +404,23 @@ public class PPOTrainer extends BaseRLTrainer {
             this.rewards = new float[capacity];
             this.advantages = new float[capacity];
             this.returns = new float[capacity];
-            this.logitsArray = new ArrayList<>(capacity);
-            this.hiddenStates = new ArrayList<>(capacity);
+            this.inputDataList = new ArrayList<>(capacity);
+            this.labelDataList = new ArrayList<>(capacity);
             this.size = 0;
         }
 
-        void add(float logProb, float value, float reward, NdArray logits, NdArray hidden) {
+        void add(float logProb, float value, float reward, NdArray inputData, NdArray labelData) {
             if (size < capacity) {
                 logProbs[size] = logProb;
                 values[size] = value;
                 rewards[size] = reward;
-                logitsArray.add(logits);
-                hiddenStates.add(hidden);
+                inputDataList.add(inputData);
+                labelDataList.add(labelData);
                 size++;
             }
         }
 
         void computeAdvantages(PPOLoss ppoLoss, PPOConfig config) {
-            // 使用GAE计算优势
             advantages = ppoLoss.computeGAE(rewards, values, 0.0f);
             returns = ppoLoss.computeReturns(advantages, values);
         }

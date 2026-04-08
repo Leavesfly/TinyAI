@@ -61,11 +61,14 @@ public class PPOLoss {
         Variable entropyLoss = computeEntropyLoss(logits);
         
         // 4. 总损失 = 策略损失 + c1*价值损失 - c2*熵损失
-        Variable totalLoss = policyLoss.add(
-            valueLoss.mul(new Variable(NdArray.of(config.getValueLossCoef())))
-        ).sub(
-            entropyLoss.mul(new Variable(NdArray.of(config.getEntropyCoef())))
-        );
+        Variable valueLossCoef = new Variable(NdArray.of(config.getValueLossCoef()));
+        valueLossCoef.setRequireGrad(false);
+        Variable entropyCoef = new Variable(NdArray.of(config.getEntropyCoef()));
+        entropyCoef.setRequireGrad(false);
+        
+        Variable totalLoss = policyLoss
+            .add(valueLoss.mul(valueLossCoef))
+            .sub(entropyLoss.mul(entropyCoef));
         
         return totalLoss;
     }
@@ -81,14 +84,14 @@ public class PPOLoss {
         Variable logRatio = newLogProbs.sub(oldLogProbs);
         Variable ratio = logRatio.exp();
 
-        // 通过计算图操作构建损失，确保梯度可以正确反向传播
-        // 使用 ratio * advantage 的均值作为策略损失的近似
+        // advantage是外部信号常量,不参与反向传播
         Variable advVar = new Variable(NdArray.of(advantages));
+        advVar.setRequireGrad(false);
+        
         Variable surrogateObj = ratio.mul(advVar).mean(0, true);
-        // 取负值（最大化目标 -> 最小化负目标）
-        Variable policyLoss = surrogateObj.mul(new Variable(NdArray.of(-1.0f)));
-
-        return policyLoss;
+        
+        // 取负值（最大化目标 → 最小化负目标）
+        return surrogateObj.neg();
     }
     
     /**
@@ -99,49 +102,17 @@ public class PPOLoss {
      */
     private Variable computeValueLoss(Variable values, float[] returns, 
                                      Variable oldValues) {
-        NdArray valuesData = values.getValue();
-        float[] valuesBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) valuesData).buffer;
-        
-        float loss = 0.0f;
-        
-        if (config.isClipValueLoss() && oldValues != null) {
-            // Clipped价值损失
-            NdArray oldValuesData = oldValues.getValue();
-            float[] oldValuesBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) oldValuesData).buffer;
-            
-            float clipEpsilon = config.getClipEpsilon();
-            
-            for (int i = 0; i < valuesBuffer.length; i++) {
-                float v = valuesBuffer[i];
-                float r = returns[i];
-                float v_old = oldValuesBuffer[i];
-                
-                // Clip价值
-                float v_clipped = v_old + Math.max(-clipEpsilon, 
-                                                   Math.min(clipEpsilon, v - v_old));
-                
-                // 两种损失取最大
-                float loss1 = (v - r) * (v - r);
-                float loss2 = (v_clipped - r) * (v_clipped - r);
-                
-                loss += Math.max(loss1, loss2);
-            }
-        } else {
-            // 标准MSE损失
-            for (int i = 0; i < valuesBuffer.length; i++) {
-                float v = valuesBuffer[i];
-                float r = returns[i];
-                loss += (v - r) * (v - r);
-            }
-        }
-        
-        // 通过计算图操作构建损失，确保梯度可以正确反向传播
+        // L_value = 0.5 * mean((V - R)^2), returns是外部信号不需要梯度
         Variable returnsVar = new Variable(NdArray.of(returns));
+        returnsVar.setRequireGrad(false);
+        
         Variable diff = values.sub(returnsVar);
-        Variable squaredDiff = diff.mul(diff);
-        Variable valueLoss = squaredDiff.mean(0, true).mul(new Variable(NdArray.of(0.5f)));
-
-        return valueLoss;
+        Variable squaredDiff = diff.squ();
+        
+        Variable half = new Variable(NdArray.of(0.5f));
+        half.setRequireGrad(false);
+        
+        return squaredDiff.mean(0, true).mul(half);
     }
     
     /**
@@ -149,18 +120,16 @@ public class PPOLoss {
      * 
      * H = -∑ p * log(p)
      */
-    private Variable computeEntropyLoss(Variable logits) {
-        // Softmax概率
-        Variable probs = softmax(logits);
+    public Variable computeEntropyLoss(Variable logits) {
+        // 使用框架内置的logSoftmax,在vocab维度(axis=-1)上计算
+        Variable logProbs = logits.logSoftmax();
         
-        // Log softmax
-        Variable logProbs = logSoftmax(logits);
+        // softMax结果detach,避免梯度通过两条路径重复回传
+        Variable probs = logits.softMax().detach();
         
-        // 熵: H = -∑ p * log(p)
-        Variable entropy = probs.mul(logProbs).mul(new Variable(NdArray.of(-1.0f)));
-        Variable meanEntropy = entropy.mean(0, true);
-        
-        return meanEntropy;
+        // 熵: H = -∑ p * log(p), p已detach,梯度只通过logProbs流回
+        Variable entropy = probs.mul(logProbs).neg();
+        return entropy.mean(-1, true);
     }
     
     /**
@@ -230,22 +199,5 @@ public class PPOLoss {
         return returns;
     }
     
-    /**
-     * Log Softmax实现
-     */
-    private Variable logSoftmax(Variable x) {
-        Variable expX = x.exp();
-        Variable sumExp = expX.sum();
-        Variable logSumExp = sumExp.log();
-        return x.sub(logSumExp);
-    }
-    
-    /**
-     * Softmax实现
-     */
-    private Variable softmax(Variable x) {
-        Variable expX = x.exp();
-        Variable sumExp = expX.sum();
-        return expX.div(sumExp);
-    }
+
 }

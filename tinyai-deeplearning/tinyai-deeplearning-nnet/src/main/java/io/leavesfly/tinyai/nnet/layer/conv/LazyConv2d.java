@@ -134,92 +134,28 @@ public class LazyConv2d extends LazyModule {
         checkLazyInitialization(inputs);
 
         Variable x = inputs[0];
-        NdArray inputData = x.getValue();
 
-        int[] dims = inputData.getShape().getShapeDims();
-        int batchSize = dims[0];
-        int inputHeight = dims[2];
-        int inputWidth = dims[3];
+        // 验证输入维度
+        int dim = x.ndim();
+        if (dim != 4) {
+            throw new IllegalArgumentException(
+                    String.format("Expected 4D input (batch, channels, height, width), but got %dD", dim));
+        }
 
-        // 计算输出尺寸
-        int outputHeight = (inputHeight + 2 * padding - kernelHeight) / stride + 1;
-        int outputWidth = (inputWidth + 2 * padding - kernelWidth) / stride + 1;
-
-        // 执行Im2Col转换
-        NdArray im2colResult = performIm2Col(inputData, batchSize, inChannels,
-                                             inputHeight, inputWidth, outputHeight, outputWidth);
-
-        // 重塑权重为二维矩阵
-        NdArray weightReshaped = reshapeWeight();
-
-        // 矩阵乘法计算卷积 - 使用Variable层级操作
-        Variable im2colVar = new Variable(im2colResult);
-        im2colVar.setRequireGrad(false);  // 中间结果不需要梯度
-        Variable weightVar = new Variable(weightReshaped.transpose());
-        weightVar.setRequireGrad(false);  // 这个临时变量不需要梯度
-        Variable output = im2colVar.matMul(weightVar);
+        // 创建底层卷积 Function（使用 Im2Col 优化实现，自动构建计算图）
+        io.leavesfly.tinyai.func.matrix.Conv2d convFunc =
+            new io.leavesfly.tinyai.func.matrix.Conv2d(stride, padding);
+        Variable output = convFunc.call(x, weight);
 
         // 添加偏置
         if (useBias) {
             output = addBias(output);
         }
 
-        // 重塑输出为4维
-        Shape outputShape = Shape.of(batchSize, outChannels, outputHeight, outputWidth);
-        output = output.reshape(outputShape);
-
         return output;
     }
 
-    /**
-     * 执行Im2Col转换
-     */
-    private NdArray performIm2Col(NdArray inputData, int batchSize, int channels,
-                                   int height, int width, int outHeight, int outWidth) {
-        int outputRows = batchSize * outHeight * outWidth;
-        int outputCols = channels * kernelHeight * kernelWidth;
 
-        float[] outputData = new float[outputRows * outputCols];
-
-        int outputRowIndex = 0;
-        for (int n = 0; n < batchSize; n++) {
-            for (int h = 0; h < outHeight; h++) {
-                for (int w = 0; w < outWidth; w++) {
-                    int colIndex = 0;
-
-                    for (int c = 0; c < channels; c++) {
-                        for (int fh = 0; fh < kernelHeight; fh++) {
-                            int imRow = h * stride + fh - padding;
-                            for (int fw = 0; fw < kernelWidth; fw++) {
-                                int imCol = w * stride + fw - padding;
-
-                                if (imRow >= 0 && imRow < height && imCol >= 0 && imCol < width) {
-                                    outputData[outputRowIndex * outputCols + colIndex] =
-                                            inputData.get(n, c, imRow, imCol);
-                                } else {
-                                    outputData[outputRowIndex * outputCols + colIndex] = 0.0f;
-                                }
-                                colIndex++;
-                            }
-                        }
-                    }
-                    outputRowIndex++;
-                }
-            }
-        }
-
-        Shape outputShape = Shape.of(outputRows, outputCols);
-        return NdArray.of(outputData, outputShape);
-    }
-
-    /**
-     * 重塑权重为二维矩阵
-     */
-    private NdArray reshapeWeight() {
-        NdArray weightData = weight.data();
-        Shape newShape = Shape.of(outChannels, inChannels * kernelHeight * kernelWidth);
-        return weightData.reshape(newShape);
-    }
 
     /**
      * 添加偏置
@@ -227,8 +163,9 @@ public class LazyConv2d extends LazyModule {
      * 使用Variable层级的加法操作
      */
     private Variable addBias(Variable output) {
-        // bias是Parameter，直接作为Variable参与运算
-        return output.add(bias);
+        int outCh = output.size(1);
+        Variable biasReshaped = bias.reshape(Shape.of(1, outCh, 1, 1));
+        return output.add(biasReshaped);
     }
 
     public int getInChannels() {

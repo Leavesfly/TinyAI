@@ -69,8 +69,9 @@ public class ExpertRouter extends Module {
     
     /**
      * 前向传播(Variable版本)
-     * 
+     * <p>
      * 委托到forwardRouter，将topKWeights打包为NdArray返回。
+     * 注意：返回的 Variable 不保持与 gateLinear 的计算图连通（topKWeights 经过了离散选择操作），
      * 如需完整路由信息(indices等)，请直接调用forwardRouter。
      */
     @Override
@@ -84,17 +85,21 @@ public class ExpertRouter extends Module {
             System.arraycopy(topKWeights[b], 0, flatWeights, b * topKSize, topKSize);
         }
         NdArray weightsArray = NdArray.of(flatWeights, Shape.of(batchSize, topKSize));
-        return new Variable(weightsArray);
+        Variable result = new Variable(weightsArray);
+        result.setRequireGrad(false);
+        return result;
     }
     
     /**
-     * 前向传播(NdArray版本)
-     * 
-     * 委托到forward(Variable...)，将输入包装为Variable后调用。
+     * 前向传播(NdArray版本，仅用于推理)
+     * <p>
+     * 注意：此方法通过 new Variable 包装输入，不保持上游计算图连通。
+     * 训练时应使用 forwardRouter(Variable) 方法。
      */
     @Override
     public NdArray forward(NdArray... inputs) {
         Variable input = new Variable(inputs[0]);
+        input.setRequireGrad(false);
         return forward(input).getValue();
     }
     

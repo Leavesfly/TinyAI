@@ -40,8 +40,8 @@ public class Where extends Function {
     @Override
     public List<NdArray> backward(NdArray yGrad) {
         // 梯度计算：
-        // dX = dY * condition (广播后)
-        // dY = dY * (1 - condition) (广播后)
+        // dX = dY * condition，然后sumTo归约回x的原始形状
+        // dY = dY * (1 - condition)，然后sumTo归约回y的原始形状
         // dCondition = 0 (条件不可导)
 
         NdArray x = inputs[1].getValue();
@@ -49,12 +49,15 @@ public class Where extends Function {
         Shape xShape = x.getShape();
         Shape yShape = y.getShape();
 
-        // 计算x和y的梯度
-        NdArray ones = NdArray.ones(condition.getShape());
-        NdArray invCond = ones.sub(condition); // 1 - condition
+        // 将condition广播到yGrad的形状（输出形状），在广播后的形状上计算梯度
+        Shape outputShape = yGrad.getShape();
+        NdArray condBroadcast = condition.broadcastTo(outputShape);
+        NdArray ones = NdArray.ones(outputShape);
+        NdArray invCond = ones.sub(condBroadcast); // 1 - condition
 
-        NdArray gradX = condition.mul(yGrad.broadcastTo(xShape));
-        NdArray gradY = invCond.mul(yGrad.broadcastTo(yShape));
+        // 先在输出形状上计算梯度，再用sumTo归约回原始输入形状
+        NdArray gradX = condBroadcast.mul(yGrad).sumTo(xShape);
+        NdArray gradY = invCond.mul(yGrad).sumTo(yShape);
 
         return Arrays.asList(
             null, // condition不可导

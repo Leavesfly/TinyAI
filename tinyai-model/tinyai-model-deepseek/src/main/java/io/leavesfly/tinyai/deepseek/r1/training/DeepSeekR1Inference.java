@@ -56,16 +56,20 @@ public class DeepSeekR1Inference extends DeepSeekBaseInference {
             int lastPos = currentSeq.length - 1;
             int nextToken = argmax(logits, 0, lastPos);  // 跳过PAD token
             generated.add(nextToken);
-
-            if (nextToken == eosTokenId) break;
             
-            // 记录推理步骤
+            // 记录推理步骤（在释放计算图前提取所需数据）
             reasoningSteps.add(new ReasoningStep(
                 i,
                 0,  // numSteps 不再可用（RL训练自然涌现）
                 0.0,  // averageConfidence 不再可用
                 result.moeLoss  // 使用 MoE 损失作为质量指标
             ));
+            
+            // 推理阶段不需要梯度，及时释放计算图防止内存泄漏
+            result.logits.unChainBackward();
+            inputVar.unChainBackward();
+
+            if (nextToken == eosTokenId) break;
         }
         
         return new GenerationResult(toIntArray(generated), reasoningSteps);
@@ -118,13 +122,17 @@ public class DeepSeekR1Inference extends DeepSeekBaseInference {
             
             int nextToken = sample(probs);
             generated.add(nextToken);
-
-            if (nextToken == eosTokenId) break;
             
             reasoningSteps.add(new ReasoningStep(
                 i, 0, 0.0,  // numSteps和confidence不再可用
                 result.moeLoss  // 使用 MoE 损失作为质量指标
             ));
+            
+            // 推理阶段不需要梯度，及时释放计算图防止内存泄漏
+            result.logits.unChainBackward();
+            inputVar.unChainBackward();
+
+            if (nextToken == eosTokenId) break;
         }
         
         return new GenerationResult(toIntArray(generated), reasoningSteps);

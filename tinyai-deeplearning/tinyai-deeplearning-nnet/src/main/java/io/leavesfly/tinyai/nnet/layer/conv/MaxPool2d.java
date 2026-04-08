@@ -1,8 +1,6 @@
 package io.leavesfly.tinyai.nnet.layer.conv;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.core.Module;
 
 /**
@@ -87,68 +85,18 @@ public class MaxPool2d extends Module {
     @Override
     public Variable forward(Variable... inputs) {
         Variable x = inputs[0];
-        // 使用Variable的形状属性
+
+        // 验证输入维度
         int dim = x.ndim();
         if (dim != 4) {
             throw new IllegalArgumentException(
                     String.format("Expected 4D input (batch, channels, height, width), but got %dD", dim));
         }
 
-        int batchSize = x.size(0);
-        int channels = x.size(1);
-        int height = x.size(2);
-        int width = x.size(3);
-
-        // 计算输出尺寸
-        int outputHeight = (height + 2 * padding - kernelHeight) / stride + 1;
-        int outputWidth = (width + 2 * padding - kernelWidth) / stride + 1;
-
-        // 执行最大池化（需要复杂的索引操作）
-        NdArray inputData = x.getValue();
-        NdArray output = performMaxPooling(inputData, batchSize, channels,
-                                          height, width, outputHeight, outputWidth);
-
-        // 返回新的Variable
-        Variable result = new Variable(output);
-        result.setRequireGrad(x.isRequireGrad());  // 继承梯度设置
-        return result;
-    }
-
-    /**
-     * 执行最大池化操作
-     */
-    private NdArray performMaxPooling(NdArray inputData, int batchSize, int channels,
-                                      int height, int width, int outHeight, int outWidth) {
-        Shape outputShape = Shape.of(batchSize, channels, outHeight, outWidth);
-        float[] outputData = new float[batchSize * channels * outHeight * outWidth];
-
-        for (int n = 0; n < batchSize; n++) {
-            for (int c = 0; c < channels; c++) {
-                for (int oh = 0; oh < outHeight; oh++) {
-                    for (int ow = 0; ow < outWidth; ow++) {
-                        float maxVal = Float.NEGATIVE_INFINITY;
-
-                        // 在池化窗口内找最大值
-                        for (int ph = 0; ph < kernelHeight; ph++) {
-                            for (int pw = 0; pw < kernelWidth; pw++) {
-                                int ih = oh * stride + ph - padding;
-                                int iw = ow * stride + pw - padding;
-
-                                if (ih >= 0 && ih < height && iw >= 0 && iw < width) {
-                                    float val = inputData.get(n, c, ih, iw);
-                                    maxVal = Math.max(maxVal, val);
-                                }
-                            }
-                        }
-
-                        int outputIndex = ((n * channels + c) * outHeight + oh) * outWidth + ow;
-                        outputData[outputIndex] = maxVal == Float.NEGATIVE_INFINITY ? 0.0f : maxVal;
-                    }
-                }
-            }
-        }
-
-        return NdArray.of(outputData, outputShape);
+        // 创建池化 Function 并通过 call 自动构建计算图
+        io.leavesfly.tinyai.func.matrix.MaxPool2d poolFunc =
+            new io.leavesfly.tinyai.func.matrix.MaxPool2d(kernelHeight, kernelWidth, stride, padding);
+        return poolFunc.call(x);
     }
 
     public int getKernelHeight() {

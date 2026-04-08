@@ -84,14 +84,19 @@ public class DeepSeekV3Inference extends DeepSeekBaseInference {
             // 使用采样策略选择下一个token
             int nextToken = strategy.sampleToken(logits, seqLen, vocabSize);
             generated.add(nextToken);
-
-            if (nextToken == eosTokenId) break;
             
+            // 记录推理步骤（在释放计算图前提取所需数据）
             reasoningSteps.add(new ReasoningStep(
                 i,
                 0.0,  // confidence不再可用（MoE自然涌现）
                 result.avgMoELoss
             ));
+            
+            // 推理阶段不需要梯度，及时释放计算图防止内存泄漏
+            result.logits.unChainBackward();
+            inputVar.unChainBackward();
+
+            if (nextToken == eosTokenId) break;
         }
         
         return new GenerationResult(toIntArray(generated), reasoningSteps);

@@ -34,6 +34,9 @@ public class PositionalEncoding extends Module {
     private final int maxLen;
     private final float dropout;
 
+    /** 缓存的位置编码 Variable，避免每次 forward 都创建新对象 */
+    private transient Variable cachedPeVar;
+
     /**
      * 构造函数
      *
@@ -51,6 +54,10 @@ public class PositionalEncoding extends Module {
         // 预计算位置编码并注册为缓冲区
         NdArray pe = createPositionalEncoding();
         registerBuffer("pe", pe);
+
+        // 缓存位置编码 Variable（不参与梯度计算）
+        this.cachedPeVar = new Variable(pe);
+        this.cachedPeVar.setRequireGrad(false);
 
         init();
     }
@@ -111,20 +118,16 @@ public class PositionalEncoding extends Module {
     @Override
     public Variable forward(Variable... inputs) {
         Variable x = inputs[0];
-        // 获取形状信息用于控制流和验证，这是允许的
-        NdArray inputData = x.getValue();
-        int[] dims = inputData.getShape().getShapeDims();
 
-        // 输入形状检查：(batch_size, seq_len, d_model)
-        if (dims.length != 3) {
+        // 使用 Variable 的形状方法进行验证
+        int ndim = x.ndim();
+        if (ndim != 3) {
             throw new IllegalArgumentException(
-                    String.format("Expected 3D input (batch, seq_len, d_model), but got shape %s",
-                            inputData.getShape()));
+                    String.format("Expected 3D input (batch, seq_len, d_model), but got %dD", ndim));
         }
 
-        int batchSize = dims[0];
-        int seqLen = dims[1];
-        int modelDim = dims[2];
+        int seqLen = x.size(1);
+        int modelDim = x.size(2);
 
         if (modelDim != dModel) {
             throw new IllegalArgumentException(
@@ -136,23 +139,12 @@ public class PositionalEncoding extends Module {
                     String.format("Sequence length %d exceeds maximum length %d", seqLen, maxLen));
         }
 
-        // 获取位置编码
-        NdArray pe = getBuffer("pe");
+        // 使用 Variable 的 sliceRange 方法切片位置编码，保持计算图连通
+        // cachedPeVar 形状: (maxLen, dModel) -> 切片为 (seqLen, dModel)
+        Variable peSlice = cachedPeVar.sliceRange(0, 0, seqLen);
 
-        // 提取对应序列长度的位置编码 (seqLen, dModel)
-        // 这里需要直接操作NdArray来切片数据
-        float[] peSlice = new float[seqLen * dModel];
-        float[] peArray = pe.getArray();
-        System.arraycopy(peArray, 0, peSlice, 0, seqLen * dModel);
-        NdArray peSeq = NdArray.of(peSlice, Shape.of(seqLen, dModel));
-
-        // 将位置编码添加到输入
-        // 需要广播到batch维度
-        Variable peVar = new Variable(peSeq);
-        peVar.setRequireGrad(false);  // 位置编码不需要梯度
-
-        // 添加位置编码到输入 - 使用Variable层级的add操作
-        Variable output = x.add(peVar);
+        // 添加位置编码到输入（广播到 batch 维度）
+        Variable output = x.add(peSlice);
 
         // 应用dropout（训练模式）
         if (isTraining() && dropout > 0) {

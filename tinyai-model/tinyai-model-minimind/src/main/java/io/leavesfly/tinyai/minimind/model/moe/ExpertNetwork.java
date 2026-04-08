@@ -77,7 +77,10 @@ public class ExpertNetwork extends Module {
     }
     
     /**
-     * 前向传播(Function接口)
+     * 前向传播(NdArray接口，仅用于推理)
+     * <p>
+     * 注意：此方法通过 new Variable 包装输入，不保持上游计算图连通。
+     * 训练时应使用 forwardVar(Variable) 方法。
      * 
      * @param inputs 输入数组
      * @return 输出NdArray
@@ -85,17 +88,8 @@ public class ExpertNetwork extends Module {
     @Override
     public NdArray forward(NdArray... inputs) {
         Variable input = new Variable(inputs[0]);
-        
-        // Layer 1
-        Variable h1 = fc1.forward(input);
-        
-        // Activation
-        Variable activated = activation.forward(h1);
-        
-        // Layer 2
-        Variable output = fc2.forward(activated);
-        
-        return output.getValue();
+        input.setRequireGrad(false);
+        return forwardVar(input).getValue();
     }
     
     /**

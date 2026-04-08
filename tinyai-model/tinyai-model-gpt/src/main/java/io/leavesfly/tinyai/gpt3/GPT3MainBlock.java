@@ -102,25 +102,15 @@ public class GPT3MainBlock extends Module {
         // 1. Token嵌入
         Variable x = tokenEmbedding.forward(tokenIds);  // (batch_size, seq_len, n_embd)
 
-        // 2. 通过所有 Transformer 块（支持梯度检查点）
+        // 2. 通过所有 Transformer 块
+        // 注意：gradientCheckpointing 配置项当前保留但不截断计算图。
+        // 原实现通过 new Variable(blockOutput.getValue()) 截断计算图来节省显存，
+        // 但由于框架尚不支持"重计算"钩子（参考 PyTorch checkpoint()），
+        // 截断后梯度无法回传，导致训练时该层之前的参数完全无法更新。
+        // 正确的梯度检查点需要在反向传播时重新执行前向以恢复中间激活，
+        // 待框架支持后再启用此优化。
         for (int i = 0; i < transformerBlocks.size(); i++) {
-            GPT3TransformerBlock block = transformerBlocks.get(i);
-
-            if (config.isGradientCheckpointing() && isTraining()) {
-                // 梯度检查点：截断计算图，反向传播时重新计算本层前向
-                // 实现原理：
-                //   1. 正常执行前向传播（获得正确输出值）
-                //   2. 将输出包装为新 Variable，断开与上游计算图的连接
-                //   3. 反向传播到此处时，需重新执行本层前向以恢复中间激活
-                // 当前实现：截断计算图（节省显存），牺牲梯度精确流通的能力
-                // 完整实现需框架支持"重计算"钩子（参考 PyTorch checkpoint()）
-                Variable blockOutput = block.forward(x);
-                Variable checkpointVar = new Variable(blockOutput.getValue());
-                checkpointVar.setRequireGrad(x.isRequireGrad());
-                x = checkpointVar;
-            } else {
-                x = block.forward(x);
-            }
+            x = transformerBlocks.get(i).forward(x);
         }
 
         // 3. 最终 LayerNorm

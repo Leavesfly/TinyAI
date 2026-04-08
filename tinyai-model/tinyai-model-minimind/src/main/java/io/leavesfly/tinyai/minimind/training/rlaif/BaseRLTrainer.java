@@ -3,6 +3,7 @@ package io.leavesfly.tinyai.minimind.training.rlaif;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
 import io.leavesfly.tinyai.minimind.training.BaseTrainer;
+import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.core.Parameter;
 
 import java.util.Map;
@@ -30,29 +31,41 @@ public abstract class BaseRLTrainer extends BaseTrainer {
     }
     
     /**
-     * Log Softmax
+     * Log Softmax（使用框架内置实现,在vocab维度axis=-1上计算）
      * 
      * @param x 输入变量
      * @return 对数 softmax 结果
      */
     protected Variable logSoftmax(Variable x) {
-        Variable expX = x.exp();
-        Variable sumExp = expX.sum();
-        Variable logSumExp = sumExp.log();
-        return x.sub(logSumExp);
+        return x.logSoftmax();
     }
     
     /**
-     * 计算对数概率
+     * 计算对数概率: log π(y|x)
      * 
-     * @param logits logit 输出
-     * @param labels 标签
-     * @return 对数概率
+     * 通过 softmaxCrossEntropy 正确计算 token 级别的对数概率,
+     * 内部完成 logSoftmax → gather(labels) → NLL,保持计算图连通。
+     * 
+     * @param logits logit 输出 [batch_size, seq_len, vocab_size]
+     * @param labels 标签 [batch_size, seq_len]
+     * @return 平均对数概率(标量Variable)
      */
     protected Variable computeLogProb(Variable logits, Variable labels) {
-        Variable logProbs = logSoftmax(logits);
-        Variable meanLogProb = logProbs.mean(0, true);
-        return meanLogProb;
+        // SoftmaxCE 只支持 2 维输入 [N, vocab_size]
+        // 如果 logits 是 3 维 [batch_size, seq_len, vocab_size]，需要先 reshape 成 2 维
+        int dims = logits.getValue().getShape().getDimNum();
+        Variable flatLogits = logits;
+        Variable flatLabels = labels;
+        if (dims == 3) {
+            int[] shape = logits.getValue().getShape().getShapeDims();
+            int batchSize = shape[0];
+            int seqLen = shape[1];
+            int vocabSize = shape[2];
+            flatLogits = logits.reshape(Shape.of(batchSize * seqLen, vocabSize));
+            flatLabels = labels.reshape(Shape.of(batchSize * seqLen, 1));
+        }
+        Variable crossEntropy = flatLogits.softmaxCrossEntropy(flatLabels);
+        return crossEntropy.neg();
     }
     
     /**

@@ -10,7 +10,6 @@ import io.leavesfly.tinyai.minimind.training.dataset.DPODataset;
 import io.leavesfly.tinyai.minimind.training.dataset.RLAIFDataset;
 import io.leavesfly.tinyai.minimind.training.rlaif.grpo.GRPOConfig;
 import io.leavesfly.tinyai.minimind.training.rlaif.grpo.GRPOTrainer;
-import io.leavesfly.tinyai.minimind.training.rlaif.ppo.ValueNetwork;
 import io.leavesfly.tinyai.minimind.training.dataset.PretrainDataset;
 import io.leavesfly.tinyai.minimind.training.dataset.SFTDataset;
 import io.leavesfly.tinyai.minimind.training.dpo.DPOConfig;
@@ -277,12 +276,9 @@ public class DemoTrainingStages {
         System.out.println("  ✓ Clip范围: " + grpoConfig.getClipEpsilon());
         System.out.println("  ✓ GRPO轮数: " + grpoConfig.getGrpoEpochs());
 
-        // 4. 创建Critic网络(可选,这里简化为null)
+        // 4. 创建GRPO训练器（GRPO不需要Critic网络）
         System.out.println("\n📝 创建训练器...");
-        ValueNetwork critic = null;  // 简化版本不使用critic
-
-        // 5. 创建GRPO训练器
-        GRPOTrainer trainer = new GRPOTrainer(model, critic, dataset, grpoConfig);
+        GRPOTrainer trainer = new GRPOTrainer(model, dataset, grpoConfig);
         trainer.configure(3, 10);  // 3 epochs, 每10步打印一次
         trainer.setCheckpointDir(CHECKPOINT_DIR + "/grpo");
 

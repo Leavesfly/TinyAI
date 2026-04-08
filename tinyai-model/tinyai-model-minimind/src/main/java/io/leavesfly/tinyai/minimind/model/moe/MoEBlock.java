@@ -110,10 +110,12 @@ public class MoEBlock extends Module {
 
     /**
      * 前向传播(接收外部RouterOutput,避免重复路由)
+     * <p>
+     * 通过 Variable 算子完成加权合并，保持计算图连通，支持梯度回传。
      * 
-     * @param input 输入 [batch_size, input_dim]
+     * @param input 输入 [batch_size, input_dim] 或 [batch_size, seq_len, input_dim]
      * @param routerOutput 已计算好的路由结果
-     * @return 输出 [batch_size, output_dim]
+     * @return 输出，形状与输入一致（最后一维为 output_dim）
      */
     public Variable forwardWithRouterOutput(Variable input, ExpertRouter.RouterOutput routerOutput) {
         // 支持3D输入 [batch_size, seq_len, input_dim] -> reshape为 [batch_size * seq_len, input_dim]
@@ -129,76 +131,42 @@ public class MoEBlock extends Module {
         int[][] topKIndices = routerOutput.getTopKIndices();
         float[][] topKWeights = routerOutput.getTopKWeights();
         
-        // 准备输出变量 (初始化为零)
-        Variable output = Variable.zeros(Shape.of(batchSize, outputDim));
+        // 逐样本通过 Variable 算子加权合并专家输出，保持计算图连通
+        Variable[] sampleOutputs = new Variable[batchSize];
         
-        // 按专家分组：为每个专家收集需要处理的样本索引和对应的权重
-        // expertInputs[e] 存储专家 e 需要处理的样本索引列表
-        // expertWeights[e] 存储专家 e 对应样本的权重列表
-        List<List<Integer>> expertBatchIndices = new ArrayList<>(numExperts);
-        List<List<Float>> expertBatchWeights = new ArrayList<>(numExperts);
-        
-        for (int e = 0; e < numExperts; e++) {
-            expertBatchIndices.add(new ArrayList<>());
-            expertBatchWeights.add(new ArrayList<>());
-        }
-        
-        // 遍历所有样本，按路由结果分组
         for (int b = 0; b < batchSize; b++) {
+            // 提取当前样本的输入: [1, input_dim]
+            Variable sampleIndexVar = new Variable(NdArray.of(new float[]{b}));
+            sampleIndexVar.setRequireGrad(false);
+            Variable sampleInput = flatInput.indexSelect(0, sampleIndexVar);
+            
+            // 对该样本的 topK 个专家加权求和
+            Variable sampleOutput = null;
             for (int k = 0; k < topK; k++) {
                 int expertIdx = topKIndices[b][k];
                 float weight = topKWeights[b][k];
                 
-                expertBatchIndices.get(expertIdx).add(b);
-                expertBatchWeights.get(expertIdx).add(weight);
-                
                 // 更新统计
                 expertUsageCount[expertIdx]++;
+                
+                // 调用专家前向传播: [1, input_dim] -> [1, output_dim]
+                ExpertNetwork expert = experts.get(expertIdx);
+                Variable expertOutput = expert.forwardVar(sampleInput);
+                
+                // 加权: expertOutput * weight（通过 Variable.mul 保持计算图）
+                Variable weightVar = new Variable(NdArray.of(new float[]{weight}));
+                weightVar.setRequireGrad(false);
+                Variable weightedOutput = expertOutput.mul(weightVar);
+                
+                // 累加（通过 Variable.add 保持计算图）
+                sampleOutput = (sampleOutput == null) ? weightedOutput : sampleOutput.add(weightedOutput);
             }
+            
+            sampleOutputs[b] = sampleOutput;
         }
         
-        // 按专家批量处理
-        for (int e = 0; e < numExperts; e++) {
-            List<Integer> batchIndices = expertBatchIndices.get(e);
-            List<Float> batchWeights = expertBatchWeights.get(e);
-            
-            if (batchIndices.isEmpty()) {
-                continue;  // 该专家没有被选中
-            }
-            
-            // 批量提取该专家需要处理的样本
-            int expertBatchSize = batchIndices.size();
-            float[] indicesArray = new float[expertBatchSize];
-            for (int i = 0; i < expertBatchSize; i++) {
-                indicesArray[i] = batchIndices.get(i);
-            }
-            
-            Variable indicesVar = new Variable(NdArray.of(indicesArray));
-            indicesVar.setRequireGrad(false);
-            Variable expertInput = flatInput.indexSelect(0, indicesVar);  // [expert_batch_size, input_dim]
-            
-            // 批量调用专家
-            ExpertNetwork expert = experts.get(e);
-            Variable expertOutput = expert.forwardVar(expertInput);  // [expert_batch_size, output_dim]
-            
-            // 加权并合并到总输出
-            NdArray outputData = output.getValue();
-            NdArray expertOutputData = expertOutput.getValue();
-            float[] outputBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) outputData).buffer;
-            float[] expertBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) expertOutputData).buffer;
-            
-            for (int i = 0; i < expertBatchSize; i++) {
-                int sampleIdx = batchIndices.get(i);
-                float weight = batchWeights.get(i);
-                
-                // 将专家输出加权后写入对应样本位置
-                for (int d = 0; d < outputDim; d++) {
-                    int expertOffset = i * outputDim + d;
-                    int outputOffset = sampleIdx * outputDim + d;
-                    outputBuffer[outputOffset] += expertBuffer[expertOffset] * weight;
-                }
-            }
-        }
+        // 将所有样本的输出拼接为 [batchSize, outputDim]
+        Variable output = Variable.cat(sampleOutputs, 0);
         
         totalCalls += batchSize;
         

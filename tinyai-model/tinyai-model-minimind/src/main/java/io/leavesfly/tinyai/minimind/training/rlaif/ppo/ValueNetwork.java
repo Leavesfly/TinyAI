@@ -94,30 +94,19 @@ public class ValueNetwork extends Module {
      * @return 价值估计序列 [batch_size, seq_len, 1]
      */
     public Variable forwardSequence(Variable hiddenStates) {
-        NdArray hiddenData = hiddenStates.getValue();
-        int[] shape = hiddenData.getShape().getShapeDims();
+        int[] shape = hiddenStates.getValue().getShape().getShapeDims();
         int batchSize = shape[0];
         int seqLen = shape[1];
         int dim = shape[2];
 
-        // 将源数据拷贝到 reshape 后的数组中，保留实际数据
-        float[] srcBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) hiddenData).buffer;
-        NdArray reshapedData = NdArray.of(Shape.of(batchSize * seqLen, dim));
-        float[] dstBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) reshapedData).buffer;
-        System.arraycopy(srcBuffer, 0, dstBuffer, 0, srcBuffer.length);
-
-        Variable reshaped = new Variable(reshapedData);
+        // 使用Variable.reshape()保持计算图连通,梯度可以正确回传
+        Variable reshaped = hiddenStates.reshape(Shape.of(batchSize * seqLen, dim));
 
         // 前向传播，得到 [batch_size*seq_len, 1]
         Variable values = forward(reshaped);
 
-        // 将结果数据拷贝到目标 shape 中
-        float[] valuesBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) values.getValue()).buffer;
-        NdArray resultData = NdArray.of(Shape.of(batchSize, seqLen, 1));
-        float[] resultBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) resultData).buffer;
-        System.arraycopy(valuesBuffer, 0, resultBuffer, 0, valuesBuffer.length);
-
-        return new Variable(resultData);
+        // 使用Variable.reshape()恢复原始batch维度,保持计算图连通
+        return values.reshape(Shape.of(batchSize, seqLen, 1));
     }
     
     /**

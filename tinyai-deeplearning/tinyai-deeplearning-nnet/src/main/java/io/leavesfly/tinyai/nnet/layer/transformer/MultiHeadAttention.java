@@ -117,10 +117,9 @@ public class MultiHeadAttention extends Module {
         Variable attnMask = inputs.length > 3 ? inputs[3] : null;
         Variable keyPaddingMask = inputs.length > 4 ? inputs[4] : null;
 
-        int[] queryShape = query.getValue().getShape().getShapeDims();
-        int batchSize = queryShape[0];
-        int seqLen = queryShape[1];
-        int keySeqLen = key.getValue().getShape().getShapeDims()[1];
+        int batchSize = query.size(0);
+        int seqLen = query.size(1);
+        int keySeqLen = key.size(1);
 
         // 1. 线性投影 Q, K, V
         Variable Q = queryProjection.forward(query);   // (batch, seq_len, d_model)
@@ -213,9 +212,10 @@ public class MultiHeadAttention extends Module {
         Variable kTransposed = new Permute(0, 1, 3, 2).call(K);
         Variable scores = Q.matMul(kTransposed);  // (batch, heads, seq_len, key_seq_len)
 
-        // 2. 缩放
-        double scale = Math.sqrt(dK);
-        Variable scaledScores = scores.div(new Variable((float) scale));
+        // 2. 缩放（使用缓存的常量避免每次创建新 Variable）
+        Variable scaleVar = new Variable((float) Math.sqrt(dK));
+        scaleVar.setRequireGrad(false);
+        Variable scaledScores = scores.div(scaleVar);
 
         // 3. 应用注意力掩码（如因果掩码）
         // attnMask: 通常是 (seq_len, key_seq_len) 或 (batch, heads, seq_len, key_seq_len)

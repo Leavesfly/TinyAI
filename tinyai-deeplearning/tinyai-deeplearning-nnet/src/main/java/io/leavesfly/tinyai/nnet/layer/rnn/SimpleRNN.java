@@ -30,7 +30,8 @@ public class SimpleRNN extends Module {
     private Parameter b;     // 偏置
 
     // 状态缓冲区
-    private NdArray hiddenState;  // 隐藏状态 h_t
+    private NdArray hiddenState;  // 隐藏状态 h_t（用于序列化和状态保存）
+    private transient Variable hiddenStateVar;  // 隐藏状态 Variable（用于计算图）
 
     private final int inputSize;
     private final int hiddenSize;
@@ -113,6 +114,7 @@ public class SimpleRNN extends Module {
      */
     public void resetState() {
         hiddenState = null;
+        hiddenStateVar = null;
         _buffers.put("hidden_state", null);
     }
 
@@ -125,21 +127,24 @@ public class SimpleRNN extends Module {
         if (hiddenState == null || hiddenState.getShape().getDimension(0) != batchSize) {
             hiddenState = NdArray.zeros(Shape.of(batchSize, hiddenSize));
             _buffers.put("hidden_state", hiddenState);
+            
+            // 同时初始化 Variable，用于计算图
+            hiddenStateVar = new Variable(hiddenState);
+            hiddenStateVar.setRequireGrad(false);
         }
     }
 
     @Override
     public Variable forward(Variable... inputs) {
         Variable x = inputs[0];
-        // 获取batch_size用于初始化状态，这是允许的
-        int batchSize = x.getValue().getShape().getDimension(0);
+        // 获取batch_size用于初始化状态，使用 Variable 的 size 方法
+        int batchSize = x.size(0);
 
         // 初始化状态
         initializeStateIfNeeded(batchSize);
 
-        // 将状态转为Variable进行计算
-        Variable h = new Variable(hiddenState);
-        h.setRequireGrad(false);  // 状态不需要梯度（在这个实现中）
+        // 直接使用 hiddenStateVar 参与计算，保持计算图连接
+        Variable h = hiddenStateVar;
 
         // 计算新的隐藏状态: h_t = activation(W_ih @ x_t + W_hh @ h_{t-1} + b)
         // 使用Variable层级的操作
@@ -152,7 +157,9 @@ public class SimpleRNN extends Module {
         // 应用激活函数
         h_new = applyActivation(h_new);
 
-        // 更新缓冲区状态（这里需要获取NdArray来更新状态，是合理的）
+        // 更新状态：使用 detach 断开历史计算图，避免无限增长
+        hiddenStateVar = h_new.detach();
+        // 同步更新 buffer（用于序列化和状态保存）
         hiddenState = h_new.getValue();
         _buffers.put("hidden_state", hiddenState);
 
@@ -193,6 +200,9 @@ public class SimpleRNN extends Module {
     public void setHiddenState(NdArray hiddenState) {
         this.hiddenState = hiddenState;
         _buffers.put("hidden_state", hiddenState);
+        // 同时更新 Variable
+        this.hiddenStateVar = new Variable(hiddenState);
+        this.hiddenStateVar.setRequireGrad(false);
     }
 
     public int getInputSize() {

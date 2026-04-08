@@ -3,9 +3,9 @@ package io.leavesfly.tinyai.vla.encoder;
 import io.leavesfly.tinyai.vla.model.VisionInput;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.v2.layer.conv.Conv2d;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.layer.conv.Conv2d;
 
 /**
  * 视觉编码器

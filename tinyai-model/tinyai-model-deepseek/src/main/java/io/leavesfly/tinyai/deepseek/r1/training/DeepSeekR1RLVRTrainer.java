@@ -8,11 +8,7 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.optimize.SGD;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 
-import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.*;
 
 /**

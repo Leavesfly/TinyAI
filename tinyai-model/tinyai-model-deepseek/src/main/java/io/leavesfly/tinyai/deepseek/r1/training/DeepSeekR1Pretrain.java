@@ -11,12 +11,8 @@ import io.leavesfly.tinyai.ml.optimize.SGD;
 import io.leavesfly.tinyai.ml.training.parallel.ParallelTrainingUtils;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import io.leavesfly.tinyai.nnet.core.Parameter;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;

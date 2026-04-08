@@ -12,10 +12,10 @@ import io.leavesfly.tinyai.ml.loss.Loss;
 import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
 import io.leavesfly.tinyai.ml.optimize.Optimizer;
 import io.leavesfly.tinyai.ml.optimize.SGD;
-import io.leavesfly.tinyai.nnet.v2.container.Sequential;
-import io.leavesfly.tinyai.nnet.v2.layer.activation.ReLU;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.v2.init.Initializers;
+import io.leavesfly.tinyai.nnet.container.Sequential;
+import io.leavesfly.tinyai.nnet.layer.activation.ReLU;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.init.Initializers;
 
 /**
  * 手写数字识别示例 - V2 API版本

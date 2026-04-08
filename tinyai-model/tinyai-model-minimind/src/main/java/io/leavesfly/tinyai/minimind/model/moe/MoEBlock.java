@@ -3,7 +3,7 @@ package io.leavesfly.tinyai.minimind.model.moe;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
+import io.leavesfly.tinyai.nnet.core.Module;
 
 import java.util.ArrayList;
 import java.util.List;

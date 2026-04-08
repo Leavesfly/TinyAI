@@ -273,9 +273,9 @@ tinyai-deeplearning-nnet/
 #### 1. 创建基础全连接网络
 
 ```java
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.v2.layer.activation.ReLU;
+import core.io.leavesfly.tinyai.nnet.Module;
+import dnn.layer.io.leavesfly.tinyai.nnet.Linear;
+import activation.layer.io.leavesfly.tinyai.nnet.ReLU;
 import io.leavesfly.tinyai.func.Variable;
 
 // 定义模型
@@ -283,21 +283,21 @@ class SimpleNet extends Module {
     private final Linear fc1;
     private final ReLU relu;
     private final Linear fc2;
-    
+
     public SimpleNet(String name, int inputSize, int hiddenSize, int outputSize) {
         super(name);
-        
+
         // 创建层
         fc1 = new Linear("fc1", inputSize, hiddenSize);
         relu = new ReLU("relu");
         fc2 = new Linear("fc2", hiddenSize, outputSize);
-        
+
         // 注册子模块
         registerModule("fc1", fc1);
         registerModule("relu", relu);
         registerModule("fc2", fc2);
     }
-    
+
     @Override
     public Variable forward(Variable... inputs) {
         Variable x = inputs[0];
@@ -308,37 +308,37 @@ class SimpleNet extends Module {
     }
 }
 
-// 使用模型
-SimpleNet model = new SimpleNet("simple_net", 784, 256, 10);
+    // 使用模型
+    SimpleNet model = new SimpleNet("simple_net", 784, 256, 10);
 model.train();  // 训练模式
-Variable output = model.forward(input);
+        Variable output=model.forward(input);
 ```
 
 #### 2. 使用Sequential容器
 
 ```java
-import io.leavesfly.tinyai.nnet.v2.container.Sequential;
 
-Sequential model = new Sequential("mlp");
-model.add(new Linear("fc1", 784, 256));
-model.add(new ReLU("relu1"));
-model.add(new Dropout("dropout", 0.5f));
-model.add(new Linear("fc2", 256, 128));
-model.add(new ReLU("relu2"));
-model.add(new Linear("fc3", 128, 10));
 
-model.train();
-Variable output = model.forward(input);
+Sequential model=new Sequential("mlp");
+        model.add(new Linear("fc1",784,256));
+        model.add(new ReLU("relu1"));
+        model.add(new Dropout("dropout",0.5f));
+        model.add(new Linear("fc2",256,128));
+        model.add(new ReLU("relu2"));
+        model.add(new Linear("fc3",128,10));
+
+        model.train();
+        Variable output=model.forward(input);
 ```
 
 #### 3. 使用LazyModule延迟初始化
 
 ```java
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.LazyLinear;
+
 
 // 无需指定输入维度，首次forward时自动推断
-LazyLinear fc = new LazyLinear("lazy_fc", 10);
-Variable output = fc.forward(input);  // 自动根据input的形状初始化参数
+LazyLinear fc=new LazyLinear("lazy_fc",10);
+        Variable output=fc.forward(input);  // 自动根据input的形状初始化参数
 ```
 
 ---
@@ -475,7 +475,7 @@ Transformer transformer = new Transformer(
 Variable output = transformer.forward(srcInput, tgtInput);
 ```
 
-更多示例请参考 [examples目录](src/main/java/io/leavesfly/tinyai/nnet/v2/examples/)。
+更多示例请参考 [examples目录](src/main/java/io/leavesfly/tinyai/nnet/examples/)。
 
 ---
 
@@ -734,16 +734,16 @@ public class MyLazyLayer extends LazyModule {
 ### 文档
 
 - [技术架构文档](doc/技术架构文档.md) - 详细的架构设计和实现原理
-- [示例代码README](src/main/java/io/leavesfly/tinyai/nnet/v2/examples/README.md) - 完整的示例说明
+- [示例代码README](src/main/java/io/leavesfly/tinyai/nnet/examples/README.md) - 完整的示例说明
 
 ### 示例代码
 
-1. [BasicUsage.java](src/main/java/io/leavesfly/tinyai/nnet/v2/examples/BasicUsage.java) - 基础使用
-2. [LazyInitialization.java](src/main/java/io/leavesfly/tinyai/nnet/v2/examples/LazyInitialization.java) - 延迟初始化
-3. [CNNClassifier.java](src/main/java/io/leavesfly/tinyai/nnet/v2/examples/CNNClassifier.java) - CNN分类器
-4. [RNNSequenceModeling.java](src/main/java/io/leavesfly/tinyai/nnet/v2/examples/RNNSequenceModeling.java) - RNN序列建模
-5. [ModelSerialization.java](src/main/java/io/leavesfly/tinyai/nnet/v2/examples/ModelSerialization.java) - 模型序列化
-6. [TransformerModel.java](src/main/java/io/leavesfly/tinyai/nnet/v2/examples/TransformerModel.java) - Transformer模型
+1. [BasicUsage.java](src/main/java/io/leavesfly/tinyai/nnet/examples/BasicUsage.java) - 基础使用
+2. [LazyInitialization.java](src/main/java/io/leavesfly/tinyai/nnet/examples/LazyInitialization.java) - 延迟初始化
+3. [CNNClassifier.java](src/main/java/io/leavesfly/tinyai/nnet/examples/CNNClassifier.java) - CNN分类器
+4. [RNNSequenceModeling.java](src/main/java/io/leavesfly/tinyai/nnet/examples/RNNSequenceModeling.java) - RNN序列建模
+5. [ModelSerialization.java](src/main/java/io/leavesfly/tinyai/nnet/examples/ModelSerialization.java) - 模型序列化
+6. [TransformerModel.java](src/main/java/io/leavesfly/tinyai/nnet/examples/TransformerModel.java) - Transformer模型
 
 ### 运行示例
 
@@ -752,7 +752,7 @@ public class MyLazyLayer extends LazyModule {
 mvn compile
 
 # 运行示例
-mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.nnet.v2.examples.BasicUsage"
+mvn exec:java -Dexec.mainClass="examples.io.leavesfly.tinyai.nnet.BasicUsage"
 
 # 运行测试
 mvn test

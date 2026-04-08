@@ -4,11 +4,11 @@ import io.leavesfly.tinyai.banana.config.BananaConfig;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.func.matrix.Permute;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
-import io.leavesfly.tinyai.nnet.v2.layer.transformer.TransformerDecoderLayer;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.dnn.Dropout;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.layer.norm.LayerNorm;
+import io.leavesfly.tinyai.nnet.layer.transformer.TransformerDecoderLayer;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -2,7 +2,6 @@ package io.leavesfly.tinyai.minimind.training;
 
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 
 import java.io.File;
 import java.io.IOException;

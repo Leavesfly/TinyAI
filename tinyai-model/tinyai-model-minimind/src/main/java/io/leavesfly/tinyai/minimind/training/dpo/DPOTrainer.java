@@ -7,7 +7,7 @@ import io.leavesfly.tinyai.minimind.training.BaseTrainer;
 import io.leavesfly.tinyai.minimind.training.dataset.DPODataset;
 import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import io.leavesfly.tinyai.nnet.core.Parameter;
 
 import java.util.ArrayList;
 import java.util.List;

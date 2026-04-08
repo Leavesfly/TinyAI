@@ -5,9 +5,8 @@ import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nl.core.NestedOptimizationLevel;
 import io.leavesfly.tinyai.nl.core.ContextFlow;
 import io.leavesfly.tinyai.nl.core.FlowDirection;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
-import java.util.Collection;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.core.Parameter;
 
 import java.util.ArrayList;
 import java.util.List;

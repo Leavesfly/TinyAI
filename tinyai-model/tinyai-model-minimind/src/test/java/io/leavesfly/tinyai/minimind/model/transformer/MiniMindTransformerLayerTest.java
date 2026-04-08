@@ -4,7 +4,7 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.minimind.model.transformer.attention.KVCache;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.util.GradientChecker;
+import io.leavesfly.tinyai.nnet.util.GradientChecker;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 

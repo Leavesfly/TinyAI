@@ -305,22 +305,14 @@ int[] combined = model.generate(tokenArray, 50, 0.8f, 40, 0.9f);
 
 ```java
 // 基础模块
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 
 // 容器
-import io.leavesfly.tinyai.nnet.v2.container.Sequential;
-import io.leavesfly.tinyai.nnet.v2.container.ModuleList;
 
 // 线性层
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
 
 // 激活函数
-import io.leavesfly.tinyai.nnet.v2.layer.activation.SiLU;
-import io.leavesfly.tinyai.nnet.v2.layer.activation.ReLU;
 
 // 归一化
-import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
 import io.leavesfly.tinyai.nnet.v2.layer.norm.Dropout;
 ```
 

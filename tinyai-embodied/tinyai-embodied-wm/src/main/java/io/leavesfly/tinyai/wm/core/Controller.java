@@ -5,10 +5,10 @@ import io.leavesfly.tinyai.wm.model.WorldModelState;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.container.Sequential;
-import io.leavesfly.tinyai.nnet.v2.layer.activation.ReLU;
-import io.leavesfly.tinyai.nnet.v2.layer.activation.Tanh;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.container.Sequential;
+import io.leavesfly.tinyai.nnet.layer.activation.ReLU;
+import io.leavesfly.tinyai.nnet.layer.activation.Tanh;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
 
 /**
  * 控制器（Controller）

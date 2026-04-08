@@ -3,7 +3,7 @@ package io.leavesfly.tinyai.minimind.model.embedding;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.func.matrix.RotaryEmbedding;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
+import io.leavesfly.tinyai.nnet.core.Module;
 
 /**
  * 旋转位置编码 (Rotary Position Embedding, RoPE)

@@ -3,8 +3,8 @@ package io.leavesfly.tinyai.ml.optimize;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.model.Model;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.core.Parameter;
 import org.junit.Before;
 import org.junit.Test;
 

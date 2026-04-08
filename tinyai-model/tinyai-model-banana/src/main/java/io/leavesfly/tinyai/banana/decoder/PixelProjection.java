@@ -2,9 +2,8 @@ package io.leavesfly.tinyai.banana.decoder;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.func.matrix.Permute;
-import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
 
 /**
  * 像素投影层 (Pixel Projection)

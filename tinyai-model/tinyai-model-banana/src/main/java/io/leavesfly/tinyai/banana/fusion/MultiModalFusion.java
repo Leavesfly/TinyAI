@@ -2,9 +2,9 @@ package io.leavesfly.tinyai.banana.fusion;
 
 import io.leavesfly.tinyai.banana.config.BananaConfig;
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.norm.LayerNorm;
+import io.leavesfly.tinyai.nnet.layer.dnn.Dropout;
 
 /**
  * 多模态融合模块

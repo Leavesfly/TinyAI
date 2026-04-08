@@ -6,8 +6,7 @@ import io.leavesfly.tinyai.minimind.model.MiniMindModel;
 import io.leavesfly.tinyai.minimind.tokenizer.MiniMindTokenizer;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.util.PlantUML;
-import io.leavesfly.tinyai.util.UmlPrinter;
+import io.leavesfly.tinyai.nnet.util.PlantUML;
 
 import java.util.Arrays;
 import java.util.List;

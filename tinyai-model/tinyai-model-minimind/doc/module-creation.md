@@ -342,7 +342,7 @@ classDiagram
 **设计原则**:
 
 1. **MiniMindModel** 继承 `io.leavesfly.tinyai.ml.Model`,作为对外统一接口
-2. **MiniMindBlock** 继承 `io.leavesfly.tinyai.nnet.v2.core.Module`,构建核心网络结构
+2. **MiniMindBlock** 继承 `core.io.leavesfly.tinyai.nnet.Module`,构建核心网络结构
 3. **优先使用 V2 组件**,如 `Linear`、`LayerNorm`、`Dropout` 等来自 `tinyai-deeplearning-nnet/v2`
 4. **避免使用 V1 组件**,除非 V2 中缺少必要功能,此时需要通过适配器桥接
 
@@ -369,10 +369,10 @@ graph TB
 
 | 组件 | 实现来源 | 具体类 | 功能描述 |
 |------|---------|--------|---------|
-| Layer Normalization | **V2 必需** | `io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm` | Pre-LN 归一化 |
+| Layer Normalization | **V2 必需** | `norm.layer.io.leavesfly.tinyai.nnet.LayerNorm` | Pre-LN 归一化 |
 | Multi-Head Attention | **自行实现** | `io.leavesfly.tinyai.minimind.model.attention.MultiHeadAttention` | 支持 RoPE、KV-Cache、因果掩码 |
-| Feed-Forward Network | **V2 必需** | `io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear` × 2 | SiLU 激活 + 两层线性变换 |
-| SiLU Activation | **V2 必需** | `io.leavesfly.tinyai.nnet.v2.layer.activation.SiLU` | Swish 激活函数 |
+| Feed-Forward Network | **V2 必需** | `dnn.layer.io.leavesfly.tinyai.nnet.Linear` × 2 | SiLU 激活 + 两层线性变换 |
+| SiLU Activation | **V2 必需** | `activation.layer.io.leavesfly.tinyai.nnet.SiLU` | Swish 激活函数 |
 | Dropout | **V2 必需** | `io.leavesfly.tinyai.nnet.v2.layer.norm.Dropout` | 正则化 |
 | Token Embedding | **自行实现** | `io.leavesfly.tinyai.minimind.model.embedding.TokenEmbedding` | 词汇表嵌入查找 |
 | RoPE | **自行实现** | `io.leavesfly.tinyai.minimind.model.embedding.RotaryPositionEmbedding` | 旋转位置编码 |
@@ -422,7 +422,7 @@ graph LR
 - 支持序列长度外推(如 YaRN 算法)
 
 **实现要求**: 
-- 继承 `io.leavesfly.tinyai.nnet.v2.core.Module`
+- 继承 `core.io.leavesfly.tinyai.nnet.Module`
 - 位置: `io.leavesfly.tinyai.minimind.model.embedding.RotaryPositionEmbedding`
 - 参考原版 MiniMind 的 RoPE 实现,确保功能一致性
 
@@ -1260,27 +1260,19 @@ POST /v1/completions
 
 ```java
 // 基础模块
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 
 // 容器
-import io.leavesfly.tinyai.nnet.v2.container.Sequential;
-import io.leavesfly.tinyai.nnet.v2.container.ModuleList;
 
 // 线性层
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
 
 // 激活函数
-import io.leavesfly.tinyai.nnet.v2.layer.activation.SiLU;
-import io.leavesfly.tinyai.nnet.v2.layer.activation.ReLU;
 
 // 归一化
-import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
 import io.leavesfly.tinyai.nnet.v2.layer.norm.Dropout;
 
 // 初始化
-import io.leavesfly.tinyai.nnet.v2.init.KaimingUniform;
-import io.leavesfly.tinyai.nnet.v2.init.Xavier;
+        import io.leavesfly.tinyai.nnet.v2.init.KaimingUniform;
+        import io.leavesfly.tinyai.nnet.v2.init.Xavier;
 ```
 
 **禁止使用的 V1 组件**:
@@ -1308,7 +1300,7 @@ import io.leavesfly.tinyai.nnet.layer.dnn.AffineLayer;  // 使用 V2 Linear 代�
 
 ```
 设计要求:
-  - 继承 io.leavesfly.tinyai.nnet.v2.core.Module
+  - 继承 core.io.leavesfly.tinyai.nnet.Module
   - Q、K、V 投影使用 V2 Linear 层
   - 输出投影使用 V2 Linear 层
   - 支持因果掩码(Causal Mask)
@@ -1354,7 +1346,7 @@ forward 方法:
 
 ```
 设计要求:
-  - 继承 io.leavesfly.tinyai.nnet.v2.core.Module
+  - 继承 core.io.leavesfly.tinyai.nnet.Module
   - 嵌入矩阵形状: [vocabSize, embeddingDim]
   - 支持权重共享(与 LM Head 共享)
 
@@ -1594,18 +1586,17 @@ gantt
 
 ### 14.1 模块继承规范
 
-**核心原则**: 所有神经网络组件必须继承 `io.leavesfly.tinyai.nnet.v2.core.Module`。
+**核心原则**: 所有神经网络组件必须继承 `core.io.leavesfly.tinyai.nnet.Module`。
 
 ```java
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import core.io.leavesfly.tinyai.nnet.Module;
 
 public class MyCustomLayer extends Module {
     public MyCustomLayer() {
         super("MyCustomLayer");
         // 初始化参数
     }
-    
+
     @Override
     public Variable forward(Variable... inputs) {
         // 实现前向传播
@@ -1753,8 +1744,9 @@ Variable outputs = model.predict(new Variable(batch.toNdArray()));
 #### Q1: 如何确认使用了 V2 组件?
 
 **A**: 检查 import 路径,必须包含 `v2`:
+
 ```java
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;  // ✅ V2
+
 import io.leavesfly.tinyai.nnet.layer.dnn.AffineLayer; // ❌ V1
 ```
 

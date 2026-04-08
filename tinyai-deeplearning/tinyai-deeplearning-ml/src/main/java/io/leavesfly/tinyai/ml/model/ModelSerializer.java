@@ -5,7 +5,7 @@ import io.leavesfly.tinyai.ml.exception.ModelSerializationException;
 import io.leavesfly.tinyai.ml.optimize.Optimizer;
 import io.leavesfly.tinyai.ml.model.parameter.ParameterOperator;
 import io.leavesfly.tinyai.ml.visual.ValidationUtils;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import io.leavesfly.tinyai.nnet.core.Parameter;
 
 import java.io.*;
 import java.util.HashMap;

@@ -8,7 +8,7 @@ import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.ml.optimize.Optimizer;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import io.leavesfly.tinyai.nnet.core.Parameter;
 
 import java.io.File;
 import java.io.IOException;

@@ -6,7 +6,7 @@ import io.leavesfly.tinyai.wm.model.LatentState;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
 
 /**
  * MDN-RNN（Mixture Density Network - Recurrent Neural Network）

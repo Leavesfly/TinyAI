@@ -8,9 +8,9 @@ import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
 import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.ml.training.Trainer;
 import io.leavesfly.tinyai.ml.visual.Monitor;
-import io.leavesfly.tinyai.nnet.v2.container.Sequential;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.v2.layer.activation.ReLU;
+import io.leavesfly.tinyai.nnet.container.Sequential;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.layer.activation.ReLU;
 
 /**
  * 并行训练测试示例

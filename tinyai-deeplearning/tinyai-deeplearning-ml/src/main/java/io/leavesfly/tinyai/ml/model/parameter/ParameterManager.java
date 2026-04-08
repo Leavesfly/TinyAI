@@ -2,10 +2,9 @@ package io.leavesfly.tinyai.ml.model.parameter;
 
 import io.leavesfly.tinyai.ml.model.Model;
 import io.leavesfly.tinyai.ml.exception.ParameterMismatchException;
-import io.leavesfly.tinyai.ml.visual.ValidationUtils;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import io.leavesfly.tinyai.nnet.core.Parameter;
 
 import java.io.*;
 import java.util.HashMap;

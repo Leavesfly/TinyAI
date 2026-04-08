@@ -7,15 +7,10 @@ import io.leavesfly.tinyai.minimind.training.dataset.SFTDataset;
 import io.leavesfly.tinyai.ml.loss.MaskedSoftmaxCELoss;
 import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import io.leavesfly.tinyai.nnet.core.Parameter;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * LoRA训练器

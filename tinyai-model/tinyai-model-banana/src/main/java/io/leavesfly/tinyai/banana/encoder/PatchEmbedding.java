@@ -3,8 +3,8 @@ package io.leavesfly.tinyai.banana.encoder;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.func.matrix.Permute;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.conv.Conv2d;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.conv.Conv2d;
 
 /**
  * Patch嵌入层

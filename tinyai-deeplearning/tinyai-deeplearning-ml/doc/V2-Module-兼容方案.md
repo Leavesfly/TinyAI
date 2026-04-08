@@ -132,7 +132,7 @@ private Shape getInputShape() {
 #### V1 vs V2 Parameter
 
 - **V1 Parameter**：`io.leavesfly.tinyai.nnet.Parameter`
-- **V2 Parameter**：`io.leavesfly.tinyai.nnet.v2.core.Parameter`
+- **V2 Parameter**：`core.io.leavesfly.tinyai.nnet.Parameter`
 
 **转换逻辑**：
 - V1 → V2：适配器自动转换
@@ -143,17 +143,15 @@ private Shape getInputShape() {
 ### 使用 V2 Module（推荐）
 
 ```java
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.container.Sequential;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
+
 
 // 创建 V2 Module
-Module v2Model = new Sequential("model")
-    .add(new Linear("fc1", 784, 128))
-    .add(new Linear("fc2", 128, 10));
+Module v2Model=new Sequential("model")
+        .add(new Linear("fc1",784,128))
+        .add(new Linear("fc2",128,10));
 
 // 直接使用 V2 Module
-Model model = new Model("myModel", v2Model);
+        Model model=new Model("myModel",v2Model);
 ```
 
 ### 使用 V1 Block（向后兼容）
@@ -183,7 +181,7 @@ Block block = model.getBlock();  // 可能为 null（如果是纯 V2 Module）
 Map<String, Parameter> params = model.getAllParams();
 
 // 获取参数（V2 格式，推荐）
-Map<String, io.leavesfly.tinyai.nnet.v2.core.Parameter> paramsV2 = model.getAllParamsV2();
+Map<String, core.io.leavesfly.tinyai.nnet.Parameter> paramsV2 = model.getAllParamsV2();
 ```
 
 ## 兼容性保证

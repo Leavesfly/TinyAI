@@ -3,11 +3,11 @@ package io.leavesfly.tinyai.example.v2;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.transformer.MultiHeadAttention;
-import io.leavesfly.tinyai.nnet.v2.layer.transformer.PositionalEncoding;
-import io.leavesfly.tinyai.nnet.v2.layer.transformer.TransformerEncoderLayer;
-import io.leavesfly.tinyai.nnet.v2.layer.transformer.TransformerDecoderLayer;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.transformer.MultiHeadAttention;
+import io.leavesfly.tinyai.nnet.layer.transformer.PositionalEncoding;
+import io.leavesfly.tinyai.nnet.layer.transformer.TransformerEncoderLayer;
+import io.leavesfly.tinyai.nnet.layer.transformer.TransformerDecoderLayer;
 
 /**
  * Transformer模型示例

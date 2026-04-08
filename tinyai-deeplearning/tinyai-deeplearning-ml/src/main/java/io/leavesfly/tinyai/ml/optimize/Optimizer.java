@@ -2,7 +2,7 @@ package io.leavesfly.tinyai.ml.optimize;
 
 import io.leavesfly.tinyai.ml.model.Model;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import io.leavesfly.tinyai.nnet.core.Parameter;
 
 import java.util.HashMap;
 import java.util.Map;

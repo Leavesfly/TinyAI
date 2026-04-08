@@ -10,10 +10,10 @@ import io.leavesfly.tinyai.ml.loss.MeanSquaredLoss;
 import io.leavesfly.tinyai.ml.optimize.Optimizer;
 import io.leavesfly.tinyai.ml.optimize.SGD;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.nnet.v2.container.Sequential;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.v2.layer.rnn.SimpleRNN;
-import io.leavesfly.tinyai.nnet.v2.init.Initializers;
+import io.leavesfly.tinyai.nnet.container.Sequential;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.layer.rnn.SimpleRNN;
+import io.leavesfly.tinyai.nnet.init.Initializers;
 
 import java.util.List;
 

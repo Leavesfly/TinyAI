@@ -1,7 +1,6 @@
 package io.leavesfly.tinyai.deepseek.v3;
 
 import io.leavesfly.tinyai.deepseek.base.DeepSeekTokenEmbeddingBase;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
 
 /**
  * DeepSeek-V3 Token嵌入层

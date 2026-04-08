@@ -2,7 +2,7 @@ package io.leavesfly.tinyai.deepseek.r1;
 
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.nnet.v2.util.PlantUML;
+import io.leavesfly.tinyai.nnet.util.PlantUML;
 import org.junit.Test;
 
 /**

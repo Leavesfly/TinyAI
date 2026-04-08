@@ -4,8 +4,8 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.minimind.model.MiniMindConfig;
 import io.leavesfly.tinyai.minimind.model.transformer.attention.KVCache;
 import io.leavesfly.tinyai.minimind.model.transformer.attention.MultiHeadAttention;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.norm.LayerNorm;
 
 /**
  * MiniMind MoE Transformer 层

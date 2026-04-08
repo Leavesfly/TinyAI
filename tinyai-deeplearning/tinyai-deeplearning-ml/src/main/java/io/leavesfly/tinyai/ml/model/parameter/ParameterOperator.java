@@ -4,7 +4,7 @@ import io.leavesfly.tinyai.ml.exception.ParameterMismatchException;
 import io.leavesfly.tinyai.ml.visual.ValidationUtils;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import io.leavesfly.tinyai.nnet.core.Parameter;
 
 /**
  * 参数操作接口，提供统一的参数复制、比较等操作，支持任意维度的参数。

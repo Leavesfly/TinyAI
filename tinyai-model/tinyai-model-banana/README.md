@@ -320,17 +320,16 @@ mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.banana.training.demo.TrainDe
 
 ```java
 // 使用TinyAI已优化的Conv2D
-import io.leavesfly.tinyai.nnet.v2.layer.conv.Conv2d;
 
 // Patch嵌入中使用卷积
-Conv2d patchConv = new Conv2d(
-    "patch_conv", 
-    imageChannels,    // 输入通道:3(RGB)
-    hiddenSize,       // 输出通道:512
-    patchSize,        // 卷积核大小:16
-    patchSize,        // 步长:16(无重叠)
-    0                 // 无padding
-);
+Conv2d patchConv=new Conv2d(
+        "patch_conv",
+        imageChannels,    // 输入通道:3(RGB)
+        hiddenSize,       // 输出通道:512
+        patchSize,        // 卷积核大小:16
+        patchSize,        // 步长:16(无重叠)
+        0                 // 无padding
+        );
 ```
 
 ### 2. Variable层面计算

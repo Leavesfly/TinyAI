@@ -4,9 +4,9 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.minimind.model.embedding.RotaryPositionEmbedding;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.dnn.Dropout;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
 
 /**
  * 多头注意力机制（Multi-Head Attention）

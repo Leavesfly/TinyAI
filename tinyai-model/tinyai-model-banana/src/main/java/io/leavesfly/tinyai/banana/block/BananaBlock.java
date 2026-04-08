@@ -8,9 +8,9 @@ import io.leavesfly.tinyai.banana.encoder.TextEncoder;
 import io.leavesfly.tinyai.banana.fusion.MultiModalFusion;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.layer.norm.LayerNorm;
 
 /**
  * Banana模型主体块

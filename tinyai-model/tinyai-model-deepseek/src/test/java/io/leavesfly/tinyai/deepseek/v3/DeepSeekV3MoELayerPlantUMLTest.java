@@ -3,7 +3,7 @@ package io.leavesfly.tinyai.deepseek.v3;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.util.PlantUML;
+import io.leavesfly.tinyai.nnet.util.PlantUML;
 import org.junit.Test;
 
 /**

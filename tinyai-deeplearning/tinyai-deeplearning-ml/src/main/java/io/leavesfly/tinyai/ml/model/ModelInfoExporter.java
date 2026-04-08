@@ -2,7 +2,7 @@ package io.leavesfly.tinyai.ml.model;
 
 import io.leavesfly.tinyai.ml.model.parameter.ParameterManager;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import io.leavesfly.tinyai.nnet.core.Parameter;
 
 import java.io.FileWriter;
 import java.io.IOException;

@@ -3,7 +3,7 @@ package io.leavesfly.tinyai.minimind.training.rlaif;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
 import io.leavesfly.tinyai.minimind.training.BaseTrainer;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import io.leavesfly.tinyai.nnet.core.Parameter;
 
 import java.util.Map;
 

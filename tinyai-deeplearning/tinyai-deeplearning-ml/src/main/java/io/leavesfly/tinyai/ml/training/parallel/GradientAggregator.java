@@ -1,7 +1,7 @@
 package io.leavesfly.tinyai.ml.training.parallel;
 
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import io.leavesfly.tinyai.nnet.core.Parameter;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;

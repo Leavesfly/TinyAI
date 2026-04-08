@@ -3,13 +3,12 @@ package io.leavesfly.tinyai.example.v2;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.rnn.LSTM;
-import io.leavesfly.tinyai.nnet.v2.layer.rnn.GRU;
-import io.leavesfly.tinyai.nnet.v2.layer.rnn.SimpleRNN;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.v2.util.PlantUML;
-import io.leavesfly.tinyai.util.UmlPrinter;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.rnn.LSTM;
+import io.leavesfly.tinyai.nnet.layer.rnn.GRU;
+import io.leavesfly.tinyai.nnet.layer.rnn.SimpleRNN;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.util.PlantUML;
 
 /**
  * RNN序列建模示例

@@ -1,11 +1,11 @@
 package io.leavesfly.tinyai.gpt3;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.activation.GELU;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.activation.GELU;
+import io.leavesfly.tinyai.nnet.layer.dnn.Dropout;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.layer.norm.LayerNorm;
 
 /**
  * GPT-3 Transformer块实现（V2 API）

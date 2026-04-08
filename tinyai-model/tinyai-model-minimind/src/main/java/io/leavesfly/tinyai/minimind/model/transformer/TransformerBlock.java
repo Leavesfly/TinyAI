@@ -3,12 +3,12 @@ package io.leavesfly.tinyai.minimind.model.transformer;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.minimind.model.transformer.attention.KVCache;
 import io.leavesfly.tinyai.minimind.model.transformer.attention.MultiHeadAttention;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.activation.ReLU;
-import io.leavesfly.tinyai.nnet.v2.layer.activation.SiLU;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.activation.ReLU;
+import io.leavesfly.tinyai.nnet.layer.activation.SiLU;
+import io.leavesfly.tinyai.nnet.layer.dnn.Dropout;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.layer.norm.LayerNorm;
 
 /**
  * MiniMind Transformer 层

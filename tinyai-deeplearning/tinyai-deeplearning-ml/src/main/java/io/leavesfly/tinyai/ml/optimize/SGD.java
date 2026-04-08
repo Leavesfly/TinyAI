@@ -1,7 +1,7 @@
 package io.leavesfly.tinyai.ml.optimize;
 
 import io.leavesfly.tinyai.ml.model.Model;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
+import io.leavesfly.tinyai.nnet.core.Parameter;
 
 /**
  * 随机梯度下降优化器

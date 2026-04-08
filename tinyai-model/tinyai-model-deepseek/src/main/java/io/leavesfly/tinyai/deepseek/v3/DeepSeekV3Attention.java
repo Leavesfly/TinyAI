@@ -5,9 +5,9 @@ import io.leavesfly.tinyai.func.matrix.Permute;
 import io.leavesfly.tinyai.func.matrix.RotaryEmbedding;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.dnn.Dropout;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
 
 /**
  * DeepSeek-V3 自注意力层（内置 RoPE 旋转位置编码）

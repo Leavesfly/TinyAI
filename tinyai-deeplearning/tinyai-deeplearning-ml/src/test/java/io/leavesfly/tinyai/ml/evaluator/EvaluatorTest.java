@@ -7,7 +7,7 @@ import io.leavesfly.tinyai.ml.dataset.DataSet;
 import io.leavesfly.tinyai.ml.loss.Classify;
 import io.leavesfly.tinyai.ml.loss.Loss;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
+import io.leavesfly.tinyai.nnet.core.Module;
 import org.junit.Before;
 import org.junit.Test;
 

@@ -2,11 +2,11 @@ package io.leavesfly.tinyai.banana.encoder;
 
 import io.leavesfly.tinyai.banana.config.BananaConfig;
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.embedding.Embedding;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Dropout;
-import io.leavesfly.tinyai.nnet.v2.layer.transformer.PositionalEncoding;
-import io.leavesfly.tinyai.nnet.v2.layer.transformer.TransformerEncoderLayer;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.embedding.Embedding;
+import io.leavesfly.tinyai.nnet.layer.dnn.Dropout;
+import io.leavesfly.tinyai.nnet.layer.transformer.PositionalEncoding;
+import io.leavesfly.tinyai.nnet.layer.transformer.TransformerEncoderLayer;
 
 import java.util.ArrayList;
 import java.util.List;

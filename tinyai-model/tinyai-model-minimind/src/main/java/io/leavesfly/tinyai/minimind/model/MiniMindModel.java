@@ -9,8 +9,8 @@ import io.leavesfly.tinyai.minimind.training.lora.LoRAConfig;
 import io.leavesfly.tinyai.minimind.training.lora.LoRALinear;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.core.Parameter;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
 
 import java.util.Arrays;
 import java.util.HashSet;

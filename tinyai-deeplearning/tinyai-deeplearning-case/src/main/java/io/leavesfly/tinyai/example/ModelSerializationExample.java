@@ -6,10 +6,10 @@ import io.leavesfly.tinyai.ml.model.ModelInfo;
 import io.leavesfly.tinyai.ml.model.ModelInfoExporter;
 import io.leavesfly.tinyai.ml.model.parameter.ParameterManager;
 import io.leavesfly.tinyai.ndarr.NdArray;
-import io.leavesfly.tinyai.nnet.v2.core.Parameter;
-import io.leavesfly.tinyai.nnet.v2.container.Sequential;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.v2.layer.activation.ReLU;
+import io.leavesfly.tinyai.nnet.core.Parameter;
+import io.leavesfly.tinyai.nnet.container.Sequential;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.layer.activation.ReLU;
 
 import java.io.File;
 import java.util.Map;

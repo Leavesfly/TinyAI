@@ -5,9 +5,9 @@ import io.leavesfly.tinyai.minimind.model.moe.MoETransformerBlock;
 import io.leavesfly.tinyai.minimind.model.transformer.attention.KVCache;
 import io.leavesfly.tinyai.minimind.model.embedding.TokenEmbedding;
 import io.leavesfly.tinyai.minimind.model.transformer.TransformerBlock;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.layer.norm.LayerNorm;
 
 import java.util.ArrayList;
 import java.util.List;

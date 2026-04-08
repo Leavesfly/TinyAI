@@ -3,9 +3,9 @@ package io.leavesfly.tinyai.vla.encoder;
 import io.leavesfly.tinyai.vla.model.ProprioceptionInput;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.v2.layer.norm.LayerNorm;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.layer.norm.LayerNorm;
 
 /**
  * 本体感知编码器

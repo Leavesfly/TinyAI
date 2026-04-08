@@ -3,8 +3,7 @@ package io.leavesfly.tinyai.gpt3;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.util.PlantUML;
-import io.leavesfly.tinyai.util.UmlPrinter;
+import io.leavesfly.tinyai.nnet.util.PlantUML;
 
 /**
  * GPT-3模型演示程序

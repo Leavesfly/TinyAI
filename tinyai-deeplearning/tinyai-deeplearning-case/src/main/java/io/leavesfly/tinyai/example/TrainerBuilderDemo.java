@@ -14,10 +14,10 @@ import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.ml.optimize.Optimizer;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
-import io.leavesfly.tinyai.nnet.v2.container.Sequential;
-import io.leavesfly.tinyai.nnet.v2.core.Module;
-import io.leavesfly.tinyai.nnet.v2.layer.activation.ReLU;
-import io.leavesfly.tinyai.nnet.v2.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.container.Sequential;
+import io.leavesfly.tinyai.nnet.core.Module;
+import io.leavesfly.tinyai.nnet.layer.activation.ReLU;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
 
 import java.util.Random;
 

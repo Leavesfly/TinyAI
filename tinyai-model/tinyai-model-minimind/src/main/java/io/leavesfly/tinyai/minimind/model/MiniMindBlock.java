@@ -88,7 +88,7 @@ public class MiniMindBlock extends Module {
             this.moeLayers = new ArrayList<>();
             for (int i = 0; i < config.getNumLayers(); i++) {
                 MoETransformerBlock layer = new MoETransformerBlock(
-                    "moe_layer_" + i, config);
+                        "moe_layer_" + i, config);
                 moeLayers.add(layer);
                 registerModule("moe_layer_" + i, layer);
             }
@@ -97,15 +97,15 @@ public class MiniMindBlock extends Module {
             this.layers = new ArrayList<>();
             for (int i = 0; i < config.getNumLayers(); i++) {
                 TransformerBlock layer = new TransformerBlock(
-                    "layer_" + i,
-                    config.getHiddenSize(),
-                    config.getNumHeads(),
-                    config.getFfnHiddenSize(),
-                    config.getMaxSeqLen(),
-                    config.getDropout(),
-                    config.getEpsilon(),
-                    config.getActivationFunction(),
-                    config.isPreLayerNorm()
+                        "layer_" + i,
+                        config.getHiddenSize(),
+                        config.getNumHeads(),
+                        config.getFfnHiddenSize(),
+                        config.getMaxSeqLen(),
+                        config.getDropout(),
+                        config.getEpsilon(),
+                        config.getActivationFunction(),
+                        config.isPreLayerNorm()
                 );
                 layers.add(layer);
                 registerModule("layer_" + i, layer);
@@ -139,9 +139,9 @@ public class MiniMindBlock extends Module {
     /**
      * 带 KV-Cache 的前向传播（返回 MoEOutput，包含负载均衡损失）
      *
-     * @param tokenIds  Token IDs,形状 [batch_size, seq_len]
-     * @param kvCaches  KV-Cache 列表（每层一个）,可为 null
-     * @param startPos  起始位置（用于 RoPE 和因果掩码）
+     * @param tokenIds Token IDs,形状 [batch_size, seq_len]
+     * @param kvCaches KV-Cache 列表（每层一个）,可为 null
+     * @param startPos 起始位置（用于 RoPE 和因果掩码）
      * @return MoE 输出结果（标准模式下 balanceLoss 为 0）
      */
     public MoEOutput forwardWithMoEOutput(Variable tokenIds, List<KVCache> kvCaches, int startPos) {
@@ -158,8 +158,9 @@ public class MiniMindBlock extends Module {
             for (int i = 0; i < moeLayers.size(); i++) {
                 MoETransformerBlock layer = moeLayers.get(i);
                 KVCache kvCache = (kvCaches != null && i < kvCaches.size()) ? kvCaches.get(i) : null;
-                MoETransformerBlock.LayerOutput layerOutput =
-                    layer.forwardWithCache(x, kvCache, startPos);
+
+                MoETransformerBlock.LayerOutput layerOutput = layer.forwardWithCache(x, kvCache, startPos);
+
                 x = layerOutput.getOutput();
                 totalBalanceLoss += layerOutput.getBalanceLoss();
             }
@@ -207,10 +208,10 @@ public class MiniMindBlock extends Module {
         List<KVCache> kvCaches = new ArrayList<>();
         for (int i = 0; i < config.getNumLayers(); i++) {
             KVCache cache = new KVCache(
-                batchSize,
-                config.getNumHeads(),
-                config.getHiddenSize() / config.getNumHeads(),
-                config.getMaxSeqLen()
+                    batchSize,
+                    config.getNumHeads(),
+                    config.getHiddenSize() / config.getNumHeads(),
+                    config.getMaxSeqLen()
             );
             kvCaches.add(cache);
         }
@@ -352,7 +353,7 @@ public class MiniMindBlock extends Module {
         // Token Embedding
         System.out.println("MiniMindBlock");
         System.out.printf("  ├── TokenEmbedding          [vocab=%d, hidden=%d]%n",
-            vocabSize, hiddenSize);
+                vocabSize, hiddenSize);
 
         // Transformer 层（后面还有 final_norm 和 lm_head，所以所有层都用 ├──）
         String layerPrefix = useMoE ? "MoETransformerLayer" : "TransformerLayer";
@@ -362,37 +363,37 @@ public class MiniMindBlock extends Module {
 
             System.out.printf("%s %s[%d]%n", layerConnector, layerPrefix, layerIndex);
             System.out.printf("%s  ├── LayerNorm(norm1)       [hidden=%d]%n",
-                childConnector, hiddenSize);
+                    childConnector, hiddenSize);
             System.out.printf("%s  ├── MultiHeadAttention     [hidden=%d, heads=%d, head_dim=%d]%n",
-                childConnector, hiddenSize, numHeads, headDim);
+                    childConnector, hiddenSize, numHeads, headDim);
             System.out.printf("%s  │     ├── Q_proj           [%d → %d]%n",
-                childConnector, hiddenSize, hiddenSize);
+                    childConnector, hiddenSize, hiddenSize);
             System.out.printf("%s  │     ├── K_proj           [%d → %d]%n",
-                childConnector, hiddenSize, hiddenSize);
+                    childConnector, hiddenSize, hiddenSize);
             System.out.printf("%s  │     ├── V_proj           [%d → %d]%n",
-                childConnector, hiddenSize, hiddenSize);
+                    childConnector, hiddenSize, hiddenSize);
             System.out.printf("%s  │     └── O_proj           [%d → %d]%n",
-                childConnector, hiddenSize, hiddenSize);
+                    childConnector, hiddenSize, hiddenSize);
             System.out.printf("%s  ├── LayerNorm(norm2)       [hidden=%d]%n",
-                childConnector, hiddenSize);
+                    childConnector, hiddenSize);
 
             if (useMoE) {
                 int numExperts = config.getNumExperts();
                 int numExpertsPerToken = config.getNumExpertsPerToken();
                 System.out.printf("%s  └── MoEBlock              [experts=%d, top_k=%d]%n",
-                    childConnector, numExperts, numExpertsPerToken);
+                        childConnector, numExperts, numExpertsPerToken);
                 System.out.printf("%s        ├── Router           [hidden=%d → %d experts]%n",
-                    childConnector, hiddenSize, numExperts);
+                        childConnector, hiddenSize, numExperts);
                 for (int expertIndex = 0; expertIndex < numExperts; expertIndex++) {
                     boolean isLastExpert = (expertIndex == numExperts - 1);
                     String expertConnector = isLastExpert ? "└──" : "├──";
                     System.out.printf("%s        %s Expert[%d]       [%d → %d → %d]%n",
-                        childConnector, expertConnector, expertIndex,
-                        hiddenSize, ffnHiddenSize, hiddenSize);
+                            childConnector, expertConnector, expertIndex,
+                            hiddenSize, ffnHiddenSize, hiddenSize);
                 }
             } else {
                 System.out.printf("%s  └── FeedForward           [%d → %d → %d]%n",
-                    childConnector, hiddenSize, ffnHiddenSize, hiddenSize);
+                        childConnector, hiddenSize, ffnHiddenSize, hiddenSize);
             }
         }
 
@@ -430,7 +431,7 @@ public class MiniMindBlock extends Module {
         @Override
         public String toString() {
             return String.format("MoEOutput(shape=%s, balance_loss=%.6f)",
-                output.getShape(), balanceLoss);
+                    output.getShape(), balanceLoss);
         }
     }
 }

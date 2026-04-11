@@ -144,8 +144,7 @@ public class DeepSeekV3Block extends Module {
         // 2. Transformer层堆叠（收集MoE损失）
         double totalMoELoss = 0.0;
         for (DeepSeekV3TransformerBlock block : transformerBlocks) {
-            DeepSeekV3TransformerBlock.DetailedForwardResult blockResult = 
-                block.forwardWithDetails(x);
+            DeepSeekV3TransformerBlock.DetailedForwardResult blockResult = block.forwardWithDetails(x);
             x = blockResult.output;
             totalMoELoss += blockResult.getLoadBalanceLoss();
         }

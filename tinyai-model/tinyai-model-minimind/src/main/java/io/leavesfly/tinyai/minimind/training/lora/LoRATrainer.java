@@ -55,8 +55,19 @@ public class LoRATrainer extends BaseTrainer {
     }
     
     /**
+     * 是否存在 LoRA 参数（决定 trainStep 是否需要在 update 前清零非 LoRA 梯度）
+     */
+    private boolean hasLoRAParams;
+    
+    /**
      * 冻结非LoRA参数
-     * 注意: 如果模型没有LoRA参数,则不冻结任何参数(退化为全参数微调)
+     * <p>
+     * 说明：{@code Parameter.clearGrad()} 只能清零"当前累积的梯度"，
+     * 但在 backward 时这些参数仍会被重新填充梯度并被 Adam 更新。
+     * 因此这里仅做统计和标记：
+     *   - 若存在 LoRA 参数：设置 {@link #hasLoRAParams} = true，
+     *     实际的"冻结"由 {@link #zeroOutNonLoRAGrads()} 在每步 update 前执行；
+     *   - 若不存在 LoRA 参数：退化为全参数微调，hasLoRAParams = false。
      */
     private void freezeNonLoRAParams() {
         int frozenCount = 0;
@@ -74,24 +85,43 @@ public class LoRATrainer extends BaseTrainer {
         
         // 如果没有LoRA参数,退化为全参数微调
         if (loraCount == 0) {
+            this.hasLoRAParams = false;
             System.out.println("⚠️ 未检测到LoRA参数,退化为全参数微调模式");
             System.out.println("可训练参数: " + totalParams);
             return;
         }
         
-        // 存在LoRA参数时,冻结非LoRA参数
+        this.hasLoRAParams = true;
+        // 统计冻结参数数量（实际清零发生在 trainStep 的 update 之前）
         for (var entry : model.getAllParams().entrySet()) {
             String paramName = entry.getKey();
-            Parameter param = entry.getValue();
-            
             if (!paramName.toLowerCase().contains("lora")) {
-                param.clearGrad();
                 frozenCount++;
             }
         }
         
-        System.out.println("冻结参数: " + frozenCount);
+        System.out.println("冻结参数: " + frozenCount + "（在每步 update 前清零梯度实现冻结）");
         System.out.println("LoRA可训练参数: " + loraCount);
+    }
+    
+    /**
+     * 将所有非 LoRA 参数的梯度清零，实现真正的参数冻结。
+     * <p>
+     * 必须在 backward 完成、optimizer.update 执行之前调用。
+     * 只有这样 Adam 才不会对非 LoRA 参数做参数更新（梯度为 0，动量项也会衰减）。
+     */
+    private void zeroOutNonLoRAGrads() {
+        if (!hasLoRAParams) {
+            return; // 全参数微调模式，不冻结任何参数
+        }
+        for (var entry : model.getAllParams().entrySet()) {
+            String paramName = entry.getKey();
+            Parameter param = entry.getValue();
+            if (!paramName.toLowerCase().contains("lora")) {
+                // clearGrad 会把梯度置为 null；Adam.update 对 null 梯度会跳过更新
+                param.clearGrad();
+            }
+        }
     }
     
     /**
@@ -195,7 +225,12 @@ public class LoRATrainer extends BaseTrainer {
         // 梯度裁剪 (继承自 BaseTrainer)
         clipGradients();
         
-        // 更新参数
+        // 关键修复：在 Adam.update 之前将非 LoRA 参数的梯度清零，
+        // 实现真正的参数冻结。否则 backward 会给所有参数填充梯度，
+        // Adam 将更新所有参数，相当于全参数微调。
+        zeroOutNonLoRAGrads();
+        
+        // 更新参数（仅 LoRA 参数会被实际更新，其他参数梯度为 null）
         optimizer.update();
         
         // 断开计算图

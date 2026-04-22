@@ -73,6 +73,15 @@ public abstract class BaseTrainer {
     
     /**
      * 训练一个epoch
+     * <p>
+     * 健壮性说明：
+     * 当 {@link #trainStep(Object)} 返回 NaN/Inf（例如 SFTTrainer 在检测到损失溢出时
+     * 会返回 {@code Float.NaN} 以跳过本 batch 的参数更新），本方法需要：
+     *   1) 不将该值累加到 epochLoss（否则平均损失被污染为 NaN）；
+     *   2) 不计入 lossHistory（否则后续统计/日志打印会被污染）；
+     *   3) 不增加 batchCount（用于平均损失分母），但 currentStep 仍自增，
+     *      以保持全局步数与日志/checkpoint 节奏一致；
+     *   4) 打印警告便于定位训练异常。
      */
     protected void trainOneEpoch() {
         prepareDataset();
@@ -80,6 +89,7 @@ public abstract class BaseTrainer {
         
         double epochLoss = 0.0;
         int batchCount = 0;
+        int skippedCount = 0;
         
         long epochStartTime = System.currentTimeMillis();
         
@@ -89,12 +99,18 @@ public abstract class BaseTrainer {
             // 训练一步
             float stepLoss = trainStep(batch);
             
-            epochLoss += stepLoss;
-            batchCount++;
             currentStep++;
             
-            // 记录损失
-            lossHistory.add(stepLoss);
+            // 跳过 NaN/Inf 损失，避免污染统计
+            if (Float.isNaN(stepLoss) || Float.isInfinite(stepLoss)) {
+                skippedCount++;
+                System.err.printf("警告: Step %d 损失异常(%s)，已跳过累加与历史记录%n",
+                    currentStep, Float.isNaN(stepLoss) ? "NaN" : "Inf");
+            } else {
+                epochLoss += stepLoss;
+                batchCount++;
+                lossHistory.add(stepLoss);
+            }
             
             // 打印日志
             if (currentStep % logInterval == 0) {
@@ -110,8 +126,13 @@ public abstract class BaseTrainer {
         long epochEndTime = System.currentTimeMillis();
         double avgEpochLoss = batchCount > 0 ? epochLoss / batchCount : 0.0;
         
-        System.out.printf("Epoch %d 完成 | 平均损失: %.4f | 耗时: %d ms%n",
-            currentEpoch + 1, avgEpochLoss, epochEndTime - epochStartTime);
+        if (skippedCount > 0) {
+            System.out.printf("Epoch %d 完成 | 平均损失: %.4f | 跳过批次: %d | 耗时: %d ms%n",
+                currentEpoch + 1, avgEpochLoss, skippedCount, epochEndTime - epochStartTime);
+        } else {
+            System.out.printf("Epoch %d 完成 | 平均损失: %.4f | 耗时: %d ms%n",
+                currentEpoch + 1, avgEpochLoss, epochEndTime - epochStartTime);
+        }
         
         resetDataset();
     }

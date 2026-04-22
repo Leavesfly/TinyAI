@@ -4,6 +4,8 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.minimind.model.MiniMindConfig;
 import io.leavesfly.tinyai.minimind.model.transformer.attention.KVCache;
 import io.leavesfly.tinyai.minimind.model.transformer.attention.MultiHeadAttention;
+import io.leavesfly.tinyai.ndarr.NdArray;
+import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.core.Module;
 import io.leavesfly.tinyai.nnet.layer.norm.LayerNorm;
 
@@ -149,13 +151,22 @@ public class MoETransformerBlock extends Module {
         Variable output = afterAttn.add(moeOutput);
 
         // 3. 计算负载均衡损失（复用同一个 routerOutput）
+        //    修复说明：同时返回 float 标量和 Variable 形态的 balanceLoss，
+        //    Variable 形态通过 LoadBalanceLoss.computeLossVar 保留了 gate 参数的可微路径
         float balanceLoss = 0.0f;
+        Variable balanceLossVar = null;
         if (training && config.isMoeEnableLoadBalance()) {
             MoEBlock.LoadBalanceStats stats = moeLayer.getLoadBalanceStats(routerOutput);
             balanceLoss = loadBalanceLoss.computeLoss(stats, config.getNumExperts());
+            balanceLossVar = loadBalanceLoss.computeLossVar(
+                    routerOutput.getAllWeightsVar(), stats, config.getNumExperts());
+        } else {
+            // 非训练或禁用负载均衡时，返回 0 标量 Variable，便于上层统一累加
+            balanceLossVar = new Variable(NdArray.of(new float[]{0.0f}, Shape.of(1)));
+            balanceLossVar.setRequireGrad(false);
         }
 
-        return new LayerOutput(output, balanceLoss);
+        return new LayerOutput(output, balanceLoss, balanceLossVar);
     }
 
     /**
@@ -201,14 +212,24 @@ public class MoETransformerBlock extends Module {
 
     /**
      * 层输出结果（包含负载均衡损失）
+     * <p>
+     * 修复说明：新增 {@code balanceLossVar} 字段，以 Variable 形态保留负载均衡损失
+     * 的计算图连通性，使得 gate_linear 参数可以从负载均衡损失中获得梯度。
+     * 旧字段 {@code balanceLoss}（float）保留用于日志/统计用途。
      */
     public static class LayerOutput {
         private final Variable output;
         private final float balanceLoss;
+        private final Variable balanceLossVar;
 
         public LayerOutput(Variable output, float balanceLoss) {
+            this(output, balanceLoss, null);
+        }
+
+        public LayerOutput(Variable output, float balanceLoss, Variable balanceLossVar) {
             this.output = output;
             this.balanceLoss = balanceLoss;
+            this.balanceLossVar = balanceLossVar;
         }
 
         public Variable getOutput() {
@@ -217,6 +238,11 @@ public class MoETransformerBlock extends Module {
 
         public float getBalanceLoss() {
             return balanceLoss;
+        }
+
+        /** 获取保留计算图的负载均衡损失 Variable，可能为 null（旧调用方式） */
+        public Variable getBalanceLossVar() {
+            return balanceLossVar;
         }
 
         @Override

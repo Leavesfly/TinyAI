@@ -70,24 +70,13 @@ public class ExpertRouter extends Module {
     /**
      * 前向传播(Variable版本)
      * <p>
-     * 委托到forwardRouter，将topKWeights打包为NdArray返回。
-     * 注意：返回的 Variable 不保持与 gateLinear 的计算图连通（topKWeights 经过了离散选择操作），
+     * 委托到forwardRouter，返回保留计算图连通的topKWeightsVar。
      * 如需完整路由信息(indices等)，请直接调用forwardRouter。
      */
     @Override
     public Variable forward(Variable... inputs) {
         RouterOutput routerOutput = forwardRouter(inputs[0]);
-        float[][] topKWeights = routerOutput.getTopKWeights();
-        int batchSize = routerOutput.getBatchSize();
-        int topKSize = routerOutput.getTopK();
-        float[] flatWeights = new float[batchSize * topKSize];
-        for (int b = 0; b < batchSize; b++) {
-            System.arraycopy(topKWeights[b], 0, flatWeights, b * topKSize, topKSize);
-        }
-        NdArray weightsArray = NdArray.of(flatWeights, Shape.of(batchSize, topKSize));
-        Variable result = new Variable(weightsArray);
-        result.setRequireGrad(false);
-        return result;
+        return routerOutput.getTopKWeightsVar();
     }
     
     /**
@@ -135,58 +124,91 @@ public class ExpertRouter extends Module {
     
     /**
      * Top-K门控计算
+     * <p>
+     * 修复说明：构建携带完整计算图的 topKWeightsVar 和 allWeightsVar，
+     * 使得 MoE 主路径的加权合并能够把梯度回传到 gateLinear。
+     * 步骤：
+     *   1) 对整个 batch 一次性做 softmax：allWeightsVar = softmax(gateLogits)  [B, E]
+     *   2) 用 float[] 排序确定每个样本的 topKIndices（离散、不可导）
+     *   3) 将全局 topKIndices 展平成一维 "全局列表索引"，一次性 indexSelect 从
+     *      allWeightsVar.reshape([B*E]) 中切出 topK 权重，再 reshape 回 [B, topK]
+     *   4) 在 Variable 层面做 topK 权重归一化（sum + div + broadcast）
      * 
      * @param gateLogits 门控logits [batch_size, num_experts]
      * @param batchSize 批次大小
      * @return 路由结果
      */
     private RouterOutput topKGating(Variable gateLogits, int batchSize) {
-        // 准备输出数组
-        int[][] topKIndices = new int[batchSize][topK];     // Top-K专家索引
-        float[][] topKWeights = new float[batchSize][topK]; // Top-K专家权重
-        float[][] allWeights = new float[batchSize][numExperts]; // 所有专家权重(用于负载均衡)
-        
-        // 对每个样本进行Top-K选择
+        // 1) 一次性对整个 batch 做 softmax，保持计算图连通
+        //    allWeightsVar: [batchSize, numExperts]
+        Variable allWeightsVar = softmaxLastDim(gateLogits, batchSize, numExperts);
+
+        // 2) 从 NdArray 层面读取数据做离散的 Top-K 排序（这一步本就不可导）
+        NdArray allWeightsData = allWeightsVar.getValue();
+        float[] softmaxBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) allWeightsData).buffer;
+
+        int[][] topKIndices = new int[batchSize][topK];
+        float[][] allWeights = new float[batchSize][numExperts];
+        // 展平的全局索引：gather 位置 = b * numExperts + expertIdx
+        float[] flatGatherIndices = new float[batchSize * topK];
+
         for (int b = 0; b < batchSize; b++) {
-            // 提取当前样本的logits: 使用 indexSelect
-            Variable batchIndexVar = new Variable(NdArray.of(new float[]{b}));
-            batchIndexVar.setRequireGrad(false);
-            Variable sampleLogits = gateLogits.indexSelect(0, batchIndexVar);  // [1, num_experts]
-            
-            // 计算Softmax (使用 Variable 算子)
-            Variable softmaxVar = sampleLogits.softMax();  // [1, num_experts]
-            NdArray softmaxData = softmaxVar.getValue();
-            float[] softmaxWeights = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) softmaxData).buffer;
-            
-            // 保存所有权重
-            System.arraycopy(softmaxWeights, 0, allWeights[b], 0, numExperts);
-            
-            // Top-K选择 (离散操作，不参与梯度计算)
+            int rowOffset = b * numExperts;
+            System.arraycopy(softmaxBuffer, rowOffset, allWeights[b], 0, numExperts);
+
+            // 按权重排序（离散操作）
             Integer[] indices = new Integer[numExperts];
             for (int i = 0; i < numExperts; i++) {
                 indices[i] = i;
             }
-            
-            // 按权重排序
-            Arrays.sort(indices, Comparator.comparingDouble(i -> -softmaxWeights[i]));
-            
-            // 提取Top-K
-            float topKSum = 0.0f;
+            final float[] rowRef = allWeights[b];
+            Arrays.sort(indices, Comparator.comparingDouble(i -> -rowRef[i]));
+
             for (int k = 0; k < topK; k++) {
                 topKIndices[b][k] = indices[k];
-                topKWeights[b][k] = softmaxWeights[indices[k]];
-                topKSum += topKWeights[b][k];
-            }
-            
-            // 重新归一化Top-K权重
-            if (topKSum > 0) {
-                for (int k = 0; k < topK; k++) {
-                    topKWeights[b][k] /= topKSum;
-                }
+                flatGatherIndices[b * topK + k] = rowOffset + indices[k];
             }
         }
-        
-        return new RouterOutput(topKIndices, topKWeights, allWeights);
+
+        // 3) 用 indexSelect 从 allWeightsVar(reshape 成 [B*E]) 中切出 topK 权重，保留计算图
+        Variable flatWeightsVar = allWeightsVar.reshape(Shape.of(batchSize * numExperts));
+        Variable gatherIdxVar = new Variable(
+                NdArray.of(flatGatherIndices, Shape.of(batchSize * topK)));
+        gatherIdxVar.setRequireGrad(false);
+        Variable topKSelectedVar = flatWeightsVar.indexSelect(0, gatherIdxVar);
+        // reshape 回 [B, topK]
+        Variable topKWeightsVarRaw = topKSelectedVar.reshape(Shape.of(batchSize, topK));
+
+        // 4) 在 Variable 层面重新归一化：topKWeightsVar = raw / sum(raw, dim=1, keepdim=true)
+        //    sum 用 sumTo 到 [B, 1]，再 broadcastTo 回 [B, topK]
+        Variable rowSumVar = topKWeightsVarRaw.sumTo(Shape.of(batchSize, 1));
+        // 避免除零：加一个极小常量（不参与梯度）
+        Variable epsVar = new Variable(NdArray.of(new float[]{1e-12f}, Shape.of(1)));
+        epsVar.setRequireGrad(false);
+        rowSumVar = rowSumVar.add(epsVar.broadcastTo(Shape.of(batchSize, 1)));
+        Variable rowSumBroadcast = rowSumVar.broadcastTo(Shape.of(batchSize, topK));
+        Variable topKWeightsVar = topKWeightsVarRaw.div(rowSumBroadcast);
+
+        // 同步回 float[][] 形式（供统计/负载均衡兼容使用）
+        float[][] topKWeightsFloat = new float[batchSize][topK];
+        float[] normalizedBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) topKWeightsVar.getValue()).buffer;
+        for (int b = 0; b < batchSize; b++) {
+            System.arraycopy(normalizedBuffer, b * topK, topKWeightsFloat[b], 0, topK);
+        }
+
+        return new RouterOutput(topKIndices, topKWeightsFloat, allWeights,
+                topKWeightsVar, allWeightsVar);
+    }
+
+    /**
+     * 在最后一维做 softmax（[B, E] -> [B, E]），Reshape 仅保持计算图连通
+     */
+    private Variable softmaxLastDim(Variable input, int batchSize, int numExperts) {
+        // 当前输入已是 [B, E]，softMax() 对整张量做全局 softmax 不符合要求，
+        // 需要按行 softmax：利用已有实现 —— Variable.softMax() 是全局的，
+        // 但在 2D 情况下，TinyAI 的 SoftMax 是沿最后一维（见 MultiHeadAttention 中用法）。
+        // 这里与 MultiHeadAttention 的 softmaxLastDim 语义保持一致。
+        return input.softMax();
     }
     
     /**
@@ -254,36 +276,63 @@ public class ExpertRouter extends Module {
     
     /**
      * 路由输出结果
+     * <p>
+     * 包含两种形态的数据：
+     *   - 离散快照（int[][] / float[][]）：用于统计、负载均衡的 CV 计算等无需梯度的场景
+     *   - Variable 形态（topKWeightsVar / allWeightsVar）：保留完整计算图，
+     *     供 MoE 主路径和负载均衡损失使用，确保 gate 参数可被正确更新
      */
     public static class RouterOutput {
-        private final int[][] topKIndices;    // [batch_size, topK]
-        private final float[][] topKWeights;  // [batch_size, topK]
-        private final float[][] allWeights;   // [batch_size, num_experts]
-        
+        private final int[][] topKIndices;          // [batch_size, topK]
+        private final float[][] topKWeights;        // [batch_size, topK]
+        private final float[][] allWeights;         // [batch_size, num_experts]
+
+        /** 归一化后的 topK 权重，保留计算图；形状 [batch_size, topK] */
+        private final Variable topKWeightsVar;
+        /** 所有专家的 softmax 权重，保留计算图；形状 [batch_size, num_experts] */
+        private final Variable allWeightsVar;
+
         public RouterOutput(int[][] topKIndices, float[][] topKWeights, float[][] allWeights) {
+            this(topKIndices, topKWeights, allWeights, null, null);
+        }
+
+        public RouterOutput(int[][] topKIndices, float[][] topKWeights, float[][] allWeights,
+                            Variable topKWeightsVar, Variable allWeightsVar) {
             this.topKIndices = topKIndices;
             this.topKWeights = topKWeights;
             this.allWeights = allWeights;
+            this.topKWeightsVar = topKWeightsVar;
+            this.allWeightsVar = allWeightsVar;
         }
-        
+
         public int[][] getTopKIndices() {
             return topKIndices;
         }
-        
+
         public float[][] getTopKWeights() {
             return topKWeights;
         }
-        
+
         public float[][] getAllWeights() {
             return allWeights;
         }
-        
+
         public int getBatchSize() {
             return topKIndices.length;
         }
-        
+
         public int getTopK() {
             return topKIndices[0].length;
+        }
+
+        /** 获取保留计算图的 topK 权重 Variable，可能为 null（旧调用方式） */
+        public Variable getTopKWeightsVar() {
+            return topKWeightsVar;
+        }
+
+        /** 获取保留计算图的所有专家权重 Variable，可能为 null（旧调用方式） */
+        public Variable getAllWeightsVar() {
+            return allWeightsVar;
         }
     }
 }

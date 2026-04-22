@@ -5,6 +5,8 @@ import io.leavesfly.tinyai.minimind.model.moe.MoETransformerBlock;
 import io.leavesfly.tinyai.minimind.model.transformer.attention.KVCache;
 import io.leavesfly.tinyai.minimind.model.embedding.TokenEmbedding;
 import io.leavesfly.tinyai.minimind.model.transformer.TransformerBlock;
+import io.leavesfly.tinyai.ndarr.NdArray;
+import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.core.Module;
 import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
 import io.leavesfly.tinyai.nnet.layer.norm.LayerNorm;
@@ -150,6 +152,9 @@ public class MiniMindBlock extends Module {
         // 1. Token Embedding
         Variable x = tokenEmbedding.forward(tokenIds);
 
+        // 累积的负载均衡损失 Variable（保留计算图）
+        Variable totalBalanceLossVar = null;
+
         // 2. 通过所有 Transformer 层（添加防御性空值检查）
         if (config.isUseMoE()) {
             if (moeLayers == null) {
@@ -163,6 +168,14 @@ public class MiniMindBlock extends Module {
 
                 x = layerOutput.getOutput();
                 totalBalanceLoss += layerOutput.getBalanceLoss();
+
+                // 累加 Variable 形态的负载均衡损失，保留计算图
+                Variable layerBalanceLossVar = layerOutput.getBalanceLossVar();
+                if (layerBalanceLossVar != null) {
+                    totalBalanceLossVar = (totalBalanceLossVar == null)
+                            ? layerBalanceLossVar
+                            : totalBalanceLossVar.add(layerBalanceLossVar);
+                }
             }
         } else {
             if (layers == null) {
@@ -181,7 +194,13 @@ public class MiniMindBlock extends Module {
         // 4. LM Head
         Variable logits = lmHead.forward(x);
 
-        return new MoEOutput(logits, totalBalanceLoss);
+        // 标准模式下 balanceLossVar 为 0 常量
+        if (totalBalanceLossVar == null) {
+            totalBalanceLossVar = new Variable(NdArray.of(new float[]{0.0f}, Shape.of(1)));
+            totalBalanceLossVar.setRequireGrad(false);
+        }
+
+        return new MoEOutput(logits, totalBalanceLoss, totalBalanceLossVar);
     }
 
     /**
@@ -410,14 +429,25 @@ public class MiniMindBlock extends Module {
 
     /**
      * MoE 输出结果（标准模式下 balanceLoss 为 0）
+     * <p>
+     * 修复说明：新增 {@code balanceLossVar} 字段，以 Variable 形态返回累积的负载均衡
+     * 损失，保留完整计算图连通性。训练循环应使用 {@code balanceLossVar} 参与总 loss 的
+     * 反向传播，使得各层 ExpertRouter 的 gate_linear 参数可获得梯度。
+     * 旧字段 {@code balanceLoss}（float）保留用于日志/监控用途。
      */
     public static class MoEOutput {
         private final Variable output;
         private final float balanceLoss;
+        private final Variable balanceLossVar;
 
         public MoEOutput(Variable output, float balanceLoss) {
+            this(output, balanceLoss, null);
+        }
+
+        public MoEOutput(Variable output, float balanceLoss, Variable balanceLossVar) {
             this.output = output;
             this.balanceLoss = balanceLoss;
+            this.balanceLossVar = balanceLossVar;
         }
 
         public Variable getOutput() {
@@ -426,6 +456,14 @@ public class MiniMindBlock extends Module {
 
         public float getBalanceLoss() {
             return balanceLoss;
+        }
+
+        /**
+         * 获取保留计算图的总负载均衡损失 Variable。
+         * 标准模式或非训练时返回 0 常量 Variable；MoE 训练模式下返回各层累加的损失 Variable。
+         */
+        public Variable getBalanceLossVar() {
+            return balanceLossVar;
         }
 
         @Override

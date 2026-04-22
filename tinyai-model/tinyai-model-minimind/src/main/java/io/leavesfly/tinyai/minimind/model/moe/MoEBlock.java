@@ -111,10 +111,16 @@ public class MoEBlock extends Module {
     /**
      * 前向传播(接收外部RouterOutput,避免重复路由)
      * <p>
-     * 通过 Variable 算子完成加权合并，保持计算图连通，支持梯度回传。
-     * 
+     * 通过 Variable 算子完成加权合并，保持完整计算图连通，支持 gate/expert 的梯度回传。
+     * <p>
+     * 修复说明（计算图断裂修复）：
+     * 使用 RouterOutput 中携带计算图的 {@code topKWeightsVar}（形状 [B, topK]）
+     * 替代原本的 float[][] 权重，通过 {@link Variable#indexSelect} 精确抽取每个 token
+     * 对应的权重 Variable 参与专家输出的加权求和，使得梯度可以从最终输出回传到
+     * {@code ExpertRouter.gateLinear}。
+     *
      * @param input 输入 [batch_size, input_dim] 或 [batch_size, seq_len, input_dim]
-     * @param routerOutput 已计算好的路由结果
+     * @param routerOutput 已计算好的路由结果（要求包含 topKWeightsVar）
      * @return 输出，形状与输入一致（最后一维为 output_dim）
      */
     public Variable forwardWithRouterOutput(Variable input, ExpertRouter.RouterOutput routerOutput) {
@@ -126,55 +132,76 @@ public class MoEBlock extends Module {
             seqLen = input.getShape().getDimension(1);
             flatInput = input.reshape(Shape.of(origBatchSize * seqLen, inputDim));
         }
-        
+
         int batchSize = flatInput.getShape().getDimension(0);
         int[][] topKIndices = routerOutput.getTopKIndices();
-        float[][] topKWeights = routerOutput.getTopKWeights();
-        
+
+        // 关键修复：优先使用携带计算图的 topKWeightsVar
+        Variable topKWeightsVar = routerOutput.getTopKWeightsVar();
+        float[][] topKWeightsFallback = routerOutput.getTopKWeights();
+
+        // 预先将 topKWeightsVar 展平为 [B*topK]，便于逐位置 indexSelect 取出标量权重 Variable
+        Variable flatWeightsVar = null;
+        if (topKWeightsVar != null) {
+            flatWeightsVar = topKWeightsVar.reshape(Shape.of(batchSize * topK));
+        }
+
         // 逐样本通过 Variable 算子加权合并专家输出，保持计算图连通
         Variable[] sampleOutputs = new Variable[batchSize];
-        
+
         for (int b = 0; b < batchSize; b++) {
             // 提取当前样本的输入: [1, input_dim]
             Variable sampleIndexVar = new Variable(NdArray.of(new float[]{b}));
             sampleIndexVar.setRequireGrad(false);
             Variable sampleInput = flatInput.indexSelect(0, sampleIndexVar);
-            
+
             // 对该样本的 topK 个专家加权求和
             Variable sampleOutput = null;
             for (int k = 0; k < topK; k++) {
                 int expertIdx = topKIndices[b][k];
-                float weight = topKWeights[b][k];
-                
+
                 // 更新统计
                 expertUsageCount[expertIdx]++;
-                
+
                 // 调用专家前向传播: [1, input_dim] -> [1, output_dim]
                 ExpertNetwork expert = experts.get(expertIdx);
                 Variable expertOutput = expert.forwardVar(sampleInput);
-                
-                // 加权: expertOutput * weight（通过 Variable.mul 保持计算图）
-                Variable weightVar = new Variable(NdArray.of(new float[]{weight}));
-                weightVar.setRequireGrad(false);
-                Variable weightedOutput = expertOutput.mul(weightVar);
-                
+
+                // 获取该 (b, k) 位置对应的权重 Variable，保持计算图
+                Variable weightVar;
+                if (flatWeightsVar != null) {
+                    // 从 flatWeightsVar [B*topK] 中抽取第 (b*topK + k) 个位置，形状 [1]
+                    Variable weightIdxVar = new Variable(
+                            NdArray.of(new float[]{(float) (b * topK + k)}, Shape.of(1)));
+                    weightIdxVar.setRequireGrad(false);
+                    weightVar = flatWeightsVar.indexSelect(0, weightIdxVar);
+                } else {
+                    // 兜底：旧版 RouterOutput 没有 Variable 形态权重，退化为常量（不建议走这条分支）
+                    weightVar = new Variable(NdArray.of(new float[]{topKWeightsFallback[b][k]}));
+                    weightVar.setRequireGrad(false);
+                }
+
+                // 广播到 expertOutput 形状后相乘，保持计算图
+                Variable weightBroadcast = weightVar.broadcastTo(expertOutput.getShape());
+                Variable weightedOutput = expertOutput.mul(weightBroadcast);
+
                 // 累加（通过 Variable.add 保持计算图）
                 sampleOutput = (sampleOutput == null) ? weightedOutput : sampleOutput.add(weightedOutput);
             }
-            
+
             sampleOutputs[b] = sampleOutput;
         }
-        
+
         // 将所有样本的输出拼接为 [batchSize, outputDim]
         Variable output = Variable.cat(sampleOutputs, 0);
-        
+
         totalCalls += batchSize;
-        
+
         // 如果原始输入是3D的，将输出reshape回 [batch_size, seq_len, output_dim]
         if (seqLen > 0) {
             output = output.reshape(Shape.of(origBatchSize, seqLen, outputDim));
         }
-        
+
         return output;
     }
     

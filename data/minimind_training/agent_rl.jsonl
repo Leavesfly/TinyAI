@@ -1,0 +1,16 @@
+{"prompt":"请计算 15 + 27 的结果","tools":["calculate_math"],"gt":["42"]}
+{"prompt":"100 * 3 等于多少","tools":["calculate_math"],"gt":["300"]}
+{"prompt":"计算 256 / 8","tools":["calculate_math"],"gt":["32"]}
+{"prompt":"北京今天天气怎么样","tools":["get_current_weather"],"gt":["28°C","晴"]}
+{"prompt":"上海的天气如何","tools":["get_current_weather"],"gt":["15°C","多云"]}
+{"prompt":"成都现在的天气","tools":["get_current_weather"],"gt":["18°C","小雨"]}
+{"prompt":"1美元等于多少人民币","tools":["get_exchange_rate"],"gt":["7.235"]}
+{"prompt":"查询欧元兑人民币汇率","tools":["get_exchange_rate"],"gt":["7.892"]}
+{"prompt":"现在几点了","tools":["get_current_time"],"gt":["14:30"]}
+{"prompt":"东京现在是什么时间","tools":["get_current_time"],"gt":["15:30"]}
+{"prompt":"5公里等于多少米","tools":["unit_converter"],"gt":["5000"]}
+{"prompt":"10磅等于多少公斤","tools":["unit_converter"],"gt":["4.536"]}
+{"prompt":"把hello翻译成中文","tools":["translate_text"],"gt":["你好"]}
+{"prompt":"将good morning翻译为中文","tools":["translate_text"],"gt":["早上好"]}
+{"prompt":"你好，请做一下自我介绍","tools":[],"gt":[]}
+{"prompt":"什么是深度学习","tools":[],"gt":[]}

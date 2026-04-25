@@ -203,44 +203,117 @@ public class BananaConfig implements Serializable {
     }
     
     /**
-     * 估算模型参数量
-     * 
-     * 计算公式：
-     * - 文本嵌入层: vocabSize * hiddenSize
-     * - 图像Patch嵌入(Conv2D): patchSize * patchSize * imageChannels * hiddenSize + hiddenSize(bias)
-     * - 位置编码: numPatches * hiddenSize
-     * - 每个Transformer层: 4 * hiddenSize^2 (QKV+O投影) + 2 * hiddenSize * ffnHiddenSize (FFN) + 4 * hiddenSize (LayerNorm)
-     * - 跨模态注意力层: 4 * hiddenSize^2 (QKV+O投影) + 2 * hiddenSize (LayerNorm)
-     * - 图像编码器层: 与Transformer层相同
+     * 估算模型参数量（覆盖 BananaBlock 的全部可训练组件）。
+     *
+     * <p>构成明细（与实际代码实现一一对应）：</p>
+     * <ul>
+     *   <li>文本编码器：token 嵌入 + 1D 位置编码 + numLayers 个 Transformer Encoder 层；</li>
+     *   <li>图像编码器：Patch Conv2D + 2D 位置编码 + numEncoderLayers 个 Transformer Encoder 层；</li>
+     *   <li>多模态融合：两个 CrossModalAttention（text→image、image→text）+ 两个 LayerNorm；</li>
+     *   <li>图像解码器：numEncoderLayers 个 Transformer Decoder 层（含 self-attn、cross-attn、FFN）
+     *       + 特征投影 + 特征 LayerNorm + 动态数量的 UpsampleBlock + PixelProjection；</li>
+     *   <li>输出头：final LayerNorm + 输出投影 (hiddenSize → vocabSize)。</li>
+     * </ul>
+     *
+     * <p>单个 TransformerEncoderLayer（Pre/Post-LN 同）大致构成：</p>
+     * <pre>
+     *   MultiHeadAttention : 4 * (hiddenSize^2 + hiddenSize)   // QKV+O 投影含 bias
+     *   FFN                : 2 * hiddenSize * ffn + hiddenSize + ffn
+     *   LayerNorm × 2      : 4 * hiddenSize                    // gamma + beta
+     * </pre>
+     * <p>TransformerDecoderLayer 比 Encoder 多一个 cross-attn（4 * (h^2 + h)）+ 一个 LayerNorm。</p>
      */
     public long estimateParameters() {
-        // 文本嵌入: vocabSize * hiddenSize
-        long textEmbedding = (long) vocabSize * hiddenSize;
-        
-        // 图像Patch嵌入(Conv2D权重 + bias): patchSize^2 * channels * hiddenSize + hiddenSize
-        long patchEmbedding = (long) (patchSize * patchSize * imageChannels) * hiddenSize + hiddenSize;
-        
-        // 位置编码: numPatches * hiddenSize
-        long positionEmbedding = (long) numPatches * hiddenSize;
-        
-        // 每个Transformer层的参数量:
-        // - 自注意力QKV投影: 3 * hiddenSize * hiddenSize + 3 * hiddenSize (bias)
-        // - 输出投影: hiddenSize * hiddenSize + hiddenSize (bias)
-        // - FFN: hiddenSize * ffnHiddenSize + ffnHiddenSize + ffnHiddenSize * hiddenSize + hiddenSize
-        // - LayerNorm: 2 * (hiddenSize + hiddenSize)
-        long selfAttnParams = 4L * hiddenSize * hiddenSize + 4L * hiddenSize;
-        long ffnParams = 2L * hiddenSize * ffnHiddenSize + hiddenSize + ffnHiddenSize;
-        long layerNormParams = 4L * hiddenSize;
-        long perLayerParams = selfAttnParams + ffnParams + layerNormParams;
-        
-        long transformerParams = (long) numLayers * perLayerParams;
-        long encoderParams = (long) numEncoderLayers * perLayerParams;
-        
-        // 跨模态注意力层: QKV投影 + 输出投影 + LayerNorm
-        long crossModalParams = enableCrossModalAttention ? (selfAttnParams + 2L * hiddenSize) : 0;
-        
-        return textEmbedding + patchEmbedding + positionEmbedding 
-             + transformerParams + encoderParams + crossModalParams;
+        // ========== 1. 文本编码器 ==========
+        long tokenEmbedding = (long) vocabSize * hiddenSize;
+        long textPosEmbedding = (long) maxTextLength * hiddenSize;
+
+        // ========== 2. 图像编码器前置 ==========
+        // Conv2D(kernelSize=patchSize, inCh=channels, outCh=hiddenSize, bias=true)
+        long patchEmbedding = (long) patchSize * patchSize * imageChannels * hiddenSize + hiddenSize;
+        // Position2D 采用行列分解：rowEmbedding [1, R, H] + colEmbedding [1, C, H]，
+        // 参数量为 (R + C) * H 而非 numPatches * H（正方形网格下 R = C = patchGrid）。
+        // 注意：下方上采样段还会再声明一个同名 patchGrid 局部变量，这里先用复合表达式避免作用域冲突。
+        long position2D = (long) (2 * (imageSize / patchSize)) * hiddenSize;
+
+        // ========== 3. 单个 Transformer Encoder 层 ==========
+        long perEncoderLayer = singleEncoderLayerParams();
+        long textEncoderLayers = (long) numLayers * perEncoderLayer;
+        long imageEncoderLayers = (long) numEncoderLayers * perEncoderLayer;
+
+        // ========== 4. 多模态融合（双向）==========
+        long fusionParams = 0L;
+        if (enableCrossModalAttention) {
+            // 每个方向：CrossModalAttention(QKV+O) + 1 个 LayerNorm
+            long singleDirection = 4L * hiddenSize * hiddenSize + 4L * hiddenSize // Q/K/V/O + bias
+                                 + 2L * hiddenSize;                               // LayerNorm
+            fusionParams = 2L * singleDirection;
+        }
+
+        // ========== 5. 图像解码器 ==========
+        long perDecoderLayer = singleDecoderLayerParams();
+        long decoderTransformerLayers = (long) numEncoderLayers * perDecoderLayer;
+
+        // 特征降维: Linear(hiddenSize -> upsamplingBaseDim) + LayerNorm(upsamplingBaseDim)
+        int upsamplingBaseDim = Math.max(hiddenSize / 2, 64);
+        long featureProjection = (long) hiddenSize * upsamplingBaseDim + upsamplingBaseDim;
+        long featureNorm = 2L * upsamplingBaseDim;
+
+        // 动态计算上采样步数：从 patchGrid 到 imageSize，每步 ×2
+        int patchGrid = imageSize / patchSize;
+        int upsampleSteps = 0;
+        int tmp = patchGrid;
+        while (tmp < imageSize) {
+            tmp *= 2;
+            upsampleSteps++;
+        }
+        // 每步 UpsampleBlock: Linear(inCh -> outCh) + LayerNorm(outCh)
+        // 通道链路: baseDim -> baseDim/2 -> baseDim/4 -> ... -> 16
+        long upsampleParams = 0L;
+        int curIn = upsamplingBaseDim;
+        for (int i = 0; i < upsampleSteps; i++) {
+            int curOut = (i == upsampleSteps - 1) ? 16 : Math.max(curIn / 2, 16);
+            upsampleParams += (long) curIn * curOut + curOut;  // Linear(in->out, bias)
+            upsampleParams += 2L * curOut;                     // LayerNorm
+            curIn = curOut;
+        }
+
+        // PixelProjection: Linear(curIn -> imageChannels)，含 bias
+        long pixelProjection = (long) curIn * imageChannels + imageChannels;
+
+        // ========== 6. 输出头 ==========
+        long finalLayerNorm = 2L * hiddenSize;
+        // outputProjection: Linear(hiddenSize -> vocabSize, bias=false)
+        long outputProjection = (long) hiddenSize * vocabSize;
+
+        return tokenEmbedding + textPosEmbedding
+             + patchEmbedding + position2D
+             + textEncoderLayers + imageEncoderLayers
+             + fusionParams
+             + decoderTransformerLayers + featureProjection + featureNorm
+             + upsampleParams + pixelProjection
+             + finalLayerNorm + outputProjection;
+    }
+
+    /**
+     * 单个 TransformerEncoderLayer 的参数量
+     */
+    private long singleEncoderLayerParams() {
+        long selfAttn = 4L * hiddenSize * hiddenSize + 4L * hiddenSize;         // QKV+O
+        long ffn = 2L * hiddenSize * ffnHiddenSize + hiddenSize + ffnHiddenSize; // 两层全连接
+        long layerNorms = 4L * hiddenSize;                                       // 2 × LN(γ+β)
+        return selfAttn + ffn + layerNorms;
+    }
+
+    /**
+     * 单个 TransformerDecoderLayer 的参数量（比 Encoder 多 cross-attn + 1 个 LN）
+     */
+    private long singleDecoderLayerParams() {
+        long selfAttn = 4L * hiddenSize * hiddenSize + 4L * hiddenSize;
+        long crossAttn = 4L * hiddenSize * hiddenSize + 4L * hiddenSize;
+        long ffn = 2L * hiddenSize * ffnHiddenSize + hiddenSize + ffnHiddenSize;
+        long layerNorms = 6L * hiddenSize;  // 3 × LN(γ+β)
+        return selfAttn + crossAttn + ffn + layerNorms;
     }
     
     /**

@@ -23,41 +23,68 @@ import java.util.*;
  * @since 2024
  */
 public class BananaDataset implements Serializable {
-    
+
     private static final long serialVersionUID = 1L;
-    
+
+    /** 默认词汇表大小，与 {@link io.leavesfly.tinyai.banana.config.BananaConfig#getVocabSize()} 的默认值保持一致。 */
+    public static final int DEFAULT_VOCAB_SIZE = 32000;
+
+    /** PAD token 统一为 0，tokenize 时会把正常 token 映射到 {@code [1, vocabSize)} 以避开 PAD。 */
+    public static final int PAD_TOKEN_ID = 0;
+
     private final int maxTextLen;    // 最大文本长度
     private final int imageSize;     // 图像大小
     private final int batchSize;
-    
+    private final int vocabSize;     // 词汇表大小，用于约束 tokenize 的取值范围
+
     // 存储所有训练样本
     private List<Sample> samples;
-    
+
     // 批次数据
     private List<Batch> batches;
     private int currentBatchIndex;
-    
+
     /**
-     * 构造函数
-     * 
+     * 兼容旧签名的构造函数，使用 {@link #DEFAULT_VOCAB_SIZE} 作为默认词汇表大小。
+     *
      * @param maxTextLen 最大文本长度
-     * @param imageSize 图像大小(正方形)
-     * @param batchSize 批次大小
+     * @param imageSize  图像大小(正方形)
+     * @param batchSize  批次大小
      */
     public BananaDataset(int maxTextLen, int imageSize, int batchSize) {
+        this(maxTextLen, imageSize, batchSize, DEFAULT_VOCAB_SIZE);
+    }
+
+    /**
+     * 完整构造函数。
+     *
+     * @param maxTextLen 最大文本长度
+     * @param imageSize  图像大小(正方形)
+     * @param batchSize  批次大小
+     * @param vocabSize  词汇表大小（必须与 {@code BananaConfig.vocabSize} 一致，用于约束 token id 范围）
+     */
+    public BananaDataset(int maxTextLen, int imageSize, int batchSize, int vocabSize) {
+        if (maxTextLen <= 0 || imageSize <= 0 || batchSize <= 0 || vocabSize <= 1) {
+            throw new IllegalArgumentException(String.format(
+                    "非法参数: maxTextLen=%d, imageSize=%d, batchSize=%d, vocabSize=%d",
+                    maxTextLen, imageSize, batchSize, vocabSize));
+        }
         this.maxTextLen = maxTextLen;
         this.imageSize = imageSize;
         this.batchSize = batchSize;
+        this.vocabSize = vocabSize;
         this.samples = new ArrayList<>();
         this.batches = new ArrayList<>();
         this.currentBatchIndex = 0;
     }
     
     /**
-     * 从CSV文件加载文本-图像对数据
-     * 
-     * 文件格式: text,image_path
-     * 
+     * 从CSV文件加载文本-图像对数据。
+     *
+     * <p>文件格式：每行 {@code text,image_path}，首行为标题行将被跳过。
+     * 第一行起始处的 UTF-8 BOM（{@code \uFEFF}）会被自动剔除；
+     * 对于字段数不足 2、text 为空或 image_path 为空的行，将被跳过并记入 {@code badLineCount}。</p>
+     *
      * @param filePath CSV文件路径
      * @throws IOException IO异常
      */
@@ -66,37 +93,54 @@ public class BananaDataset implements Serializable {
         if (!Files.exists(path)) {
             throw new FileNotFoundException("数据文件不存在: " + filePath);
         }
-        
+
         List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
-        
+        int badLineCount = 0;
+
         // 跳过标题行
         for (int i = 1; i < lines.size(); i++) {
-            String line = lines.get(i).trim();
+            String rawLine = lines.get(i);
+            if (rawLine == null) {
+                continue;
+            }
+            // 剔除首行可能带的 UTF-8 BOM
+            if (i == 1 && !rawLine.isEmpty() && rawLine.charAt(0) == '\uFEFF') {
+                rawLine = rawLine.substring(1);
+            }
+            String line = rawLine.trim();
             if (line.isEmpty()) {
                 continue;
             }
-            
+
             String[] parts = line.split(",", 2);
             if (parts.length != 2) {
+                badLineCount++;
                 continue;
             }
-            
+
             String text = parts[0].trim();
             String imagePath = parts[1].trim();
-            
+            if (text.isEmpty() || imagePath.isEmpty()) {
+                badLineCount++;
+                continue;
+            }
+
             // 模拟图像加载(实际应用中需要真实加载图像)
             float[] imageData = simulateImageLoad(imagePath);
-            
+
             // 简单分词(实际应用中应使用真实Tokenizer)
             int[] textTokens = simpleTokenize(text);
-            
+
             samples.add(new Sample(textTokens, imageData, text, imagePath));
         }
-        
+
+        if (badLineCount > 0) {
+            System.err.println("警告: CSV 中有 " + badLineCount + " 行格式非法已跳过（字段数不足或空字段）: " + filePath);
+        }
         if (samples.isEmpty()) {
             System.err.println("警告: 未从文件中加载到有效样本: " + filePath);
         }
-        
+
         System.out.println("数据加载完成,共 " + samples.size() + " 个训练样本");
     }
     
@@ -183,13 +227,18 @@ public class BananaDataset implements Serializable {
         
         for (int i = 0; i < actualBatchSize; i++) {
             Sample sample = batchSamples.get(i);
-            
-            // 填充文本
+
+            // 填充文本：超出 vocabSize 的 token 会被强制夹到 [0, vocabSize-1]，防止 Embedding 查表越界
             int[] tokens = sample.getTextTokens();
-            for (int j = 0; j < Math.min(tokens.length, maxTextLen); j++) {
-                textData[i][j] = (float) tokens[j];
+            int copyLen = Math.min(tokens.length, maxTextLen);
+            for (int j = 0; j < copyLen; j++) {
+                int tok = tokens[j];
+                if (tok < 0 || tok >= vocabSize) {
+                    tok = PAD_TOKEN_ID;
+                }
+                textData[i][j] = (float) tok;
             }
-            // 剩余位置用0填充(PAD)
+            // 剩余位置默认 0 即 PAD_TOKEN_ID
             
             // 填充图像
             float[] image = sample.getImageData();
@@ -256,15 +305,25 @@ public class BananaDataset implements Serializable {
     }
     
     /**
-     * 简单分词(实际应使用真实Tokenizer)
+     * 简单分词（仅用于演示；生产中应使用真实 Tokenizer）。
+     *
+     * <p>映射规则：将 hash 取模到 {@code [1, vocabSize)}，以避开 {@link #PAD_TOKEN_ID}（0）；
+     * 这样 {@code createBatch} 中未填满位置的 0 能被模型明确识别为 PAD。</p>
+     *
+     * @param text 输入文本
+     * @return token id 数组，长度不超过 {@link #maxTextLen}
      */
     private int[] simpleTokenize(String text) {
         String[] words = text.toLowerCase().split("\\s+");
-        int[] tokens = new int[Math.min(words.length, maxTextLen)];
-        for (int i = 0; i < tokens.length; i++) {
-            // 确保token ID为非负数且在词汇表范围内
-            // 使用Math.abs避免负数,然后取模确保在范围内
-            tokens[i] = Math.abs(words[i].hashCode()) % 10000;
+        int effectiveLen = Math.min(words.length, maxTextLen);
+        int[] tokens = new int[effectiveLen];
+        // 用 vocabSize-1 而非 vocabSize 作为模，结果落在 [0, vocabSize-1)；再 +1 得到 [1, vocabSize)。
+        // 注意：使用 & 0x7FFFFFFF 而非 Math.abs(hashCode())，因为 Math.abs(Integer.MIN_VALUE)
+        // 仍返回 Integer.MIN_VALUE（负数），会导致 % 得到负数或后续 +1 得到 0（PAD 冲突）。
+        int modRange = vocabSize - 1;
+        for (int i = 0; i < effectiveLen; i++) {
+            int h = (words[i].hashCode() & 0x7FFFFFFF) % modRange;
+            tokens[i] = h + 1;
         }
         return tokens;
     }

@@ -34,11 +34,11 @@ import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
  */
 public class CrossModalAttention extends Module {
     
-    private final int hiddenSize;    // 隐藏层维度
-    private final int numHeads;      // 注意力头数
-    private final int headDim;       // 每个头的维度
-    private final float dropout;     // Dropout比率
-    private final float scaleFactor; // 缩放因子 1/sqrt(headDim)，预计算避免重复开方
+    private final int hiddenSize;        // 隐藏层维度
+    private final int numHeads;          // 注意力头数
+    private final int headDim;           // 每个头的维度
+    private final float dropout;         // Dropout比率
+    private final float invSqrtHeadDim;  // 注意力缩放因子 1/sqrt(headDim)，预计算避免重复开方
     
     // 投影层
     private final Linear queryProj;   // Query投影(来自模态1)
@@ -70,7 +70,8 @@ public class CrossModalAttention extends Module {
         this.numHeads = numHeads;
         this.headDim = hiddenSize / numHeads;
         this.dropout = dropout;
-        this.scaleFactor = (float) Math.sqrt(headDim);
+        // 注意力缩放因子 1/sqrt(headDim)：一次性计算并用乘法代替除法，数值稳定且更高效
+        this.invSqrtHeadDim = 1.0f / (float) Math.sqrt(this.headDim);
         
         // 初始化投影层
         this.queryProj = new Linear(name + "_q_proj", hiddenSize, hiddenSize, true);
@@ -202,9 +203,9 @@ public class CrossModalAttention extends Module {
         
         // 2. Q @ K^T -> [batch, num_heads, query_len, kv_len]
         Variable scores = Q.matMul(KT);
-        
-        // 3. 缩放（使用预计算的缩放因子）
-        Variable scaledScores = scores.div(new Variable(scaleFactor));
+
+        // 3. 缩放：乘以预计算的 1/sqrt(headDim)（乘法比除法更快且数值稳定）
+        Variable scaledScores = scores.mul(new Variable(invSqrtHeadDim));
         
         // 4. 应用注意力掩码（如果提供）
         if (mask != null) {

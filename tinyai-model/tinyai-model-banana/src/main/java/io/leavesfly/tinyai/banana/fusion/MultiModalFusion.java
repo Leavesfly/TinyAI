@@ -111,56 +111,59 @@ public class MultiModalFusion extends Module {
     }
     
     /**
-     * 前向传播
-     * 
-     * 注意: 由于 Module.forward() 方法只能返回单个 Variable，
-     * 此方法仅返回融合后的文本特征。
-     * 如果需要同时获取融合后的文本和图像特征，请使用 forwardBoth() 方法。
-     * 
-     * @param inputs inputs[0]: textFeatures [batch, text_len, hidden_size]
-     *               inputs[1]: imageFeatures [batch, num_patches, hidden_size]
-     * @return fusedTextFeatures [batch, text_len, hidden_size]
-     * @see #forwardBoth(Variable, Variable) 同时获取两种融合特征
+     * 前向传播（仅返回 text 侧融合结果，单侧开销）。
+     *
+     * <p>由于 {@link Module#forward(Variable...)} 签名只能返回单个 {@link Variable}，
+     * 此方法仅执行 <b>text → image</b> 方向的跨模态注意力并返回。</p>
+     *
+     * <p><b>注意</b>：此方法 <i>不会</i> 计算 image→text 分支，避免白算开销。
+     * 需要同时拿到双向融合结果时，请调用 {@link #forwardBoth(Variable, Variable)}。</p>
+     *
+     * @param inputs {@code inputs[0]}: textFeatures {@code [batch, text_len, hidden_size]}；
+     *               {@code inputs[1]}: imageFeatures {@code [batch, num_patches, hidden_size]}
+     * @return fusedTextFeatures {@code [batch, text_len, hidden_size]}
+     * @see #forwardBoth(Variable, Variable)
      */
     @Override
     public Variable forward(Variable... inputs) {
         if (inputs == null || inputs.length < 2) {
             throw new IllegalArgumentException(
-                "MultiModalFusion需要2个输入: textFeatures和imageFeatures"
+                    "MultiModalFusion需要2个输入: textFeatures和imageFeatures"
             );
         }
-        
-        Variable textFeatures = inputs[0];   // [batch, text_len, hidden_size]
-        Variable imageFeatures = inputs[1];  // [batch, num_patches, hidden_size]
-        
-        // 1. Text → Image 跨模态注意力
-        // 文本特征作为Query,图像特征作为Key/Value
-        Variable fusedTextFeatures = fuseTextWithImage(textFeatures, imageFeatures);
-        
-        // 2. Image → Text 跨模态注意力 (计算但不返回，需要时请用forwardBoth)
-        // 图像特征作为Query,文本特征作为Key/Value
-        // Variable fusedImageFeatures = fuseImageWithText(imageFeatures, textFeatures);
-        
-        return fusedTextFeatures;
+        Variable textFeatures = inputs[0];
+        Variable imageFeatures = inputs[1];
+        return fuseTextWithImage(textFeatures, imageFeatures);
     }
-    
+
     /**
-     * 双向融合前向传播
-     * 
-     * 同时返回文本和图像的融合结果
-     * 
-     * @param textFeatures 文本特征 [batch, text_len, hidden_size]
-     * @param imageFeatures 图像特征 [batch, num_patches, hidden_size]
-     * @return Variable数组: [fusedTextFeatures, fusedImageFeatures]
+     * 双向融合前向传播：同时返回 text 和 image 两侧的融合结果。
+     *
+     * <p>两侧分支彼此独立、参数互不共享，因此返回的两个张量可以同时参与下游 loss，
+     * 让两组 CrossModalAttention 的参数都获得梯度。</p>
+     *
+     * @param textFeatures  文本特征 {@code [batch, text_len, hidden_size]}
+     * @param imageFeatures 图像特征 {@code [batch, num_patches, hidden_size]}
+     * @return 长度为 2 的数组 {@code [fusedTextFeatures, fusedImageFeatures]}
      */
     public Variable[] forwardBoth(Variable textFeatures, Variable imageFeatures) {
-        // 1. Text → Image 跨模态注意力
         Variable fusedTextFeatures = fuseTextWithImage(textFeatures, imageFeatures);
-        
-        // 2. Image → Text 跨模态注意力
         Variable fusedImageFeatures = fuseImageWithText(imageFeatures, textFeatures);
-        
         return new Variable[]{fusedTextFeatures, fusedImageFeatures};
+    }
+
+    /**
+     * 反向融合：仅执行 <b>image → text</b> 方向的跨模态注意力。
+     *
+     * <p>适用于图像理解类任务（如看图说话）：以图像 patch 序列作为 Query、文本作为 K/V，
+     * 输出形状为 {@code [batch, num_patches, hidden_size]}。</p>
+     *
+     * @param textFeatures  文本特征 {@code [batch, text_len, hidden_size]}，作为 K/V
+     * @param imageFeatures 图像特征 {@code [batch, num_patches, hidden_size]}，作为 Q
+     * @return fusedImageFeatures {@code [batch, num_patches, hidden_size]}
+     */
+    public Variable forwardReverse(Variable textFeatures, Variable imageFeatures) {
+        return fuseImageWithText(imageFeatures, textFeatures);
     }
     
     /**

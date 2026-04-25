@@ -134,26 +134,45 @@ public class TextEncoder extends Module {
     }
     
     /**
-     * 验证输入有效性
+     * 验证输入有效性：形状、序列长度以及 token id 取值范围。
+     *
+     * <p>Token id 越界时，{@link Embedding} 的查表会静默读到错误数据或直接抛 {@link ArrayIndexOutOfBoundsException}，
+     * 出错信息对用户非常不友好。此处做一次 O(batch*seq) 的扫描，在训练端给出明确报错。</p>
      */
     private void validateInput(Variable tokenIds) {
         if (tokenIds == null) {
             throw new IllegalArgumentException("tokenIds不能为null");
         }
-        
+
         int[] shape = tokenIds.getValue().getShape().getShapeDims();
         if (shape.length != 2) {
             throw new IllegalArgumentException(
-                "tokenIds必须是2维 [batch, seq_len], 当前shape: " + 
+                "tokenIds必须是2维 [batch, seq_len], 当前shape: " +
                 java.util.Arrays.toString(shape)
             );
         }
-        
+
         int seqLen = shape[1];
         if (seqLen > config.getMaxTextLength()) {
             throw new IllegalArgumentException(
                 "序列长度 " + seqLen + " 超过最大长度 " + config.getMaxTextLength()
             );
+        }
+
+        // Token id 范围校验：要求 id ∈ [0, vocabSize)
+        int vocabSize = config.getVocabSize();
+        float[] flat = tokenIds.getValue().getArray();
+        for (int i = 0; i < flat.length; i++) {
+            float f = flat[i];
+            int id = (int) f;
+            if (f != id || id < 0 || id >= vocabSize) {
+                int row = i / seqLen;
+                int col = i % seqLen;
+                throw new IllegalArgumentException(String.format(
+                    "tokenIds[%d, %d]=%s 越界或非整数；要求 id ∈ [0, vocabSize=%d)。" +
+                        "请检查 tokenizer 是否与 BananaConfig.vocabSize 对齐。",
+                    row, col, f, vocabSize));
+            }
         }
     }
     

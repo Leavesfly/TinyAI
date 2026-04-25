@@ -107,73 +107,84 @@ public class ImageDecoder extends Module {
         );
         registerModule("feat_norm", featureNorm);
         
-        // 4. 初始化上采样模块
-        // 从16x16上采样到256x256：需要4个2x上采样步骤
-        // 16 -> 32 -> 64 -> 128 -> 256
+        // 4. 初始化上采样模块（动态计算步数）
+        //
+        // 上采样链路：从 patchGrid 起步，每步 ×2 直到 imageSize。
+        // 通道链路：baseDim → baseDim/2 → baseDim/4 → ... → finalChannels(=16)。
+        //
+        // 示例：
+        //   Nano :  4 ×2→ 8  ×2→ 16  ×2→ 32  ×2→ 64         (imageSize=64,  4 步)
+        //   Tiny : 16 ×2→ 32 ×2→ 64 ×2→ 128 ×2→ 256         (imageSize=256, 4 步)
+        //   Small: 24 ×2→ 48 ×2→ 96 ×2→ 192 ×2→ 384         (imageSize=384, 4 步)  ← 注意 384 不是 2 的整数幂
+        //   Base : 32 ×2→ 64 ×2→ 128 ×2→ 256 ×2→ 512        (imageSize=512, 4 步)
+        //
+        // 对 Small 的 384 情况：patchGrid=24，24×2^4=384，刚好整除；
+        // 更一般地要求 imageSize / patchGrid 必须是 2 的幂次，否则抛出异常。
         this.upsampleBlocks = new ArrayList<>();
-        
-        // 通道级联: baseDim -> baseDim/2 -> baseDim/4 -> baseDim/8 -> 16
-        int ch1 = upsamplingBaseDim / 2;
-        int ch2 = ch1 / 2;
-        int ch3 = ch2 / 2;
-        int ch4 = 16;  // 始终输出 16 通道供 PixelProjection
-                
-        // 计算初始 patch 网格尺寸
-        int patchGridSize = config.getImageSize() / config.getPatchSize(); // 256/16=16
-                
-        // 第一个上采样块
-        UpsampleBlock block1 = new UpsampleBlock(
-            name + "_upsample_0",
-            upsamplingBaseDim,
-            ch1,
-            patchGridSize,
-            patchGridSize * 2
-        );
-        upsampleBlocks.add(block1);
-        registerModule("upsample_0", block1);
-                
-        // 第二个上采样块
-        UpsampleBlock block2 = new UpsampleBlock(
-            name + "_upsample_1",
-            ch1,
-            ch2,
-            patchGridSize * 2,
-            patchGridSize * 4
-        );
-        upsampleBlocks.add(block2);
-        registerModule("upsample_1", block2);
-                
-        // 第三个上采样块
-        UpsampleBlock block3 = new UpsampleBlock(
-            name + "_upsample_2",
-            ch2,
-            ch3,
-            patchGridSize * 4,
-            patchGridSize * 8
-        );
-        upsampleBlocks.add(block3);
-        registerModule("upsample_2", block3);
-                
-        // 第四个上采样块
-        UpsampleBlock block4 = new UpsampleBlock(
-            name + "_upsample_3",
-            ch3,
-            ch4,
-            patchGridSize * 8,
-            config.getImageSize()
-        );
-        upsampleBlocks.add(block4);
-        registerModule("upsample_3", block4);
-                
+
+        int patchGridSize = config.getImageSize() / config.getPatchSize();
+        int upsampleSteps = computeUpsampleSteps(patchGridSize, config.getImageSize());
+        int finalChannels = 16;  // PixelProjection 的输入通道
+
+        int curSize = patchGridSize;
+        int curChannels = upsamplingBaseDim;
+        for (int i = 0; i < upsampleSteps; i++) {
+            int nextSize = curSize * 2;
+            // 最后一步强制 finalChannels，其余步按 2 倍衰减但不低于 finalChannels
+            int nextChannels = (i == upsampleSteps - 1)
+                    ? finalChannels
+                    : Math.max(curChannels / 2, finalChannels);
+
+            UpsampleBlock block = new UpsampleBlock(
+                    name + "_upsample_" + i,
+                    curChannels,
+                    nextChannels,
+                    curSize,
+                    nextSize
+            );
+            upsampleBlocks.add(block);
+            registerModule("upsample_" + i, block);
+
+            curSize = nextSize;
+            curChannels = nextChannels;
+        }
+
         // 5. 像素投影层（最终输出）
         this.pixelProjection = new PixelProjection(
             name + "_pixel_proj",
-            ch4,
-            config.getImageChannels() // 3 (RGB)
+            curChannels,                 // 实际上等于 finalChannels
+            config.getImageChannels()    // 3 (RGB)
         );
         registerModule("pixel_proj", pixelProjection);
-        
+
         init();
+    }
+
+    /**
+     * 计算从 patchGrid 到 imageSize 需要多少次 ×2 上采样步骤。
+     *
+     * <p>要求 imageSize / patchGrid 必须是 2 的正整数幂次，否则抛出
+     * {@link IllegalArgumentException}，避免后续前向传播出现维度不匹配的隐式错误。</p>
+     */
+    private static int computeUpsampleSteps(int patchGrid, int imageSize) {
+        if (patchGrid <= 0 || imageSize <= 0 || imageSize < patchGrid) {
+            throw new IllegalArgumentException(
+                    "非法的 patchGrid/imageSize: patchGrid=" + patchGrid + ", imageSize=" + imageSize
+            );
+        }
+        int steps = 0;
+        int cur = patchGrid;
+        while (cur < imageSize) {
+            cur *= 2;
+            steps++;
+        }
+        if (cur != imageSize) {
+            throw new IllegalArgumentException(String.format(
+                    "imageSize / patchGrid 必须为 2 的整数幂次，但 imageSize=%d, patchGrid=%d, " +
+                            "请调整 imageSize 或 patchSize 使得两者比值为 2 的幂。",
+                    imageSize, patchGrid));
+        }
+        return steps;
     }
     
     @Override

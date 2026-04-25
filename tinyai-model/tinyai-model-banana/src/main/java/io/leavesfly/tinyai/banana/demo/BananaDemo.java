@@ -113,13 +113,15 @@ public class BananaDemo {
         System.out.println("-".repeat(80));
         
         // 创建自定义配置
+        // 注意：imageSize / patchSize 必须是 2 的幂（ImageDecoder 的上采样链路是 ×2 级联）。
+        // 这里选 256/16 = 16 = 2^4，合法。
         BananaConfig config = new BananaConfig();
         config.setHiddenSize(384);
         config.setNumLayers(6);
         config.setNumHeads(6);
         config.setFfnHiddenSize(1536);
-        config.setImageSize(224);
-        config.setPatchSize(14);
+        config.setImageSize(256);
+        config.setPatchSize(16);
         config.updateNumPatches();
         
         // 验证配置

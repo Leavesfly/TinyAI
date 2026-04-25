@@ -4,22 +4,22 @@ import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.nnet.core.Module;
 import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.layer.activation.ReLU;
+import io.leavesfly.tinyai.nnet.layer.activation.SiLU;
 import io.leavesfly.tinyai.nnet.core.Parameter;
 
 import java.util.Map;
 
 /**
- * Expert Network - 专家网络
+ * Expert Network - 专家网络（对标 Python FeedForward）
  * 
- * MoE中的单个专家,采用标准FFN结构:
- * input → Linear(W1) → ReLU → Linear(W2) → output
+ * MoE中的单个专家,采用 SwiGLU 结构：
+ * output = down_proj(SiLU(gate_proj(x)) * up_proj(x))
  * 
  * 架构特点:
- * - 两层全连接网络
- * - ReLU激活函数
+ * - 三层线性层（gate_proj, up_proj, down_proj）
+ * - SiLU 激活函数 + 门控机制
+ * - 无 bias（对标 Python）
  * - 每个专家独立参数
- * - 支持不同隐藏层维度
  * 
  * @author leavesfly
  * @since 2024
@@ -31,9 +31,10 @@ public class ExpertNetwork extends Module {
     private final int outputDim;
     private final int expertId;
     
-    private final Linear fc1;      // 第一层: input_dim -> hidden_dim
-    private final ReLU activation; // 激活函数
-    private final Linear fc2;      // 第二层: hidden_dim -> output_dim
+    private final Linear gateProj;   // 门控投影: inputDim -> hiddenDim
+    private final SiLU silu;         // SiLU 激活函数
+    private final Linear upProj;     // 上投影: inputDim -> hiddenDim
+    private final Linear downProj;   // 下投影: hiddenDim -> outputDim
     
     /**
      * 构造函数
@@ -50,15 +51,17 @@ public class ExpertNetwork extends Module {
         this.hiddenDim = hiddenDim;
         this.outputDim = outputDim;
         
-        // 创建层
-        this.fc1 = new Linear("expert_" + expertId + "_fc1", inputDim, hiddenDim, true);
-        this.activation = new ReLU("expert_" + expertId + "_relu");
-        this.fc2 = new Linear("expert_" + expertId + "_fc2", hiddenDim, outputDim, true);
+        // SwiGLU 结构（对标 Python FeedForward，无 bias）
+        this.gateProj = new Linear("expert_" + expertId + "_gate_proj", inputDim, hiddenDim, false);
+        this.silu = new SiLU("expert_" + expertId + "_silu");
+        this.upProj = new Linear("expert_" + expertId + "_up_proj", inputDim, hiddenDim, false);
+        this.downProj = new Linear("expert_" + expertId + "_down_proj", hiddenDim, outputDim, false);
         
         // 注册子模块
-        registerModule("fc1", fc1);
-        registerModule("activation", activation);
-        registerModule("fc2", fc2);
+        registerModule("gate_proj", gateProj);
+        registerModule("silu", silu);
+        registerModule("up_proj", upProj);
+        registerModule("down_proj", downProj);
     }
     
     /**
@@ -70,10 +73,14 @@ public class ExpertNetwork extends Module {
     }
     
     /**
-     * 前向传播(内部调用)
+     * 前向传播(内部调用) - SwiGLU
+     * output = down_proj(SiLU(gate_proj(x)) * up_proj(x))
      */
     public Variable forwardVar(Variable input) {
-        return fc2.forward(activation.forward(fc1.forward(input)));
+        Variable gate = silu.forward(gateProj.forward(input));
+        Variable up = upProj.forward(input);
+        Variable hidden = gate.mul(up);
+        return downProj.forward(hidden);
     }
     
     /**
@@ -121,12 +128,13 @@ public class ExpertNetwork extends Module {
     }
     
     /**
-     * 获取参数数量
+     * 获取参数数量（SwiGLU: 3 个无 bias 的 Linear）
      */
     public int getParameterCount() {
-        // fc1: (input_dim + 1) * hidden_dim
-        // fc2: (hidden_dim + 1) * output_dim
-        return (inputDim + 1) * hiddenDim + (hiddenDim + 1) * outputDim;
+        // gate_proj: inputDim * hiddenDim
+        // up_proj: inputDim * hiddenDim  
+        // down_proj: hiddenDim * outputDim
+        return inputDim * hiddenDim * 2 + hiddenDim * outputDim;
     }
     
     /**

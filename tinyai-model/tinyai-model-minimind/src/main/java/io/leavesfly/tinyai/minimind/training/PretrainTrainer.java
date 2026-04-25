@@ -28,9 +28,11 @@ public class PretrainTrainer extends BaseTrainer {
     // 训练配置
     private float initialLearningRate;
     private int warmupSteps;     // 学习率预热步数
+    private int accumulationSteps = 1;  // 梯度累积步数（对标 Python accumulation_steps）
     
     // 训练状态
     private float currentLearningRate;
+    private int accumulationCounter = 0;  // 梯度累积计数器
     
     /**
      * 构造函数
@@ -62,12 +64,6 @@ public class PretrainTrainer extends BaseTrainer {
     
     /**
      * 配置训练参数
-     * 
-     * @param maxEpochs 最大训练轮次
-     * @param learningRate 学习率
-     * @param warmupSteps 预热步数
-     * @param maxGradNorm 梯度裁剪阈值
-     * @return this
      */
     public PretrainTrainer configure(int maxEpochs, float learningRate, 
                                       int warmupSteps, float maxGradNorm) {
@@ -75,6 +71,14 @@ public class PretrainTrainer extends BaseTrainer {
         this.initialLearningRate = learningRate;
         this.warmupSteps = warmupSteps;
         this.maxGradNorm = maxGradNorm;
+        return this;
+    }
+
+    /**
+     * 设置梯度累积步数（对标 Python accumulation_steps）
+     */
+    public PretrainTrainer setAccumulationSteps(int accumulationSteps) {
+        this.accumulationSteps = Math.max(1, accumulationSteps);
         return this;
     }
     
@@ -100,7 +104,6 @@ public class PretrainTrainer extends BaseTrainer {
         
         PretrainDataset.Batch pretrainBatch = (PretrainDataset.Batch) batch;
         
-        // 获取输入和目标
         NdArray inputArray = pretrainBatch.getInput();
         NdArray targetArray = pretrainBatch.getTarget();
         
@@ -110,7 +113,6 @@ public class PretrainTrainer extends BaseTrainer {
         // 前向传播
         Variable logits = model.predict(input);
         
-        // SoftmaxCE 需要 2D 输入，将 [batch, seqLen, vocabSize] reshape 为 [batch*seqLen, vocabSize]
         int[] logitsShape = logits.getValue().getShape().getShapeDims();
         int totalTokens = logitsShape[0] * logitsShape[1];
         int vocabSize = logitsShape[2];
@@ -122,17 +124,31 @@ public class PretrainTrainer extends BaseTrainer {
         Variable loss = lossFunction.loss(targetReshaped, logitsReshaped);
         float lossValue = loss.getValue().getNumber().floatValue();
         
-        // 清除梯度
-        model.clearGrads();
+        // 梯度累积：将损失除以累积步数（对标 Python: loss = loss / accumulation_steps）
+        if (accumulationSteps > 1) {
+            Variable scaleVar = new Variable(1.0f / accumulationSteps);
+            scaleVar.setRequireGrad(false);
+            loss = loss.mul(scaleVar);
+        }
         
-        // 反向传播
+        // 反向传播（累积梯度）
         loss.backward();
         
-        // 梯度裁剪（继承自BaseTrainer）
-        clipGradients();
+        accumulationCounter++;
         
-        // 更新参数
-        optimizer.update();
+        // 每 accumulation_steps 步更新一次参数
+        if (accumulationCounter % accumulationSteps == 0) {
+            // 梯度裁剪
+            clipGradients();
+            
+            // 更新参数
+            optimizer.update();
+            
+            // 清除梯度
+            model.clearGrads();
+            
+            accumulationCounter = 0;
+        }
         
         // 断开计算图
         loss.unChainBackward();
@@ -206,23 +222,23 @@ public class PretrainTrainer extends BaseTrainer {
     // ==================== PretrainTrainer 特有方法 ====================
     
     /**
-     * 更新学习率(带预热的余弦退火)
+     * 更新学习率（对标 Python get_lr）
+     * <p>
+     * Python 公式: lr * (0.1 + 0.45 * (1 + cos(π * step / total_steps)))
+     * 即余弦退火到初始 LR 的 10%（floor = 10%）
      */
     private void updateLearningRate() {
+        int totalSteps = maxEpochs * dataset.getBatchCount();
+        
         if (currentStep < warmupSteps) {
             // 线性预热
             currentLearningRate = initialLearningRate * ((float) currentStep / warmupSteps);
         } else {
-            // 余弦退火
-            int totalSteps = maxEpochs * dataset.getBatchCount();
-            int decaySteps = totalSteps - warmupSteps;
-            int currentDecayStep = currentStep - warmupSteps;
-            
-            double cosineDecay = 0.5 * (1 + Math.cos(Math.PI * currentDecayStep / decaySteps));
+            // 余弦退火（floor = 10%，对标 Python）
+            double cosineDecay = 0.1 + 0.45 * (1 + Math.cos(Math.PI * currentStep / totalSteps));
             currentLearningRate = initialLearningRate * (float) cosineDecay;
         }
         
-        // 更新优化器学习率
         optimizer.setLearningRate(currentLearningRate);
     }
     

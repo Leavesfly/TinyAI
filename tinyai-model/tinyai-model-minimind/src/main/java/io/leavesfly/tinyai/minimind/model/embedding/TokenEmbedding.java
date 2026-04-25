@@ -5,6 +5,7 @@ import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.core.Module;
 import io.leavesfly.tinyai.nnet.core.Parameter;
+import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
 
 /**
  * Token 嵌入层
@@ -81,6 +82,21 @@ public class TokenEmbedding extends Module {
     }
 
 
+
+    /**
+     * 权重共享：让 TokenEmbedding 使用 lmHead 的 weight（对标 Python）
+     * <p>
+     * Python: self.model.embed_tokens.weight = self.lm_head.weight
+     * Embedding weight shape: [vocabSize, embeddingDim]
+     * Linear weight shape:    [vocabSize, hiddenSize]（outFeatures=vocabSize, inFeatures=hiddenSize）
+     * 两者形状一致（embeddingDim == hiddenSize），可以共享同一份参数。
+     *
+     * @param lmHead LM Head 线性层
+     */
+    public void shareWeightWith(Linear lmHead) {
+        // 替换为 lmHead 的 weight 参数
+        this.weight = lmHead.getWeight();
+    }
 
     /**
      * 获取嵌入权重参数(用于权重共享)

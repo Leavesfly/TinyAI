@@ -3,6 +3,7 @@ package io.leavesfly.tinyai.minimind.training.dataset;
 import io.leavesfly.tinyai.minimind.tokenizer.MiniMindTokenizer;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
+import org.json.JSONObject;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -66,6 +67,38 @@ public class PretrainDataset implements Serializable {
         
         List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
         loadFromTexts(lines);
+    }
+    
+    /**
+     * 从JSONL文件加载数据
+     * 支持格式: {"text": "..."} 每行一个JSON对象
+     * 对齐Python minimind3的预训练数据格式
+     * 
+     * @param filePath JSONL文件路径
+     * @throws IOException IO异常
+     */
+    public void loadFromJsonl(String filePath) throws IOException {
+        Path path = Paths.get(filePath);
+        if (!Files.exists(path)) {
+            throw new FileNotFoundException("数据文件不存在: " + filePath);
+        }
+        
+        List<String> lines = Files.readAllLines(path, StandardCharsets.UTF_8);
+        List<String> texts = new ArrayList<>();
+        for (String line : lines) {
+            if (line.trim().isEmpty()) continue;
+            try {
+                JSONObject json = new JSONObject(line);
+                String text = json.optString("text", "");
+                if (!text.isEmpty()) {
+                    texts.add(text);
+                }
+            } catch (Exception e) {
+                // 不是JSON格式，作为纯文本处理
+                texts.add(line);
+            }
+        }
+        loadFromTexts(texts);
     }
     
     /**

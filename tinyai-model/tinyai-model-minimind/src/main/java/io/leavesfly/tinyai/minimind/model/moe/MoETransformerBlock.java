@@ -7,32 +7,26 @@ import io.leavesfly.tinyai.minimind.model.transformer.attention.MultiHeadAttenti
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.core.Module;
-import io.leavesfly.tinyai.nnet.layer.norm.LayerNorm;
+import io.leavesfly.tinyai.nnet.layer.norm.RMSNorm;
 
 /**
- * MiniMind MoE Transformer 层
+ * MiniMind MoE Transformer 层（对标 Python MiniMindBlock with use_moe=True）
  * <p>
  * 集成了多头注意力和 MoE FFN 的 Transformer 层
  * 
- * 架构 (Pre-LayerNorm):
- * 1. x = x + MultiHeadAttention(LayerNorm(x))
- * 2. x = x + MoEBlock(LayerNorm(x))
- * 
- * 特点:
- * - 用 MoE 层替换标准 FFN
- * - 支持 KV-Cache 增量推理
- * - 计算负载均衡损失
- * - 专家使用统计
+ * 架构 (Pre-RMSNorm):
+ * 1. x = x + MultiHeadAttention(RMSNorm(x))
+ * 2. x = x + MoEBlock(RMSNorm(x))
  * 
  * @author leavesfly
- * @version 1.0
+ * @version 2.0
  */
 public class MoETransformerBlock extends Module {
 
     /**
-     * 第一个归一化层（用于注意力）
+     * 第一个归一化层（对标 Python self.input_layernorm = RMSNorm）
      */
-    private final LayerNorm norm1;
+    private final RMSNorm norm1;
 
     /**
      * 多头自注意力层
@@ -40,9 +34,9 @@ public class MoETransformerBlock extends Module {
     private final MultiHeadAttention attention;
 
     /**
-     * 第二个归一化层（用于 MoE）
+     * 第二个归一化层（对标 Python self.post_attention_layernorm = RMSNorm）
      */
-    private final LayerNorm norm2;
+    private final RMSNorm norm2;
 
     /**
      * MoE 层
@@ -79,28 +73,22 @@ public class MoETransformerBlock extends Module {
         int maxSeqLen = config.getMaxSeqLen();
         float epsilon = config.getEpsilon();
 
-        // 1. 第一个 LayerNorm
-        this.norm1 = new LayerNorm(name + "_norm1", hiddenSize, epsilon);
+        // 1. RMSNorm（对标 Python self.input_layernorm）
+        this.norm1 = new RMSNorm(name + "_norm1", hiddenSize, epsilon);
         registerModule("norm1", norm1);
 
-        // 2. 多头自注意力
-        this.attention = new MultiHeadAttention(
-            name + "_attn",
-            hiddenSize,
-            numHeads,
-            maxSeqLen,
-            0.0f  // dropout
-        );
+        // 2. 多头自注意力（使用 Config 构造，支持 GQA）
+        this.attention = new MultiHeadAttention(name + "_attn", config);
         registerModule("attention", attention);
 
-        // 3. 第二个 LayerNorm
-        this.norm2 = new LayerNorm(name + "_norm2", hiddenSize, epsilon);
+        // 3. RMSNorm（对标 Python self.post_attention_layernorm）
+        this.norm2 = new RMSNorm(name + "_norm2", hiddenSize, epsilon);
         registerModule("norm2", norm2);
 
-        // 4. MoE 层
+        // 4. MoE 层（使用 moeIntermediateSize）
         this.moeLayer = new MoEBlock(
             config.getHiddenSize(),
-            config.getFfnHiddenSize(),
+            config.getMoeIntermediateSize(),
             config.getHiddenSize(),
             config.getNumExperts(),
             config.getNumExpertsPerToken(),
@@ -108,10 +96,9 @@ public class MoETransformerBlock extends Module {
         );
         registerModule("moe", moeLayer);
 
-        // 5. 负载均衡损失
+        // 5. 负载均衡损失（对标 Python router_aux_loss_coef）
         this.loadBalanceLoss = new LoadBalanceLoss(
-            config.getMoeImportanceCoef(),
-            config.getMoeLoadCoef()
+            config.getRouterAuxLossCoef()
         );
     }
 

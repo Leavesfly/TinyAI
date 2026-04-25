@@ -145,10 +145,75 @@ public class RotaryPositionEmbeddingTest {
         // 测试最大序列长度边界
         float[] data = new float[dimModel];
         NdArray input = NdArray.of(data, Shape.of(1, 1, dimModel));
-        
+
         // 在最大长度内应该正常工作
         Variable posVar = new Variable(NdArray.of(new float[]{maxSeqLen - 1}, Shape.of(1)));
         Variable output = rope.forward(new Variable(input), posVar);
         assertNotNull(output, "在最大序列长度内应正常工作");
+    }
+
+    /**
+     * 回归测试：同一个 RoPE 实例被 Q、K 两种不同形状的输入先后调用后，
+     * 反向传播必须都能正确完成。
+     * <p>
+     * 该测试精确复现历史 Bug：
+     * {@code java.lang.IllegalArgumentException: 数据长度 16384 与形状大小 8192 不匹配}。
+     * <br>
+     * 根因：RotaryEmbedding Function 将 {@code inputShape} / {@code startPos} 缓存为实例字段，
+     * 同一实例被 Q（[B, numHeads, L, D]）和 K（[B, numKVHeads, L, D]）先后 call() 会互相覆盖，
+     * 导致反传 Q 分支时读到 K 的 shape，数据长度变成 shape size 的 numKVGroups 倍。
+     * <br>
+     * 修复后：每次 forward 都 new 一个独立的 Function 实例（共享 cos/sin 缓存），Q、K 互不干扰。
+     */
+    @Test
+    public void testBackwardWithDifferentShapesGQA() {
+        // 模拟 GQA 场景：numHeads=8, numKVHeads=2, numKVGroups=4
+        int batchSize = 1;
+        int numHeads = 8;
+        int numKVHeads = 2;
+        int seqLen = 16;
+        int headDim = 16;
+
+        // Q: [1, 8, 16, 16] = 2048
+        float[] qData = new float[batchSize * numHeads * seqLen * headDim];
+        for (int i = 0; i < qData.length; i++) {
+            qData[i] = (i % 7) * 0.1f;
+        }
+        Variable q = new Variable(NdArray.of(qData, Shape.of(batchSize, numHeads, seqLen, headDim)));
+
+        // K: [1, 2, 16, 16] = 512（形状比 Q 小 4 倍）
+        float[] kData = new float[batchSize * numKVHeads * seqLen * headDim];
+        for (int i = 0; i < kData.length; i++) {
+            kData[i] = (i % 5) * 0.1f;
+        }
+        Variable k = new Variable(NdArray.of(kData, Shape.of(batchSize, numKVHeads, seqLen, headDim)));
+
+        RotaryPositionEmbedding sharedRope = new RotaryPositionEmbedding(headDim, 64, 10000.0f);
+
+        // 先对 Q 调用 RoPE，再对 K 调用 RoPE（模拟 MultiHeadAttention.forwardWithCache 的调用顺序）
+        Variable startPos = new Variable(NdArray.of(new float[]{0}));
+        startPos.setRequireGrad(false);
+        Variable qOut = sharedRope.forward(q, startPos);
+        Variable kOut = sharedRope.forward(k, startPos);
+
+        assertArrayEquals(new int[]{batchSize, numHeads, seqLen, headDim},
+                qOut.getValue().getShape().getShapeDims(), "Q 输出形状应保持");
+        assertArrayEquals(new int[]{batchSize, numKVHeads, seqLen, headDim},
+                kOut.getValue().getShape().getShapeDims(), "K 输出形状应保持");
+
+        // 关键点：对 Q 的输出做反向传播
+        // 修复前会抛 IllegalArgumentException: 数据长度 2048 与形状大小 512 不匹配
+        qOut.backward();
+        assertNotNull(q.getGrad(), "Q 的梯度不应为 null");
+        assertArrayEquals(q.getValue().getShape().getShapeDims(),
+                q.getGrad().getShape().getShapeDims(),
+                "Q 的梯度形状必须与 Q 的输入形状一致");
+
+        // 对 K 的输出也做反向传播
+        kOut.backward();
+        assertNotNull(k.getGrad(), "K 的梯度不应为 null");
+        assertArrayEquals(k.getValue().getShape().getShapeDims(),
+                k.getGrad().getShape().getShapeDims(),
+                "K 的梯度形状必须与 K 的输入形状一致");
     }
 }

@@ -38,8 +38,13 @@ public class DeepSeekV3Attention extends Module {
     private final Linear outputProjection;
     private final Dropout attnDropout;
 
-    // RoPE 旋转位置编码（作用于每个 head 的维度）
-    private final RotaryEmbedding rotaryEmbedding;
+    // RoPE 预计算的 cos/sin 缓存（只算一次，所有 forward 共享）
+    // 每次 forward 会基于这份缓存 new 一个新的 RotaryEmbedding Function 实例，
+    // 避免同一实例被 Q、K 多次 call 导致 inputShape/startPos 字段互相覆盖。
+    private final NdArray ropeCos;
+    private final NdArray ropeSin;
+    private final int ropeMaxSeqLen;
+    private final float ropeTheta;
 
     // Permute 对象缓存（避免每次 forward 都创建新对象）
     private static final Permute SPLIT_HEADS_PERMUTE = new Permute(0, 2, 1, 3);
@@ -82,8 +87,14 @@ public class DeepSeekV3Attention extends Module {
         registerModule("o_proj", outputProjection);
         registerModule("attn_dropout", attnDropout);
 
-        // 初始化 RoPE（作用于 headDim 维度，支持 4D 输入 [B, H, L, D_k]）
-        rotaryEmbedding = new RotaryEmbedding(headDim, maxSeqLen, ropeTheta);
+        // 初始化 RoPE 预计算缓存（作用于 headDim 维度，支持 4D 输入 [B, H, L, D_k]）
+        // 每次 forward 会基于这份共享缓存 new 一个新的 RotaryEmbedding Function 实例，
+        // 避免同一实例被 Q、K 多次 call 导致 inputShape/startPos 字段互相覆盖。
+        RotaryEmbedding bootstrap = new RotaryEmbedding(headDim, maxSeqLen, ropeTheta);
+        this.ropeCos = bootstrap.getCosCache();
+        this.ropeSin = bootstrap.getSinCache();
+        this.ropeMaxSeqLen = maxSeqLen;
+        this.ropeTheta = ropeTheta;
     }
 
     /**
@@ -113,8 +124,14 @@ public class DeepSeekV3Attention extends Module {
         valueOutput = splitHeads(valueOutput, batchSize, seqLen);
 
         // 3. 对 Q, K 应用 RoPE（4D 输入 [B, H, L, D_k]）
-        queryOutput = rotaryEmbedding.call(queryOutput);
-        keyOutput = rotaryEmbedding.call(keyOutput);
+        // 为 Q、K 各 new 一个 RotaryEmbedding Function 实例（共享 cos/sin 缓存），
+        // 避免同一实例被两次 call 时 inputShape/startPos 字段互相覆盖的 bug。
+        RotaryEmbedding ropeForQuery = new RotaryEmbedding(headDim, ropeMaxSeqLen, ropeTheta,
+                ropeCos, ropeSin);
+        RotaryEmbedding ropeForKey = new RotaryEmbedding(headDim, ropeMaxSeqLen, ropeTheta,
+                ropeCos, ropeSin);
+        queryOutput = ropeForQuery.call(queryOutput);
+        keyOutput = ropeForKey.call(keyOutput);
 
         // 4. 缩放点积注意力
         Variable attention = scaledDotProductAttention(queryOutput, keyOutput, valueOutput, causalMask);

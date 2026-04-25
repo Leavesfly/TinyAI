@@ -51,11 +51,11 @@ public class RotaryEmbedding extends Function {
         if (dim % 2 != 0) {
             throw new IllegalArgumentException("dim must be even, got: " + dim);
         }
-        
+
         this.dim = dim;
         this.maxSeqLen = maxSeqLen;
         this.theta = theta;
-        
+
         // 预计算 cos 和 sin 值
         precomputeFreqsCis();
     }
@@ -65,6 +65,63 @@ public class RotaryEmbedding extends Function {
      */
     public RotaryEmbedding(int dim, int maxSeqLen) {
         this(dim, maxSeqLen, 10000.0f);
+    }
+
+    /**
+     * 共享缓存构造函数
+     * <p>
+     * 重要：由于 RotaryEmbedding 通过实例字段 {@code inputShape} / {@code startPos}
+     * 在 forward 与 backward 之间传递上下文，同一实例被连续 {@code call()} 两次会互相覆盖，
+     * 导致反向传播时使用错误的输入形状（例如 GQA 中 Q 与 K 头数不同时）。
+     * </p>
+     * <p>
+     * 推荐的使用姿势是：把 cos/sin 缓存在上层模块只计算一次，
+     * 每次 {@code forward} 都通过本构造器 new 一个轻量 Function 实例，
+     * 这样 Q、K 就会得到各自独立的计算图节点，互不影响。
+     * </p>
+     *
+     * @param dim        特征维度(必须是偶数)
+     * @param maxSeqLen  最大序列长度
+     * @param theta      频率基数
+     * @param cosCache   预计算好的 cos 缓存，形状必须为 [maxSeqLen, dim/2]
+     * @param sinCache   预计算好的 sin 缓存，形状必须为 [maxSeqLen, dim/2]
+     */
+    public RotaryEmbedding(int dim, int maxSeqLen, float theta,
+                           NdArray cosCache, NdArray sinCache) {
+        if (dim % 2 != 0) {
+            throw new IllegalArgumentException("dim must be even, got: " + dim);
+        }
+        if (cosCache == null || sinCache == null) {
+            throw new IllegalArgumentException("cosCache and sinCache must not be null");
+        }
+        int[] cosDims = cosCache.getShape().getShapeDims();
+        int[] sinDims = sinCache.getShape().getShapeDims();
+        int halfDim = dim / 2;
+        if (cosDims.length != 2 || cosDims[0] != maxSeqLen || cosDims[1] != halfDim
+                || sinDims.length != 2 || sinDims[0] != maxSeqLen || sinDims[1] != halfDim) {
+            throw new IllegalArgumentException(
+                    "cos/sin cache shape mismatch: expected [" + maxSeqLen + ", " + halfDim + "]");
+        }
+
+        this.dim = dim;
+        this.maxSeqLen = maxSeqLen;
+        this.theta = theta;
+        this.cosCache = cosCache;
+        this.sinCache = sinCache;
+    }
+
+    /**
+     * 获取内部预计算的 cos 缓存（供上层共享复用，避免重复计算三角函数）
+     */
+    public NdArray getCosCache() {
+        return cosCache;
+    }
+
+    /**
+     * 获取内部预计算的 sin 缓存（供上层共享复用，避免重复计算三角函数）
+     */
+    public NdArray getSinCache() {
+        return sinCache;
     }
 
     /**

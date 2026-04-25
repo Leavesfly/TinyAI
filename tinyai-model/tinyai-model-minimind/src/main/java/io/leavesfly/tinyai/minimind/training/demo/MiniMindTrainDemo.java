@@ -14,10 +14,12 @@ import static io.leavesfly.tinyai.minimind.training.demo.DemoTrainingStages.*;
  * 1. 数据准备 - 生成各阶段训练数据
  * 2. 预训练 - 无监督语言建模
  * 3. SFT微调 - 监督指令微调（全参数）
- * 4. DPO训练 - 直接偏好优化（人类偏好对齐）
- * 5. RL训练 - 强化学习优化
- * 6. LoRA微调 - 参数高效微调（特定任务适配）
- * 7. 推理测试 - 文本生成
+ * 4. 知识蒸馏 - 教师模型指导学生模型
+ * 5. DPO训练 - 直接偏好优化（人类偏好对齐）
+ * 6. RL训练 - 强化学习优化
+ * 7. Agent RL训练 - 工具调用强化学习
+ * 8. LoRA微调 - 参数高效微调（特定任务适配）
+ * 9. 推理测试 - 文本生成
  * <p>
  * 数据集特点：超小规模、适合教学、覆盖完整流程
  * <p>
@@ -44,17 +46,23 @@ public class MiniMindTrainDemo {
             // 步骤2: 监督微调（SFT）
             MiniMindModel sftModel = runSupervisedFinetuning(pretrainedModel);
 
-            // 步骤3: DPO训练（人类偏好对齐）
-            MiniMindModel dpoModel = runDPOTraining(sftModel);
+            // 步骤3: 知识蒸馏训练（教师模型指导学生模型）
+            MiniMindModel distilledModel = runDistillationTraining(sftModel);
 
-            // 步骤4: 强化学习训练
+            // 步骤4: DPO训练（人类偏好对齐）
+            MiniMindModel dpoModel = runDPOTraining(distilledModel);
+
+            // 步骤5: 强化学习训练
             MiniMindModel rlModel = runReinforcementLearningTraining(dpoModel);
 
-            // LoRA微调前推理 - 记录基线效果
-            runInferenceForComparison(rlModel, "LoRA微调前推理（基线效果）");
+            // 步骤6: Agent RL训练（工具调用强化学习）
+            MiniMindModel agentModel = runAgentTraining(rlModel);
 
-            // 步骤5: LoRA微调（特定任务适配）
-            MiniMindModel loraModel = runLoRAFinetuning(rlModel);
+            // LoRA微调前推理 - 记录基线效果
+            runInferenceForComparison(agentModel, "LoRA微调前推理（基线效果）");
+
+            // 步骤7: LoRA微调（特定任务适配）
+            MiniMindModel loraModel = runLoRAFinetuning(agentModel);
 
             // LoRA微调后推理 - 与基线对比
             runInferenceForComparison(loraModel, "LoRA微调后推理（微调效果）");
@@ -66,7 +74,7 @@ public class MiniMindTrainDemo {
             loraModel.mergeLoRA();
             ModelLoader.saveModel(loraModel, getSharedTokenizer(), modelName);
 
-            // 步骤6: 从模型文件加载并推理测试
+            // 步骤8: 从模型文件加载并推理测试
             runInference(modelName);
 
             printSuccess();
@@ -84,7 +92,7 @@ public class MiniMindTrainDemo {
         System.out.println("=".repeat(80));
         System.out.println();
         System.out.println("训练流程:");
-        System.out.println("  [0] 数据准备 → [1] 预训练 → [2] SFT → [3] DPO → [4] RL → [5] LoRA → [6] 推理");
+        System.out.println("  [0] 数据准备 → [1] 预训练 → [2] SFT → [3] 蒸馏 → [4] DPO → [5] RL → [6] Agent → [7] LoRA → [8] 推理");
         System.out.println();
     }
 

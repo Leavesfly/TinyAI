@@ -1,112 +1,137 @@
 package io.leavesfly.tinyai.minimind.model.transformer.attention;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.minimind.model.MiniMindConfig;
 import io.leavesfly.tinyai.minimind.model.embedding.RotaryPositionEmbedding;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.core.Module;
 import io.leavesfly.tinyai.nnet.layer.dnn.Dropout;
 import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
+import io.leavesfly.tinyai.nnet.layer.norm.RMSNorm;
 
 /**
- * 多头注意力机制（Multi-Head Attention）
+ * 多头注意力机制（Multi-Head Attention，对标 Python Attention）
  * <p>
- * 实现功能：
- * - Q、K、V 投影使用 V2 Linear 层
- * - 集成 RoPE 旋转位置编码
- * - 支持因果掩码(Causal Mask)
- * - 支持 KV-Cache 增量推理
- * - Scaled Dot-Product Attention
+ * 支持 GQA（Grouped Query Attention）和 QK Normalization。
  * <p>
- * 计算流程：
+ * 计算流程（对标 Python）：
  * 1. Q = X @ W_Q, K = X @ W_K, V = X @ W_V
- * 2. 应用 RoPE 位置编码到 Q、K
- * 3. 多头分割：reshape 为 [batch, numHeads, seqLen, headDim]
- * 4. 计算注意力分数：scores = (Q @ K^T) / sqrt(headDim)
- * 5. 应用因果掩码
- * 6. Softmax 归一化
- * 7. 应用注意力权重：output = scores @ V
- * 8. 多头合并：reshape 为 [batch, seqLen, hiddenSize]
- * 9. 输出投影：output @ W_O
+ * 2. 多头分割：Q -> [batch, seqLen, numHeads, headDim], K/V -> [batch, seqLen, numKVHeads, headDim]
+ * 3. QK Normalization: Q = RMSNorm(Q), K = RMSNorm(K)
+ * 4. 应用 RoPE 位置编码
+ * 5. repeat_kv: 将 KV 头扩展到与 Q 头一致
+ * 6. 转置为 [batch, numHeads, seqLen, headDim]
+ * 7. 计算注意力分数：scores = (Q @ K^T) / sqrt(headDim)
+ * 8. 应用因果掩码
+ * 9. Softmax 归一化 + Dropout
+ * 10. 应用注意力权重：output = scores @ V
+ * 11. 多头合并 + 输出投影
  *
  * @author leavesfly
- * @version 1.0
+ * @version 2.0
  */
 public class MultiHeadAttention extends Module {
 
-    /**
-     * 隐藏层维度
-     */
+    /** 隐藏层维度 */
     private final int hiddenSize;
 
-    /**
-     * 注意力头数
-     */
+    /** Q 注意力头数 */
     private final int numHeads;
 
-    /**
-     * 每个头的维度
-     */
+    /** KV 注意力头数（GQA） */
+    private final int numKVHeads;
+
+    /** 每个头的维度 */
     private final int headDim;
 
-    /**
-     * Query 投影层（支持 LoRA 替换）
-     */
+    /** KV 头重复倍数 (numHeads / numKVHeads) */
+    private final int numKVGroups;
+
+    /** Query 投影层（支持 LoRA 替换） */
     private Module queryProj;
 
-    /**
-     * Key 投影层
-     */
+    /** Key 投影层 */
     private Module keyProj;
 
-    /**
-     * Value 投影层（支持 LoRA 替换）
-     */
+    /** Value 投影层（支持 LoRA 替换） */
     private Module valueProj;
 
-    /**
-     * 输出投影层
-     */
+    /** 输出投影层 */
     private Module outputProj;
 
-    /**
-     * RoPE 位置编码
-     */
+    /** QK Normalization - Q 归一化（对标 Python self.q_norm） */
+    private final RMSNorm qNorm;
+
+    /** QK Normalization - K 归一化（对标 Python self.k_norm） */
+    private final RMSNorm kNorm;
+
+    /** RoPE 位置编码 */
     private final RotaryPositionEmbedding rope;
 
-    /**
-     * Dropout 比例
-     */
+    /** Dropout 比例 */
     private final float dropoutRate;
 
-    /**
-     * 注意力权重的 Dropout 层
-     */
+    /** 注意力权重的 Dropout 层 */
     private final Dropout attnDropout;
 
-    /**
-     * 是否处于训练模式
-     */
+    /** 是否处于训练模式 */
     private boolean training = true;
-    
-    /**
-     * 掩码缓存：缓存已创建的因果掩码
-     */
+
+    /** 掩码缓存 */
     private Variable cachedMask;
-    
-    /**
-     * 缓存的掩码大小：记录缓存的掩码对应的序列长度
-     */
     private long cachedMaskSize = -1;
 
     /**
-     * 构造多头注意力层
+     * 使用 MiniMindConfig 构造（推荐，支持 GQA + QK Norm）
      *
-     * @param name        层名称
-     * @param hiddenSize  隐藏层维度
-     * @param numHeads    注意力头数
-     * @param maxSeqLen   最大序列长度
-     * @param dropoutRate Dropout 比例
+     * @param name   层名称
+     * @param config 模型配置
+     */
+    public MultiHeadAttention(String name, MiniMindConfig config) {
+        super(name);
+
+        this.hiddenSize = config.getHiddenSize();
+        this.numHeads = config.getNumHeads();
+        this.numKVHeads = config.getNumKVHeads();
+        this.headDim = config.getHeadDim();
+        this.numKVGroups = numHeads / numKVHeads;
+        this.dropoutRate = config.getDropout();
+
+        // Q 投影: hiddenSize -> numHeads * headDim
+        this.queryProj = new Linear("query_proj", hiddenSize, numHeads * headDim, false);
+        // K 投影: hiddenSize -> numKVHeads * headDim（GQA: KV 维度更小）
+        this.keyProj = new Linear("key_proj", hiddenSize, numKVHeads * headDim, false);
+        // V 投影: hiddenSize -> numKVHeads * headDim
+        this.valueProj = new Linear("value_proj", hiddenSize, numKVHeads * headDim, false);
+        // 输出投影: numHeads * headDim -> hiddenSize
+        this.outputProj = new Linear("output_proj", numHeads * headDim, hiddenSize, false);
+
+        registerModule("query_proj", queryProj);
+        registerModule("key_proj", keyProj);
+        registerModule("value_proj", valueProj);
+        registerModule("output_proj", outputProj);
+
+        // QK Normalization（对标 Python self.q_norm / self.k_norm）
+        this.qNorm = new RMSNorm("q_norm", headDim, config.getEpsilon());
+        this.kNorm = new RMSNorm("k_norm", headDim, config.getEpsilon());
+        registerModule("q_norm", qNorm);
+        registerModule("k_norm", kNorm);
+
+        // Dropout
+        this.attnDropout = new Dropout("attn_dropout", dropoutRate);
+        registerModule("attn_dropout", attnDropout);
+
+        // RoPE（使用 config 中的 theta 和 maxPositionEmbeddings）
+        this.rope = new RotaryPositionEmbedding(headDim, config.getMaxPositionEmbeddings(),
+                config.getRopeTheta());
+        registerModule("rope", rope);
+
+        init();
+    }
+
+    /**
+     * 兼容旧接口的构造函数（不支持 GQA，numKVHeads = numHeads，无 QK Norm）
      */
     public MultiHeadAttention(String name, int hiddenSize, int numHeads, int maxSeqLen, float dropoutRate) {
         super(name);
@@ -117,30 +142,31 @@ public class MultiHeadAttention extends Module {
 
         this.hiddenSize = hiddenSize;
         this.numHeads = numHeads;
+        this.numKVHeads = numHeads; // 无 GQA
         this.headDim = hiddenSize / numHeads;
+        this.numKVGroups = 1;
         this.dropoutRate = dropoutRate;
 
-        // 创建投影层（使用 V2 Linear）
         this.queryProj = new Linear("query_proj", hiddenSize, hiddenSize, false);
         this.keyProj = new Linear("key_proj", hiddenSize, hiddenSize, false);
         this.valueProj = new Linear("value_proj", hiddenSize, hiddenSize, false);
         this.outputProj = new Linear("output_proj", hiddenSize, hiddenSize, false);
 
-        // 注册子模块
         registerModule("query_proj", queryProj);
         registerModule("key_proj", keyProj);
         registerModule("value_proj", valueProj);
         registerModule("output_proj", outputProj);
 
-        // 创建注意力 Dropout
+        // 旧接口无 QK Norm，使用 identity-like RMSNorm
+        this.qNorm = null;
+        this.kNorm = null;
+
         this.attnDropout = new Dropout("attn_dropout", dropoutRate);
         registerModule("attn_dropout", attnDropout);
 
-        // 创建 RoPE 位置编码
         this.rope = new RotaryPositionEmbedding(headDim, maxSeqLen);
         registerModule("rope", rope);
 
-        // 初始化参数
         init();
     }
 
@@ -151,38 +177,48 @@ public class MultiHeadAttention extends Module {
     }
 
     /**
-     * 带 KV-Cache 的前向传播
+     * 带 KV-Cache 的前向传播（对标 Python Attention.forward）
      *
-     * @param x        输入 Variable
+     * @param x        输入 Variable [batch, seqLen, hiddenSize]
      * @param kvCache  KV-Cache 对象（可为 null）
      * @param startPos 起始位置（用于 RoPE 和因果掩码）
-     * @return 输出 Variable
+     * @return 输出 Variable [batch, seqLen, hiddenSize]
      */
     public Variable forwardWithCache(Variable x, KVCache kvCache, int startPos) {
 
+        int[] xShape = x.getValue().getShape().getShapeDims();
+        int batchSize = xShape[0];
+        int seqLen = xShape[1];
+
         // 1. Q、K、V 投影
-        Variable Q = queryProj.forward(x);
-        Variable K = keyProj.forward(x);
-        Variable V = valueProj.forward(x);
+        Variable Q = queryProj.forward(x);  // [batch, seqLen, numHeads * headDim]
+        Variable K = keyProj.forward(x);    // [batch, seqLen, numKVHeads * headDim]
+        Variable V = valueProj.forward(x);  // [batch, seqLen, numKVHeads * headDim]
 
-        // 获取输入形状
-        int[] qShape = Q.getValue().getShape().getShapeDims();
-        int batchSize = qShape[0];
-        int seqLen = qShape[1];
+        // 2. 多头分割
+        // Q: [batch, seqLen, numHeads, headDim]
+        Variable qSplit = Q.reshape(Shape.of(batchSize, seqLen, numHeads, headDim));
+        // K: [batch, seqLen, numKVHeads, headDim]
+        Variable kSplit = K.reshape(Shape.of(batchSize, seqLen, numKVHeads, headDim));
+        // V: [batch, seqLen, numKVHeads, headDim]
+        Variable vSplit = V.reshape(Shape.of(batchSize, seqLen, numKVHeads, headDim));
 
-        // 2. 多头分割：[batch, seqLen, hiddenSize] -> [batch, numHeads, seqLen, headDim]
-        //    先分割，RoPE 需要 headDim 维度的输入
-        Variable qSplit = reshapeForMultiHead(Q, batchSize, seqLen);
-        Variable kSplit = reshapeForMultiHead(K, batchSize, seqLen);
-        Variable vSplit = reshapeForMultiHead(V, batchSize, seqLen);
+        // 3. QK Normalization（对标 Python: xq, xk = self.q_norm(xq), self.k_norm(xk)）
+        if (qNorm != null && kNorm != null) {
+            qSplit = qNorm.forward(qSplit);
+            kSplit = kNorm.forward(kSplit);
+        }
 
-        // 3. 应用 RoPE 位置编码（在 headDim 维度上）
+        // 4. 转置为 [batch, numHeads/numKVHeads, seqLen, headDim] 以便应用 RoPE
+        qSplit = qSplit.permute(0, 2, 1, 3);
+        kSplit = kSplit.permute(0, 2, 1, 3);
+        vSplit = vSplit.permute(0, 2, 1, 3);
+
+        // 5. 应用 RoPE 位置编码
         qSplit = rope.forward(qSplit, new Variable(NdArray.of(new float[]{startPos})));
         kSplit = rope.forward(kSplit, new Variable(NdArray.of(new float[]{startPos})));
 
-        // 4. KV-Cache 处理
-        // 注意：KV-Cache 仅在推理（生成）阶段使用，此时不需要梯度回传，
-        // 因此这里用 new Variable 包装是安全的，不会影响训练时的计算图。
+        // 6. KV-Cache 处理（推理时使用）
         if (kvCache != null) {
             NdArray[] updated = kvCache.update(kSplit.getValue(), vSplit.getValue());
             kSplit = new Variable(updated[0]);
@@ -191,20 +227,24 @@ public class MultiHeadAttention extends Module {
             vSplit.setRequireGrad(false);
         }
 
+        // 7. repeat_kv: 将 KV 头扩展到与 Q 头一致（GQA 核心）
+        if (numKVGroups > 1) {
+            kSplit = repeatKV(kSplit, numKVGroups);
+            vSplit = repeatKV(vSplit, numKVGroups);
+        }
+
         int kvSeqLen = kSplit.getShape().getShapeDims()[2];
 
-        // 5-9. 注意力计算：使用 Variable 层面操作
-        Variable attnOutput = computeAttentionWithVariable(qSplit, kSplit, vSplit, 
-                                                   batchSize, seqLen, kvSeqLen, startPos, 
-                                                   kvCache == null);
+        // 8. 注意力计算
+        Variable attnOutput = computeAttentionWithVariable(qSplit, kSplit, vSplit,
+                batchSize, seqLen, kvSeqLen, startPos,
+                kvCache == null);
 
-        // 10. 多头合并：[batch, numHeads, seqLen, headDim] -> [batch, seqLen, hiddenSize]
+        // 9. 多头合并：[batch, numHeads, seqLen, headDim] -> [batch, seqLen, numHeads * headDim]
         Variable merged = mergeMultiHead(attnOutput, batchSize, seqLen);
 
-        // 11. 输出投影
-        Variable output = outputProj.forward(merged);
-
-        return output;
+        // 10. 输出投影
+        return outputProj.forward(merged);
     }
 
     /**
@@ -252,7 +292,23 @@ public class MultiHeadAttention extends Module {
         return attended;
     }
 
-    // 已删除旧的 NdArray 直接操作方法，改用 Variable 算子
+    /**
+     * repeat_kv: 将 KV 头扩展到与 Q 头一致（对标 Python repeat_kv）
+     * <p>
+     * 输入: [batch, numKVHeads, seqLen, headDim]
+     * 输出: [batch, numKVHeads * nRep, seqLen, headDim]
+     */
+    private Variable repeatKV(Variable x, int nRep) {
+        if (nRep == 1) return x;
+        int[] shape = x.getShape().getShapeDims();
+        int bs = shape[0], nKVHeads = shape[1], slen = shape[2], hd = shape[3];
+        // [bs, nKVHeads, slen, headDim] -> [bs, nKVHeads, 1, slen, headDim]
+        Variable expanded = x.reshape(Shape.of(bs, nKVHeads, 1, slen, hd));
+        // broadcast to [bs, nKVHeads, nRep, slen, headDim]
+        expanded = expanded.broadcastTo(Shape.of(bs, nKVHeads, nRep, slen, hd));
+        // reshape to [bs, nKVHeads * nRep, slen, headDim]
+        return expanded.reshape(Shape.of(bs, nKVHeads * nRep, slen, hd));
+    }
 
     /**
      * 设置训练模式
@@ -342,25 +398,12 @@ public class MultiHeadAttention extends Module {
     // =============================================================================
     
     /**
-     * 多头分割（使用 Variable.reshape + permute，保持计算图连通）
-     * [batch, seqLen, hiddenSize] -> [batch, numHeads, seqLen, headDim]
-     */
-    private Variable reshapeForMultiHead(Variable input, int batchSize, int seqLen) {
-        // [batch, seqLen, hiddenSize] -> [batch, seqLen, numHeads, headDim]
-        Variable reshaped = input.reshape(Shape.of(batchSize, seqLen, numHeads, headDim));
-        // 转置为 [batch, numHeads, seqLen, headDim]（通过 permute 保持计算图连通）
-        return reshaped.permute(0, 2, 1, 3);
-    }
-    
-    /**
      * 多头合并（使用 Variable.permute + reshape，保持计算图连通）
-     * [batch, numHeads, seqLen, headDim] -> [batch, seqLen, hiddenSize]
+     * [batch, numHeads, seqLen, headDim] -> [batch, seqLen, numHeads * headDim]
      */
     private Variable mergeMultiHead(Variable input, int batchSize, int seqLen) {
-        // [batch, numHeads, seqLen, headDim] -> [batch, seqLen, numHeads, headDim]（通过 permute 保持计算图连通）
         Variable transposed = input.permute(0, 2, 1, 3);
-        // [batch, seqLen, numHeads, headDim] -> [batch, seqLen, hiddenSize]
-        return transposed.reshape(Shape.of(batchSize, seqLen, hiddenSize));
+        return transposed.reshape(Shape.of(batchSize, seqLen, numHeads * headDim));
     }
     
     /**

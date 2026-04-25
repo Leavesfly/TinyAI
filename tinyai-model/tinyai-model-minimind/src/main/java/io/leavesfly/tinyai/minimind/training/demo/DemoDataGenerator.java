@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.minimind.training.demo;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.*;
@@ -22,6 +23,7 @@ public class DemoDataGenerator {
 
     /**
      * 准备所有训练数据集
+     * 如果数据文件已存在，则跳过生成
      */
     public static void prepareDatasets() throws IOException {
         System.out.println("\n" + "=".repeat(80));
@@ -34,10 +36,26 @@ public class DemoDataGenerator {
             System.out.println("✓ 创建数据目录: " + DATA_DIR);
         }
 
-        generatePretrainDataset();
-        generateSFTDataset();
-        generateDPODataset();
-        generateRLDataset();
+        // 检查是否已有数据文件（从 minimind3 提取的中文数据）
+        boolean hasPretrainData = new File(DATA_DIR + "/pretrain.jsonl").exists();
+        boolean hasSFTData = new File(DATA_DIR + "/sft_train.jsonl").exists();
+        boolean hasDPOData = new File(DATA_DIR + "/dpo_train.jsonl").exists();
+        boolean hasRLData = new File(DATA_DIR + "/rl_train.jsonl").exists();
+        boolean hasAgentData = new File(DATA_DIR + "/agent_rl.jsonl").exists();
+
+        if (hasPretrainData && hasSFTData && hasDPOData && hasRLData && hasAgentData) {
+            System.out.println("  ✓ 数据文件已存在，跳过生成");
+            System.out.println("  ✓ pretrain.jsonl, sft_train.jsonl, dpo_train.jsonl, rl_train.jsonl, agent_rl.jsonl");
+            System.out.println("\n✅ 数据集准备完成!");
+            return;
+        }
+
+        // 如果缺少数据文件，生成默认演示数据
+        if (!hasPretrainData) generatePretrainDataset();
+        if (!hasSFTData) generateSFTDataset();
+        if (!hasDPOData) generateDPODataset();
+        if (!hasRLData) generateRLDataset();
+        if (!hasAgentData) generateAgentDataset();
 
         System.out.println("\n✅ 数据集准备完成!");
     }
@@ -465,6 +483,101 @@ public class DemoDataGenerator {
         }
         writeJsonlFile(jsonLines, filePath);
         System.out.println("  ✓ RL训练数据: " + rlTexts.size() + " 条");
+    }
+
+    /**
+     * 生成 Agent 强化学习数据集 - 工具调用训练数据
+     * <p>
+     * 对标 Python minimind3 agent_rl.jsonl 格式：
+     * {"prompt": "...", "tools": ["tool1"], "gt": ["expected_value"]}
+     */
+    public static void generateAgentDataset() throws IOException {
+        System.out.println("\n📝 生成Agent强化学习数据集...");
+
+        List<String> jsonLines = new ArrayList<>();
+
+        // 数学计算工具
+        jsonLines.add(new JSONObject()
+                .put("prompt", "请计算 15 + 27 的结果")
+                .put("tools", new JSONArray().put("calculate_math"))
+                .put("gt", new JSONArray().put("42")).toString());
+        jsonLines.add(new JSONObject()
+                .put("prompt", "100 * 3 等于多少")
+                .put("tools", new JSONArray().put("calculate_math"))
+                .put("gt", new JSONArray().put("300")).toString());
+        jsonLines.add(new JSONObject()
+                .put("prompt", "计算 256 / 8")
+                .put("tools", new JSONArray().put("calculate_math"))
+                .put("gt", new JSONArray().put("32")).toString());
+
+        // 天气查询工具
+        jsonLines.add(new JSONObject()
+                .put("prompt", "北京今天天气怎么样")
+                .put("tools", new JSONArray().put("get_current_weather"))
+                .put("gt", new JSONArray().put("28°C").put("晴")).toString());
+        jsonLines.add(new JSONObject()
+                .put("prompt", "上海的天气如何")
+                .put("tools", new JSONArray().put("get_current_weather"))
+                .put("gt", new JSONArray().put("15°C").put("多云")).toString());
+        jsonLines.add(new JSONObject()
+                .put("prompt", "成都现在的天气")
+                .put("tools", new JSONArray().put("get_current_weather"))
+                .put("gt", new JSONArray().put("18°C").put("小雨")).toString());
+
+        // 汇率查询工具
+        jsonLines.add(new JSONObject()
+                .put("prompt", "1美元等于多少人民币")
+                .put("tools", new JSONArray().put("get_exchange_rate"))
+                .put("gt", new JSONArray().put("7.235")).toString());
+        jsonLines.add(new JSONObject()
+                .put("prompt", "查询欧元兑人民币汇率")
+                .put("tools", new JSONArray().put("get_exchange_rate"))
+                .put("gt", new JSONArray().put("7.892")).toString());
+
+        // 时间查询工具
+        jsonLines.add(new JSONObject()
+                .put("prompt", "现在几点了")
+                .put("tools", new JSONArray().put("get_current_time"))
+                .put("gt", new JSONArray().put("14:30")).toString());
+        jsonLines.add(new JSONObject()
+                .put("prompt", "东京现在是什么时间")
+                .put("tools", new JSONArray().put("get_current_time"))
+                .put("gt", new JSONArray().put("15:30")).toString());
+
+        // 单位换算工具
+        jsonLines.add(new JSONObject()
+                .put("prompt", "5公里等于多少米")
+                .put("tools", new JSONArray().put("unit_converter"))
+                .put("gt", new JSONArray().put("5000")).toString());
+        jsonLines.add(new JSONObject()
+                .put("prompt", "10磅等于多少公斤")
+                .put("tools", new JSONArray().put("unit_converter"))
+                .put("gt", new JSONArray().put("4.536")).toString());
+
+        // 翻译工具
+        jsonLines.add(new JSONObject()
+                .put("prompt", "把hello翻译成中文")
+                .put("tools", new JSONArray().put("translate_text"))
+                .put("gt", new JSONArray().put("你好")).toString());
+        jsonLines.add(new JSONObject()
+                .put("prompt", "将good morning翻译为中文")
+                .put("tools", new JSONArray().put("translate_text"))
+                .put("gt", new JSONArray().put("早上好")).toString());
+
+        // 无工具调用场景
+        jsonLines.add(new JSONObject()
+                .put("prompt", "你好，请做一下自我介绍")
+                .put("tools", new JSONArray())
+                .put("gt", new JSONArray()).toString());
+        jsonLines.add(new JSONObject()
+                .put("prompt", "什么是深度学习")
+                .put("tools", new JSONArray())
+                .put("gt", new JSONArray()).toString());
+
+        String filePath = DATA_DIR + "/agent_rl.jsonl";
+        writeJsonlFile(jsonLines, filePath);
+        System.out.println("  ✓ Agent RL训练数据: " + jsonLines.size() + " 条");
+        System.out.println("  ✓ 保存路径: " + filePath);
     }
 
     /**

@@ -32,6 +32,9 @@ public class SFTTrainer extends BaseTrainer {
     private final Adam optimizer;
     
     private float learningRate;
+    private int accumulationSteps = 1;  // 梯度累积步数
+    private float currentLearningRate;
+    private int accumulationCounter = 0;
     
     /**
      * 构造函数
@@ -59,9 +62,18 @@ public class SFTTrainer extends BaseTrainer {
     public SFTTrainer configure(int maxEpochs, float learningRate, float maxGradNorm) {
         this.maxEpochs = maxEpochs;
         this.learningRate = learningRate;
+        this.currentLearningRate = learningRate;
         this.maxGradNorm = maxGradNorm;
         
         optimizer.setLearningRate(learningRate);
+        return this;
+    }
+
+    /**
+     * 设置梯度累积步数
+     */
+    public SFTTrainer setAccumulationSteps(int accumulationSteps) {
+        this.accumulationSteps = Math.max(1, accumulationSteps);
         return this;
     }
     
@@ -69,19 +81,19 @@ public class SFTTrainer extends BaseTrainer {
     
     @Override
     protected float trainStep(Object batch) {
+        // 更新学习率（对标 Python get_lr: cosine with 10% floor）
+        updateLearningRate();
+        
         SFTDataset.Batch sftBatch = (SFTDataset.Batch) batch;
         
         NdArray inputArray = sftBatch.getInput();
         NdArray labelArray = sftBatch.getLabels();
-        // 注: 掩码暂不使用，SoftmaxCE 已计算平均损失
         
         Variable input = new Variable(inputArray);
         Variable labels = new Variable(labelArray);
         
-        // 前向传播
         Variable logits = model.predict(input);
         
-        // SoftmaxCE 需要 2D 输入，将 [batch, seqLen, vocabSize] reshape 为 [batch*seqLen, vocabSize]
         int[] logitsShape = logits.getValue().getShape().getShapeDims();
         int totalTokens = logitsShape[0] * logitsShape[1];
         int vocabSize = logitsShape[2];
@@ -89,34 +101,45 @@ public class SFTTrainer extends BaseTrainer {
         Variable logitsReshaped = logits.reshape(Shape.of(totalTokens, vocabSize));
         Variable labelsReshaped = labels.reshape(Shape.of(totalTokens, 1));
         
-        // 计算损失（SoftmaxCE 返回标量平均损失）
         Variable loss = lossFunction.loss(labelsReshaped, logitsReshaped);
-        
         float lossValue = loss.getValue().getNumber().floatValue();
         
-        // 检查异常值
         if (Float.isNaN(lossValue) || Float.isInfinite(lossValue)) {
             System.err.println("警告: 损失值异常 (" + lossValue + "), 跳过此batch");
-            // 跳过此batch，不进行参数更新
-            return Float.NaN;  // 返回NaN标识跳过，训练循环应处理此情况
+            return Float.NaN;
         }
         
-        // 清除梯度
-        model.clearGrads();
+        // 梯度累积
+        if (accumulationSteps > 1) {
+            Variable scaleVar = new Variable(1.0f / accumulationSteps);
+            scaleVar.setRequireGrad(false);
+            loss = loss.mul(scaleVar);
+        }
         
-        // 反向传播
         loss.backward();
         
-        // 梯度裁剪（继承自BaseTrainer）
-        clipGradients();
+        accumulationCounter++;
         
-        // 更新参数
-        optimizer.update();
+        if (accumulationCounter % accumulationSteps == 0) {
+            clipGradients();
+            optimizer.update();
+            model.clearGrads();
+            accumulationCounter = 0;
+        }
         
-        // 断开计算图
         loss.unChainBackward();
         
         return lossValue;
+    }
+    
+    /**
+     * 更新学习率（对标 Python get_lr: cosine with 10% floor）
+     */
+    private void updateLearningRate() {
+        int totalSteps = maxEpochs * dataset.getBatchCount();
+        double cosineDecay = 0.1 + 0.45 * (1 + Math.cos(Math.PI * currentStep / Math.max(totalSteps, 1)));
+        currentLearningRate = learningRate * (float) cosineDecay;
+        optimizer.setLearningRate(currentLearningRate);
     }
     
     @Override

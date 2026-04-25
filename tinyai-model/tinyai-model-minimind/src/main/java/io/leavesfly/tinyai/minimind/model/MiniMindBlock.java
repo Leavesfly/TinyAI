@@ -9,7 +9,7 @@ import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.core.Module;
 import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
-import io.leavesfly.tinyai.nnet.layer.norm.LayerNorm;
+import io.leavesfly.tinyai.nnet.layer.norm.RMSNorm;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,9 +52,9 @@ public class MiniMindBlock extends Module {
     private final List<MoETransformerBlock> moeLayers;
 
     /**
-     * 最终归一化层
+     * 最终归一化层（对标 Python self.norm = RMSNorm）
      */
-    private final LayerNorm finalNorm;
+    private final RMSNorm finalNorm;
 
     /**
      * 语言模型头 (LM Head) - 将隐藏状态映射回词汇表
@@ -98,29 +98,23 @@ public class MiniMindBlock extends Module {
             this.moeLayers = null;
             this.layers = new ArrayList<>();
             for (int i = 0; i < config.getNumLayers(); i++) {
-                TransformerBlock layer = new TransformerBlock(
-                        "layer_" + i,
-                        config.getHiddenSize(),
-                        config.getNumHeads(),
-                        config.getFfnHiddenSize(),
-                        config.getMaxSeqLen(),
-                        config.getDropout(),
-                        config.getEpsilon(),
-                        config.getActivationFunction(),
-                        config.isPreLayerNorm()
-                );
+                TransformerBlock layer = new TransformerBlock("layer_" + i, config);
                 layers.add(layer);
                 registerModule("layer_" + i, layer);
             }
         }
 
-        // 3. 创建最终归一化层
-        this.finalNorm = new LayerNorm("final_norm", config.getHiddenSize(), config.getEpsilon());
+        // 3. 创建最终归一化层（对标 Python self.norm = RMSNorm）
+        this.finalNorm = new RMSNorm("final_norm", config.getHiddenSize(), config.getEpsilon());
         registerModule("final_norm", finalNorm);
 
         // 4. 创建 LM Head
         this.lmHead = new Linear("lm_head", config.getHiddenSize(), config.getVocabSize(), false);
         registerModule("lm_head", lmHead);
+
+        // 5. 权重共享：embed_tokens.weight = lm_head.weight（对标 Python）
+        // 让 tokenEmbedding 和 lmHead 共享同一份权重矩阵
+        tokenEmbedding.shareWeightWith(lmHead);
 
         // 初始化参数
         init();

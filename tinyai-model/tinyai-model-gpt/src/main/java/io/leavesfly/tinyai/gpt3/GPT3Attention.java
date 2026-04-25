@@ -67,10 +67,17 @@ public class GPT3Attention extends Module {
     private final Dropout attnDropout;
 
     /**
-     * RoPE 可微分算子（RotaryEmbedding Function），支持反向传播。
+     * RoPE 预计算的 cos/sin 缓存（只算一次，所有 forward 共享）。
      * 仅在 useRoPE=true 且 rotaryDim>0 时初始化。
+     *
+     * 注意：不直接持有 RotaryEmbedding Function 实例，因为同一 Function 实例被 Q/K
+     * 先后 call() 两次会相互覆盖 inputShape/startPos，导致反向传播出错。
+     * 每次 forward 时会基于这份缓存 new 一个新的轻量 Function 实例。
      */
-    private final RotaryEmbedding ropeFunction;
+    private final NdArray ropeCos;
+    private final NdArray ropeSin;
+    private final int ropeMaxSeqLen;
+    private final float ropeBase;
 
     /**
      * 构造 GPT-3 增强注意力层
@@ -105,13 +112,22 @@ public class GPT3Attention extends Module {
         registerModule("o_proj", oProj);
         registerModule("attn_dropout", attnDropout);
 
-        // 初始化 RoPE 可微分算子（使用 RotaryEmbedding Function，支持反向传播）
+        // 初始化 RoPE 预计算缓存（使用临时 RotaryEmbedding 实例完成 cos/sin 预计算）
+        // 每次 forward 会基于这份共享缓存 new 一个新的 RotaryEmbedding Function 实例，
+        // 避免同一实例被 Q、K 多次 call 导致 inputShape/startPos 字段互相覆盖。
         if (useRoPE && rotaryDim > 0) {
             int maxSeqLen = config.getNPositions();
             float base = (float) config.getRotaryBase();
-            ropeFunction = new RotaryEmbedding(rotaryDim, maxSeqLen, base);
+            RotaryEmbedding bootstrap = new RotaryEmbedding(rotaryDim, maxSeqLen, base);
+            this.ropeCos = bootstrap.getCosCache();
+            this.ropeSin = bootstrap.getSinCache();
+            this.ropeMaxSeqLen = maxSeqLen;
+            this.ropeBase = base;
         } else {
-            ropeFunction = null;
+            this.ropeCos = null;
+            this.ropeSin = null;
+            this.ropeMaxSeqLen = 0;
+            this.ropeBase = 0f;
         }
 
         init();
@@ -247,6 +263,11 @@ public class GPT3Attention extends Module {
      * @param startPos 在完整序列中的起始位置（KV Cache 增量推理时使用）
      */
     private Variable applyPartialRoPE(Variable qk, int batchSize, int seqLen, int startPos) {
+        // 每次调用都新建一个 RotaryEmbedding Function 实例（共享 cos/sin 缓存），
+        // 避免同一实例被 Q、K 多次 call 时 inputShape/startPos 字段互相覆盖的 bug。
+        RotaryEmbedding ropeFunction = new RotaryEmbedding(rotaryDim, ropeMaxSeqLen, ropeBase,
+                ropeCos, ropeSin);
+
         if (rotaryDim == headDim) {
             // 全维度旋转：直接对整个张量应用 RoPE
             Variable startPosVar = new Variable(NdArray.of((float) startPos));

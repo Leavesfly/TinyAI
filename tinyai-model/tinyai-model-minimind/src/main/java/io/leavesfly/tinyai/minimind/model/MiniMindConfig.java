@@ -18,11 +18,16 @@ public class MiniMindConfig implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
+     * BOS token ID (默认为 1)
+     */
+    private int bosTokenId = 1;
+
+    /**
      * EOS token ID (默认为 2)
      */
     private int eosTokenId = 2;
 
-    // ========== 基础配置 ==========
+    // ========== 基础配置（对标 Python MiniMindConfig 默认值） ==========
 
     /**
      * 词汇表大小
@@ -30,46 +35,70 @@ public class MiniMindConfig implements Serializable {
     private int vocabSize = 6400;
 
     /**
-     * 最大序列长度
+     * 最大序列长度（训练时使用，对标 Python max_position_embeddings=32768）
      */
     private int maxSeqLen = 512;
 
     /**
-     * 隐藏层维度(d_model)
+     * 最大位置编码长度（对标 Python max_position_embeddings）
      */
-    private int hiddenSize = 512;
+    private int maxPositionEmbeddings = 32768;
 
     /**
-     * Transformer 层数
+     * 隐藏层维度(d_model)，对标 Python hidden_size=768
+     */
+    private int hiddenSize = 768;
+
+    /**
+     * Transformer 层数，对标 Python num_hidden_layers=8
      */
     private int numLayers = 8;
 
     /**
-     * 注意力头数
+     * 注意力头数（Q 头数），对标 Python num_attention_heads=8
      */
-    private int numHeads = 16;
+    private int numHeads = 8;
 
     /**
-     * 前馈网络隐藏层维度(FFN hidden size)
+     * GQA 中的 KV 头数，对标 Python num_key_value_heads=4
+     * 当 numKVHeads < numHeads 时启用 GQA（分组查询注意力）
      */
-    private int ffnHiddenSize = 1024;
+    private int numKVHeads = 4;
+
+    /**
+     * 每个注意力头的维度，默认 hiddenSize / numHeads
+     */
+    private int headDim = -1; // -1 表示自动计算
+
+    /**
+     * 前馈网络中间层维度（SwiGLU intermediate size）
+     * 对标 Python: intermediate_size = ceil(hidden_size * PI / 64) * 64
+     * 若为 -1 则自动按公式计算
+     */
+    private int intermediateSize = -1;
+
+    /**
+     * 前馈网络隐藏层维度（兼容旧接口，优先使用 intermediateSize）
+     * @deprecated 使用 {@link #intermediateSize} 代替
+     */
+    private int ffnHiddenSize = -1;
 
     // ========== 正则化参数 ==========
 
     /**
-     * Dropout 比例
+     * Dropout 比例，对标 Python dropout=0.0
      */
-    private float dropout = 0.1f;
+    private float dropout = 0.0f;
 
     /**
      * 注意力 Dropout 比例
      */
-    private float attentionDropout = 0.1f;
+    private float attentionDropout = 0.0f;
 
     /**
-     * LayerNorm epsilon 值
+     * RMSNorm epsilon 值，对标 Python rms_norm_eps=1e-6
      */
-    private float epsilon = 1e-5f;
+    private float epsilon = 1e-6f;
 
     // ========== 架构特性 ==========
 
@@ -89,9 +118,14 @@ public class MiniMindConfig implements Serializable {
     private boolean preLayerNorm = true;
 
     /**
-     * RoPE 的 theta 参数(用于计算频率)
+     * RoPE 的 theta 参数，对标 Python rope_theta=1e6
      */
-    private float ropeTheta = 10000.0f;
+    private float ropeTheta = 1000000.0f;
+
+    /**
+     * 是否使用 Flash Attention（Java 中仅做标记）
+     */
+    private boolean flashAttn = true;
 
     /**
      * 是否使用 Bias(默认不使用,遵循现代 LLM 设计)
@@ -101,9 +135,9 @@ public class MiniMindConfig implements Serializable {
     // ========== MoE 相关配置 ==========
 
     /**
-     * 是否启用 MoE 架构
+     * 是否启用 MoE 架构，对标 Python use_moe=False
      */
-    private boolean useMoE = true;
+    private boolean useMoE = false;
 
     /**
      * MoE 专家数量
@@ -111,14 +145,14 @@ public class MiniMindConfig implements Serializable {
     private int numExperts = 4;
 
     /**
-     * 每个 Token 激活的专家数量(Top-K)
+     * 每个 Token 激活的专家数量(Top-K)，对标 Python num_experts_per_tok=1
      */
-    private int numExpertsPerToken = 2;
+    private int numExpertsPerToken = 1;
 
     /**
-     * MoE 负载均衡损失系数
+     * MoE 路由辅助损失系数，对标 Python router_aux_loss_coef=5e-4
      */
-    private float moeLoadBalanceWeight = 0.01f;
+    private float routerAuxLossCoef = 5e-4f;
 
     /**
      * MoE 路由噪声因子
@@ -126,12 +160,23 @@ public class MiniMindConfig implements Serializable {
     private float moeNoiseFactor = 0.1f;
 
     /**
-     * MoE 重要性损失系数
+     * MoE 专家中间层维度，默认等于 intermediateSize
+     * 对标 Python moe_intermediate_size
+     */
+    private int moeIntermediateSize = -1;
+
+    /**
+     * 是否归一化 top-k 概率，对标 Python norm_topk_prob=True
+     */
+    private boolean normTopkProb = true;
+
+    /**
+     * MoE 重要性损失系数（兼容旧接口）
      */
     private float moeImportanceCoef = 0.01f;
 
     /**
-     * MoE 负载损失系数
+     * MoE 负载损失系数（兼容旧接口）
      */
     private float moeLoadCoef = 0.01f;
 
@@ -160,97 +205,78 @@ public class MiniMindConfig implements Serializable {
     // ========== 预设配置工厂方法 ==========
 
     /**
-     * 创建 Small 模型配置 (26M 参数)
+     * 创建默认配置（对标 Python MiniMindConfig 默认值）
      * <p>
-     * 参数配置:
+     * 参数配置（对标 minimind3）:
      * - 词汇表: 6400
-     * - 序列长度: 512
-     * - 隐藏维度: 512
+     * - 隐藏维度: 768
      * - 层数: 8
-     * - 注意力头数: 16
-     * - FFN 维度: 1024
+     * - Q 注意力头数: 8
+     * - KV 注意力头数: 4（GQA）
+     * - intermediate_size: ceil(768 * PI / 64) * 64 = 2432
+     * - dropout: 0.0
+     * - rms_norm_eps: 1e-6
+     * - rope_theta: 1e6
      * </p>
      *
-     * @return Small 模型配置
+     * @return 默认模型配置
      */
-    public static MiniMindConfig createSmallConfig() {
+    public static MiniMindConfig createDefaultConfig() {
         MiniMindConfig config = new MiniMindConfig();
-        config.vocabSize = 6400;
-        config.maxSeqLen = 512;
-        config.hiddenSize = 512;
-        config.numLayers = 8;
-        config.numHeads = 16;
-        config.ffnHiddenSize = 1024;
-        config.dropout = 0.1f;
-        config.attentionDropout = 0.1f;
-        config.epsilon = 1e-5f;
-        config.ropeTheta = 10000.0f;
-        config.useBias = false;
-        config.activationFunction = "silu";
-        config.useRoPE = true;
-        config.preLayerNorm = true;
+        // 所有默认值已在字段声明中对标 Python
         return config;
     }
 
     /**
-     * 创建 Medium 模型配置 (108M 参数)
+     * 创建 Small 模型配置（对标 Python 默认配置）
+     *
+     * @return Small 模型配置
+     */
+    public static MiniMindConfig createSmallConfig() {
+        return createDefaultConfig();
+    }
+
+    /**
+     * 创建 Medium 模型配置
      * <p>
      * 参数配置:
-     * - 词汇表: 6400
-     * - 序列长度: 512
-     * - 隐藏维度: 768
+     * - 隐藏维度: 1024
      * - 层数: 16
-     * - 注意力头数: 16
-     * - FFN 维度: 2048
+     * - Q 注意力头数: 16
+     * - KV 注意力头数: 8
      * </p>
      *
      * @return Medium 模型配置
      */
     public static MiniMindConfig createMediumConfig() {
         MiniMindConfig config = new MiniMindConfig();
-        config.vocabSize = 6400;
-        config.maxSeqLen = 512;
-        config.hiddenSize = 768;
+        config.hiddenSize = 1024;
         config.numLayers = 16;
         config.numHeads = 16;
-        config.ffnHiddenSize = 2048;
-        config.dropout = 0.1f;
-        config.attentionDropout = 0.1f;
-        config.epsilon = 1e-5f;
-        config.ropeTheta = 10000.0f;
-        config.useBias = false;
-        config.activationFunction = "silu";
-        config.useRoPE = true;
-        config.preLayerNorm = true;
+        config.numKVHeads = 8;
+        // intermediateSize 自动计算
         return config;
     }
 
     /**
-     * 创建 MoE 模型配置 (145M 参数, 4 专家)
+     * 创建 MoE 模型配置（对标 Python use_moe=True）
      * <p>
      * 参数配置:
-     * - 词汇表: 6400
-     * - 序列长度: 512
-     * - 隐藏维度: 512
-     * - 层数: 8
-     * - 注意力头数: 16
-     * - FFN 维度: 1024
+     * - 基础: 默认配置
      * - 专家数量: 4
-     * - 每次激活: 2 个专家
+     * - 每次激活: 1 个专家
+     * - 辅助损失系数: 5e-4
      * </p>
      *
      * @return MoE 模型配置
      */
     public static MiniMindConfig createMoEConfig() {
-        MiniMindConfig config = createSmallConfig();
+        MiniMindConfig config = createDefaultConfig();
         config.useMoE = true;
         config.numExperts = 4;
-        config.numExpertsPerToken = 2;
-        config.moeLoadBalanceWeight = 0.01f;
-        config.moeNoiseFactor = 0.1f;
-        config.moeImportanceCoef = 0.01f;
-        config.moeLoadCoef = 0.01f;
-        config.moeSharedExperts = false;
+        config.numExpertsPerToken = 1;
+        config.routerAuxLossCoef = 5e-4f;
+        config.normTopkProb = true;
         config.moeEnableLoadBalance = true;
         return config;
     }
@@ -263,12 +289,54 @@ public class MiniMindConfig implements Serializable {
      * @return 头维度 (hiddenSize / numHeads)
      */
     public int getHeadDim() {
+        if (headDim > 0) {
+            return headDim;
+        }
         if (hiddenSize % numHeads != 0) {
             throw new IllegalStateException(
                     "hiddenSize(" + hiddenSize + ") must be divisible by numHeads(" + numHeads + ")"
             );
         }
         return hiddenSize / numHeads;
+    }
+
+    /**
+     * 获取 FFN 中间层维度（SwiGLU intermediate size）
+     * 若未显式设置，按 Python 公式自动计算：ceil(hiddenSize * PI / 64) * 64
+     *
+     * @return 中间层维度
+     */
+    public int getIntermediateSize() {
+        if (intermediateSize > 0) {
+            return intermediateSize;
+        }
+        if (ffnHiddenSize > 0) {
+            return ffnHiddenSize;
+        }
+        return (int) Math.ceil(hiddenSize * Math.PI / 64) * 64;
+    }
+
+    /**
+     * 获取 MoE 专家的中间层维度
+     * 默认等于 intermediateSize
+     *
+     * @return MoE 中间层维度
+     */
+    public int getMoeIntermediateSize() {
+        if (moeIntermediateSize > 0) {
+            return moeIntermediateSize;
+        }
+        return getIntermediateSize();
+    }
+
+    /**
+     * 获取 GQA 中 KV 头的重复倍数
+     * numHeads / numKVHeads
+     *
+     * @return KV 头重复倍数
+     */
+    public int getNumKVGroups() {
+        return numHeads / numKVHeads;
     }
 
     /**
@@ -295,8 +363,11 @@ public class MiniMindConfig implements Serializable {
         if (hiddenSize % numHeads != 0) {
             throw new IllegalStateException("hiddenSize must be divisible by numHeads");
         }
-        if (ffnHiddenSize <= 0) {
-            throw new IllegalStateException("ffnHiddenSize must be positive");
+        if (getIntermediateSize() <= 0) {
+            throw new IllegalStateException("intermediateSize must be positive");
+        }
+        if (numKVHeads <= 0 || numHeads % numKVHeads != 0) {
+            throw new IllegalStateException("numHeads must be divisible by numKVHeads");
         }
         if (dropout < 0 || dropout >= 1) {
             throw new IllegalStateException("dropout must be in [0, 1)");
@@ -331,10 +402,10 @@ public class MiniMindConfig implements Serializable {
     public String getModelSize() {
         if (useMoE) {
             return String.format("MoE-%dM (%d Experts)", estimateParameters() / 1_000_000, numExperts);
-        } else if (hiddenSize == 512 && numLayers == 8) {
-            return "Small-26M";
-        } else if (hiddenSize == 768 && numLayers == 16) {
-            return "Medium-108M";
+        } else if (hiddenSize == 768 && numLayers == 8) {
+            return "Small";
+        } else if (hiddenSize == 1024 && numLayers == 16) {
+            return "Medium";
         } else {
             return String.format("Custom-%dM", estimateParameters() / 1_000_000);
         }
@@ -353,46 +424,36 @@ public class MiniMindConfig implements Serializable {
 
         // Transformer Layers
         for (int i = 0; i < numLayers; i++) {
-            // Attention: QKV projections + Output projection
-            // QKV: 3 * hiddenSize * hiddenSize (with bias: + 3 * hiddenSize)
-            // Output: hiddenSize * hiddenSize (with bias: + hiddenSize)
-            params += (long) hiddenSize * hiddenSize * 4;
-            if (useBias) {
-                params += (long) hiddenSize * 4;
-            }
+            // Attention: Q projection + KV projections + Output projection
+            // GQA: Q uses numHeads, K/V use numKVHeads
+            int kvDim = numKVHeads * getHeadDim();
+            params += (long) hiddenSize * hiddenSize; // Q proj
+            params += (long) hiddenSize * kvDim * 2;  // K, V proj
+            params += (long) hiddenSize * hiddenSize; // Output proj
+            // QK Norm: 2 * headDim
+            params += (long) getHeadDim() * 2;
 
-            // FFN
+            // SwiGLU FFN: gate_proj + up_proj + down_proj
+            int ffnDim = getIntermediateSize();
             if (useMoE) {
-                // MoE: numExperts * (hiddenSize * ffnHiddenSize * 2)
-                params += (long) numExperts * hiddenSize * ffnHiddenSize * 2;
-                if (useBias) {
-                    params += (long) numExperts * (ffnHiddenSize + hiddenSize) * 2;
-                }
+                int moeFfnDim = getMoeIntermediateSize();
+                // MoE: numExperts * (gate + up + down)
+                params += (long) numExperts * (hiddenSize * moeFfnDim * 3);
                 // Router: hiddenSize * numExperts
                 params += (long) hiddenSize * numExperts;
-                if (useBias) {
-                    params += (long) numExperts;
-                }
             } else {
-                // Standard FFN: hiddenSize * ffnHiddenSize * 2
-                params += (long) hiddenSize * ffnHiddenSize * 2;
-                if (useBias) {
-                    params += (long) ffnHiddenSize + hiddenSize;
-                }
+                // Standard SwiGLU: gate_proj + up_proj + down_proj
+                params += (long) hiddenSize * ffnDim * 3;
             }
 
-            // LayerNorm: 2 * hiddenSize (gamma + beta)
-            params += (long) hiddenSize * 2 * 2;
+            // RMSNorm: 2 * hiddenSize (attention_norm + ffn_norm, only weight, no bias)
+            params += (long) hiddenSize * 2;
         }
 
-        // Final LayerNorm: hiddenSize
+        // Final RMSNorm: hiddenSize
         params += hiddenSize;
 
-        // LM Head: hiddenSize * vocabSize (may share with embedding)
-        params += (long) hiddenSize * vocabSize;
-        if (useBias) {
-            params += (long) vocabSize;
-        }
+        // LM Head shares weight with Embedding, so not counted separately
 
         return params;
     }
@@ -440,11 +501,72 @@ public class MiniMindConfig implements Serializable {
     }
 
     public int getFfnHiddenSize() {
-        return ffnHiddenSize;
+        return getIntermediateSize();
     }
 
     public void setFfnHiddenSize(int ffnHiddenSize) {
         this.ffnHiddenSize = ffnHiddenSize;
+        this.intermediateSize = ffnHiddenSize;
+    }
+
+    public void setIntermediateSize(int intermediateSize) {
+        this.intermediateSize = intermediateSize;
+    }
+
+    public int getNumKVHeads() {
+        return numKVHeads;
+    }
+
+    public void setNumKVHeads(int numKVHeads) {
+        this.numKVHeads = numKVHeads;
+    }
+
+    public void setHeadDim(int headDim) {
+        this.headDim = headDim;
+    }
+
+    public int getMaxPositionEmbeddings() {
+        return maxPositionEmbeddings;
+    }
+
+    public void setMaxPositionEmbeddings(int maxPositionEmbeddings) {
+        this.maxPositionEmbeddings = maxPositionEmbeddings;
+    }
+
+    public boolean isFlashAttn() {
+        return flashAttn;
+    }
+
+    public void setFlashAttn(boolean flashAttn) {
+        this.flashAttn = flashAttn;
+    }
+
+    public float getRouterAuxLossCoef() {
+        return routerAuxLossCoef;
+    }
+
+    public void setRouterAuxLossCoef(float routerAuxLossCoef) {
+        this.routerAuxLossCoef = routerAuxLossCoef;
+    }
+
+    public boolean isNormTopkProb() {
+        return normTopkProb;
+    }
+
+    public void setNormTopkProb(boolean normTopkProb) {
+        this.normTopkProb = normTopkProb;
+    }
+
+    public void setMoeIntermediateSize(int moeIntermediateSize) {
+        this.moeIntermediateSize = moeIntermediateSize;
+    }
+
+    public int getBosTokenId() {
+        return bosTokenId;
+    }
+
+    public void setBosTokenId(int bosTokenId) {
+        this.bosTokenId = bosTokenId;
     }
 
     public float getDropout() {
@@ -536,11 +658,11 @@ public class MiniMindConfig implements Serializable {
     }
 
     public float getMoeLoadBalanceWeight() {
-        return moeLoadBalanceWeight;
+        return routerAuxLossCoef;
     }
 
     public void setMoeLoadBalanceWeight(float moeLoadBalanceWeight) {
-        this.moeLoadBalanceWeight = moeLoadBalanceWeight;
+        this.routerAuxLossCoef = moeLoadBalanceWeight;
     }
 
     public float getMoeNoiseFactor() {
@@ -601,7 +723,8 @@ public class MiniMindConfig implements Serializable {
         sb.append(", hiddenSize=").append(hiddenSize);
         sb.append(", numLayers=").append(numLayers);
         sb.append(", numHeads=").append(numHeads);
-        sb.append(", ffnHiddenSize=").append(ffnHiddenSize);
+        sb.append(", intermediateSize=").append(getIntermediateSize());
+        sb.append(", numKVHeads=").append(numKVHeads);
         sb.append(", dropout=").append(dropout);
         sb.append(", activation='").append(activationFunction).append('\'');
         sb.append(", useRoPE=").append(useRoPE);
@@ -610,10 +733,8 @@ public class MiniMindConfig implements Serializable {
         if (useMoE) {
             sb.append(", numExperts=").append(numExperts);
             sb.append(", numExpertsPerToken=").append(numExpertsPerToken);
-            sb.append(", moeNoiseFactor=").append(moeNoiseFactor);
-            sb.append(", moeImportanceCoef=").append(moeImportanceCoef);
-            sb.append(", moeLoadCoef=").append(moeLoadCoef);
-            sb.append(", moeSharedExperts=").append(moeSharedExperts);
+            sb.append(", routerAuxLossCoef=").append(routerAuxLossCoef);
+            sb.append(", normTopkProb=").append(normTopkProb);
             sb.append(", moeEnableLoadBalance=").append(moeEnableLoadBalance);
         }
 

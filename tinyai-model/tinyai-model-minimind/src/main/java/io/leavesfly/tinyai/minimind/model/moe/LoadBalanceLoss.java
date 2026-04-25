@@ -7,20 +7,16 @@ import io.leavesfly.tinyai.ndarr.Shape;
 import java.io.Serializable;
 
 /**
- * Load Balance Loss - 负载均衡损失
+ * Load Balance Loss - 负载均衡损失（对标 Python MOEFeedForward.aux_loss）
  * <p>
- * 确保专家使用均衡,避免某些专家过载而其他专家闲置
- * <p>
- * 核心公式:
- * L_balance = α · importance_loss + β · load_loss
- * <p>
- * importance_loss = num_experts · Σ(importance_i · load_i)
- * load_loss = CV(load) = std(load) / mean(load)
+ * Python 公式:
+ * load = one_hot(topk_idx, num_experts).float().mean(0)
+ * aux_loss = (load * scores.mean(0)).sum() * num_experts * router_aux_loss_coef
  * <p>
  * 其中:
- * - importance_i: 专家i的重要性(所有样本的权重和)
- * - load_i: 专家i的负载(被选中的次数占比)
- * - CV: 变异系数(Coefficient of Variation)
+ * - load: 每个专家被选中的频率（one-hot 求均值）
+ * - scores.mean(0): 每个专家的平均路由概率
+ * - router_aux_loss_coef: 配置中的系数
  *
  * @author leavesfly
  * @since 2024
@@ -29,90 +25,64 @@ public class LoadBalanceLoss implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    private final float importanceCoef;  // 重要性损失系数
-    private final float loadCoef;        // 负载损失系数
+    private final float routerAuxLossCoef;  // 对标 Python router_aux_loss_coef
 
     /**
-     * 构造函数
+     * 构造函数（对标 Python）
      *
-     * @param importanceCoef 重要性损失系数(默认0.01)
-     * @param loadCoef       负载损失系数(默认0.01)
+     * @param routerAuxLossCoef 路由辅助损失系数（默认 5e-4）
+     */
+    public LoadBalanceLoss(float routerAuxLossCoef) {
+        this.routerAuxLossCoef = routerAuxLossCoef;
+    }
+
+    /**
+     * 兼容旧接口的构造函数
      */
     public LoadBalanceLoss(float importanceCoef, float loadCoef) {
-        this.importanceCoef = importanceCoef;
-        this.loadCoef = loadCoef;
+        // 旧接口：取 importanceCoef 作为 routerAuxLossCoef
+        this.routerAuxLossCoef = importanceCoef;
     }
 
     /**
      * 默认构造函数
      */
     public LoadBalanceLoss() {
-        this(0.01f, 0.01f);
+        this(5e-4f);
     }
 
     /**
-     * 计算负载均衡损失
-     *
-     * @param stats      负载均衡统计
-     * @param numExperts 专家数量
-     * @return 负载均衡损失
+     * 计算负载均衡损失（float 版本，对标 Python）
+     * <p>
+     * Python: (load * scores.mean(0)).sum() * num_experts * router_aux_loss_coef
      */
     public float computeLoss(MoEBlock.LoadBalanceStats stats, int numExperts) {
-        float[] importance = stats.getImportance();
-        float[] load = stats.getLoad();
+        float[] importance = stats.getImportance();  // scores.mean(0)
+        float[] load = stats.getLoad();               // one_hot mean(0)
 
-        // 1. Switch Transformer 标准的辅助损失
-        // Auxiliary Loss = numExperts * sum(fraction_i * probability_i)
-        // 其中 fraction_i 是分配给专家 i 的 token 比例
-        // probability_i 是路由到专家 i 的平均概率
-        float auxiliaryLoss = 0.0f;
+        // aux_loss = sum(load_i * importance_i) * numExperts * routerAuxLossCoef
+        float auxLoss = 0.0f;
         for (int i = 0; i < numExperts; i++) {
-            auxiliaryLoss += load[i] * importance[i];
+            auxLoss += load[i] * importance[i];
         }
-        auxiliaryLoss *= numExperts;
+        auxLoss *= numExperts * routerAuxLossCoef;
 
-        // 2. Load Loss: 变异系数CV(load)
-        float loadLoss = coefficientOfVariation(load);
-
-        // 3. 总损失：使用辅助损失替代原来的 importance loss
-        float totalLoss = importanceCoef * auxiliaryLoss + loadCoef * loadLoss;
-
-        return totalLoss;
+        return auxLoss;
     }
 
     /**
-     * 计算负载均衡损失（Variable 版本，保留计算图）
+     * 计算负载均衡损失（Variable 版本，保留计算图，对标 Python）
      * <p>
-     * 修复说明（计算图断裂修复）：
-     * 原版 {@link #computeLoss(MoEBlock.LoadBalanceStats, int)} 返回 float，
-     * 导致 gate_linear 无法通过辅助损失获得梯度（虽然 MoE 主路径在本次修复后已能回传，
-     * 但负载均衡损失本身对 gate 训练稳定性至关重要）。
-     * <p>
-     * 可微分部分：Auxiliary Loss = numExperts * Σ(load_i * importance_i)
-     *   - importance_i：对 allWeightsVar 沿 batch 维求平均得到的每专家平均权重，可微；
-     *   - load_i：每个专家被选中的 token 比例，由离散 Top-K 选择产生，本身不可导，
-     *             以常量形式参与乘法（不需要梯度）。
-     * <p>
-     * CV(load) 部分同样是离散统计量，以常量形式加到总损失上，不参与梯度。
-     *
-     * @param allWeightsVar Router softmax 后的权重 Variable，形状 [B, numExperts]（可为 null，此时退化为常量）
-     * @param stats         负载均衡统计（float[] 形式，含 importance/load 快照）
-     * @param numExperts    专家数量
-     * @return 负载均衡损失 Variable（若 allWeightsVar 为 null，返回不可导的常量 Variable）
+     * 可微分部分: importance = allWeightsVar.mean(dim=0)
+     * load 部分为离散操作，以常量形式参与
+     * aux_loss = (load * importance).sum() * numExperts * routerAuxLossCoef
      */
     public Variable computeLossVar(Variable allWeightsVar,
                                    MoEBlock.LoadBalanceStats stats,
                                    int numExperts) {
         float[] load = stats.getLoad();
-        float cvLoad = coefficientOfVariation(load);
-
-        // 1) CV(load) 部分：完全离散，包装为不可导常量
-        Variable cvLoadVar = new Variable(
-                NdArray.of(new float[]{loadCoef * cvLoad}, Shape.of(1)));
-        cvLoadVar.setRequireGrad(false);
 
         if (allWeightsVar == null) {
-            // 无法构造可微的 auxiliary loss，退化为 float 版本的常量返回
             float fallback = computeLoss(stats, numExperts);
             Variable fallbackVar = new Variable(NdArray.of(new float[]{fallback}, Shape.of(1)));
             fallbackVar.setRequireGrad(false);
@@ -122,15 +92,13 @@ public class LoadBalanceLoss implements Serializable {
         int[] dims = allWeightsVar.getShape().getShapeDims();
         int batchSize = dims[0];
         if (dims.length != 2 || dims[1] != numExperts) {
-            // 形状不符，退化为常量
             float fallback = computeLoss(stats, numExperts);
             Variable fallbackVar = new Variable(NdArray.of(new float[]{fallback}, Shape.of(1)));
             fallbackVar.setRequireGrad(false);
             return fallbackVar;
         }
 
-        // 2) importanceVar = mean over batch of allWeightsVar，形状 [numExperts]
-        //    用 sumTo 得 [1, numExperts]，再除以 batchSize，然后 reshape 到 [numExperts]
+        // importanceVar = mean over batch of allWeightsVar，形状 [numExperts]
         Variable importanceSum = allWeightsVar.sumTo(Shape.of(1, numExperts));
         Variable batchSizeConst = new Variable(
                 NdArray.of(new float[]{(float) batchSize}, Shape.of(1)));
@@ -139,26 +107,17 @@ public class LoadBalanceLoss implements Serializable {
         Variable importanceAvg = importanceSum.div(batchSizeBroadcast);
         Variable importanceVar = importanceAvg.reshape(Shape.of(numExperts));
 
-        // 3) loadVar：常量（不可导），形状 [numExperts]
+        // loadVar：常量
         Variable loadConst = new Variable(NdArray.of(load.clone(), Shape.of(numExperts)));
         loadConst.setRequireGrad(false);
 
-        // 4) auxLoss = numExperts * sum(importanceVar * loadConst)
+        // auxLoss = (load * importance).sum() * numExperts * routerAuxLossCoef
         Variable product = importanceVar.mul(loadConst);
         Variable auxSum = product.sumTo(Shape.of(1));
-        Variable numExpertsConst = new Variable(
-                NdArray.of(new float[]{(float) numExperts}, Shape.of(1)));
-        numExpertsConst.setRequireGrad(false);
-        Variable auxLoss = auxSum.mul(numExpertsConst);
-
-        // 5) 加权系数 importanceCoef
-        Variable importanceCoefConst = new Variable(
-                NdArray.of(new float[]{importanceCoef}, Shape.of(1)));
-        importanceCoefConst.setRequireGrad(false);
-        Variable weightedAux = auxLoss.mul(importanceCoefConst);
-
-        // 6) 总损失 = importanceCoef * auxLoss + loadCoef * cvLoad（CV 部分为常量）
-        return weightedAux.add(cvLoadVar);
+        Variable coefConst = new Variable(
+                NdArray.of(new float[]{(float) numExperts * routerAuxLossCoef}, Shape.of(1)));
+        coefConst.setRequireGrad(false);
+        return auxSum.mul(coefConst);
     }
 
     /**
@@ -190,22 +149,15 @@ public class LoadBalanceLoss implements Serializable {
     }
 
     /**
-     * 获取重要性系数
+     * 获取路由辅助损失系数
      */
-    public float getImportanceCoef() {
-        return importanceCoef;
-    }
-
-    /**
-     * 获取负载系数
-     */
-    public float getLoadCoef() {
-        return loadCoef;
+    public float getRouterAuxLossCoef() {
+        return routerAuxLossCoef;
     }
 
     @Override
     public String toString() {
-        return String.format("LoadBalanceLoss(importance_coef=%.4f, load_coef=%.4f)",
-                importanceCoef, loadCoef);
+        return String.format("LoadBalanceLoss(router_aux_loss_coef=%.4f)",
+                routerAuxLossCoef);
     }
 }

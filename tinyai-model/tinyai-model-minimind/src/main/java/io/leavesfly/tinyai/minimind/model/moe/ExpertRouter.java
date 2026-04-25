@@ -60,8 +60,8 @@ public class ExpertRouter extends Module {
         this.topK = topK;
         this.noiseFactor = noiseFactor;
         
-        // 创建门控层
-        this.gateLinear = new Linear("gate", inputDim, numExperts, true);
+        // 创建门控层（对标 Python: self.gate = nn.Linear(..., bias=False)）
+        this.gateLinear = new Linear("gate", inputDim, numExperts, false);
         
         // 注册子模块
         registerModule("gate", gateLinear);

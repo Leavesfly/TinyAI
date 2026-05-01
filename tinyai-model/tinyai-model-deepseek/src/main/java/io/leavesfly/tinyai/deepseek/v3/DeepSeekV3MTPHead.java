@@ -14,23 +14,23 @@ import java.util.List;
 
 /**
  * DeepSeek-V3 Multi-Token Prediction (MTP) 预测头
- * 
+ * <p>
  * 对标 DeepSeek-V3 论文的 MTP 机制：
  * 除了标准的 next-token prediction，额外预测后续 D 个 token（D 为 MTP 深度）。
- * 
+ * <p>
  * 每个 MTP 深度 k 的预测流程：
  * 1. 将 Transformer 隐藏状态 h_i 与第 i+k 个 token 的嵌入向量拼接
  * 2. 通过线性投影层将拼接向量映射回 nEmbd 维度
  * 3. 通过 RMSNorm 归一化
  * 4. 通过共享的输出投影层（lm_head）得到 logits
  * 5. 预测目标是第 i+k+1 个 token
- * 
+ * <p>
  * 关键设计：
  * - 每个深度有独立的投影层和 RMSNorm
  * - 输出投影层（lm_head）与主模型共享，减少参数量
  * - 训练时 MTP loss = 各深度 loss 的均值 × mtpLossWeight
  * - 推理时 MTP 头可用于推测解码（speculative decoding）加速
- * 
+ *
  * @author leavesfly
  * @version 1.0
  */
@@ -53,7 +53,7 @@ public class DeepSeekV3MTPHead extends Module {
 
     /**
      * 构造函数
-     * 
+     *
      * @param name                   模块名称
      * @param config                 V3 配置对象
      * @param sharedOutputProjection 与主模型共享的输出投影层（lm_head）
@@ -82,19 +82,19 @@ public class DeepSeekV3MTPHead extends Module {
         for (int depth = 0; depth < mtpDepth; depth++) {
             // 投影层：将 [h_i; embed_{i+k}] 的拼接（2 * nEmbd）映射回 nEmbd
             Linear projection = new Linear(
-                name + "_mtp_proj_" + depth,
-                2 * nEmbd,
-                nEmbd,
-                false
+                    name + "_mtp_proj_" + depth,
+                    2 * nEmbd,
+                    nEmbd,
+                    false
             );
             projectionLayers.add(projection);
             registerModule("mtp_proj_" + depth, projection);
 
             // RMSNorm 归一化
             RMSNorm norm = new RMSNorm(
-                name + "_mtp_norm_" + depth,
-                nEmbd,
-                (float) config.getLayerNormEpsilon()
+                    name + "_mtp_norm_" + depth,
+                    nEmbd,
+                    (float) config.getLayerNormEpsilon()
             );
             normLayers.add(norm);
             registerModule("mtp_norm_" + depth, norm);
@@ -107,19 +107,19 @@ public class DeepSeekV3MTPHead extends Module {
     @Override
     public Variable forward(Variable... inputs) {
         throw new UnsupportedOperationException(
-            "MTP 头不支持直接 forward 调用，请使用 computeMTPLoss 方法");
+                "MTP 头不支持直接 forward 调用，请使用 computeMTPLoss 方法");
     }
 
     /**
      * 计算指定深度的 MTP logits
-     * 
+     * <p>
      * 对标 DeepSeek-V3 论文 MTP 流程：
      * 1. 取 Transformer 隐藏状态 h[0..validLen-1]
      * 2. 取对应位置偏移 offset 的 token 嵌入 embed[offset..seqLen-1]
      * 3. 拼接 [h_i; embed_{i+offset}] → 投影 → RMSNorm → 共享 lm_head → logits
-     * 
+     * <p>
      * 所有操作基于 Variable 完成，保持计算图连通以支持梯度回传。
-     * 
+     *
      * @param hiddenStates Transformer 最后一层的隐藏状态 [batch, seqLen, nEmbd]
      * @param tokenIds     输入 token ID 序列 [batch, seqLen]
      * @param depth        MTP 深度（0-indexed，第 0 层预测 i+2，第 1 层预测 i+3...）
@@ -128,7 +128,7 @@ public class DeepSeekV3MTPHead extends Module {
     public Variable computeMTPLogits(Variable hiddenStates, Variable tokenIds, int depth) {
         if (depth < 0 || depth >= mtpDepth) {
             throw new IllegalArgumentException(
-                String.format("MTP depth %d 超出范围 [0, %d)", depth, mtpDepth));
+                    String.format("MTP depth %d 超出范围 [0, %d)", depth, mtpDepth));
         }
 
         int seqLen = hiddenStates.getValue().getShape().getDimension(1);
@@ -164,11 +164,11 @@ public class DeepSeekV3MTPHead extends Module {
 
     /**
      * 计算 MTP 总损失
-     * 
+     * <p>
      * 与 DeepSeekV3Pretrainer.reshapeForLoss 保持一致的格式：
      * - logits reshape 为 [N, vocabSize]
      * - targets reshape 为 [N, 1]
-     * 
+     *
      * @param hiddenStates Transformer 最后一层的隐藏状态 [batch, seqLen, nEmbd]
      * @param tokenIds     输入 token ID 序列 [batch, seqLen]
      * @param targetIds    目标 token ID 序列 [batch, seqLen]（即 tokenIds 左移一位）
@@ -208,9 +208,9 @@ public class DeepSeekV3MTPHead extends Module {
             // targets: [batch, validLen] → [batch*validLen, 1]
             int totalTokens = batchSize * validLen;
             Variable reshapedLogits = logits.reshape(
-                Shape.of(totalTokens, config.getVocabSize()));
+                    Shape.of(totalTokens, config.getVocabSize()));
             Variable reshapedTargets = new Variable(
-                NdArray.of(depthTargets)).reshape(Shape.of(totalTokens, 1));
+                    NdArray.of(depthTargets)).reshape(Shape.of(totalTokens, 1));
 
             Variable depthLoss = lossFunction.loss(reshapedTargets, reshapedLogits);
 

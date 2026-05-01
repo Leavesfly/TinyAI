@@ -1,6 +1,7 @@
 package io.leavesfly.tinyai.deepseek.v3;
 
 
+import io.leavesfly.tinyai.deepseek.base.utils.FormatUtils;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
 import io.leavesfly.tinyai.nnet.core.Module;
@@ -208,26 +209,13 @@ public class DeepSeekV3Block extends Module {
         System.out.printf("专家数量: %d专家, Top-%d选择\n", 
             config.getNumExperts(), config.getTopK());
         System.out.printf("架构模式: Pre-RMSNorm + 纯MoE (推理和代码能力自然涌现)\n");
-        System.out.printf("估算总参数: %s\n", formatParamCount(getParameterCount()));
-        System.out.printf("激活参数: %s (%.2f%%)\n", 
-            formatParamCount(getActiveParameterCount()),
+        System.out.printf("估算总参数: %s\n", FormatUtils.formatParamCount(getParameterCount()));
+        System.out.printf("激活参数: %s (%.2f%%)\n",
+            FormatUtils.formatParamCount(getActiveParameterCount()),
             config.getActivationRatio());
         System.out.println("=".repeat(80));
     }
-    
-    /**
-     * 格式化参数数量
-     */
-    private String formatParamCount(long count) {
-        if (count >= 1_000_000_000) {
-            return String.format("%.2f B", count / 1_000_000_000.0);
-        } else if (count >= 1_000_000) {
-            return String.format("%.2f M", count / 1_000_000.0);
-        } else {
-            return String.format("%,d", count);
-        }
-    }
-    
+
     /**
      * 详细前向传播结果类（包含MoE信息和MTP所需的隐藏状态）
      */
@@ -270,6 +258,28 @@ public class DeepSeekV3Block extends Module {
      */
     public DeepSeekV3MTPHead getMtpHead() {
         return mtpHead;
+    }
+
+    /**
+     * 在 optimizer.update() 之后调用，执行无辅助损失负载均衡的 expertBias 更新
+     * <p>
+     * 之所以在优化器 step 之后执行（而不是在 forward 内部）：
+     * 1. 保证 forward + backward 期间 bias 值保持稳定，避免影响自动微分
+     * 2. bias 更新频率与主优化器同步，语义清晰
+     * 3. 推理阶段（不调用本方法）不会改变 bias
+     * <p>
+     * 训练循环应在 optimizer.update() 之后调用本方法一次。
+     */
+    public void updateExpertBiasAfterStep() {
+        if (transformerBlocks == null) {
+            return;
+        }
+        for (DeepSeekV3TransformerBlock block : transformerBlocks) {
+            DeepSeekV3MoEBlock moe = block.getMoeLayer();
+            if (moe != null) {
+                moe.updateExpertBiasAfterStep();
+            }
+        }
     }
     
     /**

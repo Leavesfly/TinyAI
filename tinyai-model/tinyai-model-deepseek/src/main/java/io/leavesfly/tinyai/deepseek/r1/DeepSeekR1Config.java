@@ -54,7 +54,30 @@ public class DeepSeekR1Config extends DeepSeekBaseConfig {
     
     /** RL奖励缩放因子，默认1.0 */
     private double rlRewardScale = 1.0;
-    
+
+    // ==================== GRPO 专用超参（R1 RLVR 训练）====================
+
+    /** GRPO 组大小（每条 prompt 采样多少个 rollout），默认 4 */
+    private int grpoGroupSize = 4;
+
+    /** GRPO PPO-clip 范围 ε，默认 0.2（与 rlClipRange 语义一致，为 GRPO 路径独立暴露） */
+    private double grpoClipEps = 0.2;
+
+    /** GRPO KL 约束权重 β，默认 0.04 */
+    private double grpoKlWeight = 0.04;
+
+    /** GRPO 组内优势归一化的数值稳定 ε，默认 1e-8 */
+    private double grpoAdvantageEps = 1e-8;
+
+    /** GRPO 采样温度，默认 1.0 */
+    private double grpoTemperature = 1.0;
+
+    /** GRPO 每个 batch 内策略更新次数 K，默认 2 */
+    private int grpoInnerUpdatesPerBatch = 2;
+
+    /** GRPO 参考模型同步周期（每多少 epoch 同步一次 π_ref ← π_θ），默认 1 */
+    private int grpoRefSyncEpochInterval = 1;
+
     /**
      * 默认构造函数，创建标准DeepSeek-R1配置
      * 使用与V3相同的基础架构（MoE）
@@ -228,11 +251,69 @@ public class DeepSeekR1Config extends DeepSeekBaseConfig {
     public double getRlRewardScale() {
         return rlRewardScale;
     }
-    
+
     public void setRlRewardScale(double rlRewardScale) {
         this.rlRewardScale = rlRewardScale;
     }
-    
+
+    // ==================== GRPO 超参 Getter / Setter ====================
+
+    public int getGrpoGroupSize() {
+        return grpoGroupSize;
+    }
+
+    public void setGrpoGroupSize(int grpoGroupSize) {
+        this.grpoGroupSize = grpoGroupSize;
+    }
+
+    public double getGrpoClipEps() {
+        return grpoClipEps;
+    }
+
+    public void setGrpoClipEps(double grpoClipEps) {
+        this.grpoClipEps = grpoClipEps;
+    }
+
+    public double getGrpoKlWeight() {
+        return grpoKlWeight;
+    }
+
+    public void setGrpoKlWeight(double grpoKlWeight) {
+        this.grpoKlWeight = grpoKlWeight;
+    }
+
+    public double getGrpoAdvantageEps() {
+        return grpoAdvantageEps;
+    }
+
+    public void setGrpoAdvantageEps(double grpoAdvantageEps) {
+        this.grpoAdvantageEps = grpoAdvantageEps;
+    }
+
+    public double getGrpoTemperature() {
+        return grpoTemperature;
+    }
+
+    public void setGrpoTemperature(double grpoTemperature) {
+        this.grpoTemperature = grpoTemperature;
+    }
+
+    public int getGrpoInnerUpdatesPerBatch() {
+        return grpoInnerUpdatesPerBatch;
+    }
+
+    public void setGrpoInnerUpdatesPerBatch(int grpoInnerUpdatesPerBatch) {
+        this.grpoInnerUpdatesPerBatch = grpoInnerUpdatesPerBatch;
+    }
+
+    public int getGrpoRefSyncEpochInterval() {
+        return grpoRefSyncEpochInterval;
+    }
+
+    public void setGrpoRefSyncEpochInterval(int grpoRefSyncEpochInterval) {
+        this.grpoRefSyncEpochInterval = grpoRefSyncEpochInterval;
+    }
+
     // ==================== toString方法 ====================
     
     @Override

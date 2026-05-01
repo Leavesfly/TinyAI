@@ -1,6 +1,7 @@
 package io.leavesfly.tinyai.deepseek.r1;
 
 import io.leavesfly.tinyai.deepseek.base.TaskType;
+import io.leavesfly.tinyai.deepseek.base.utils.FormatUtils;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3TransformerBlock;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ndarr.NdArray;
@@ -218,24 +219,11 @@ public class DeepSeekR1Block extends Module {
         System.out.printf("Top-K选择: %d\n", config.getTopK());
         System.out.printf("架构模式: Pre-RMSNorm + RoPE + MoE\n");
         System.out.printf("训练方式: 纯RL（推理能力自然涌现）\n");
-        System.out.printf("估算总参数: %s\n", formatParamCount(getParameterCount()));
+        System.out.printf("估算总参数: %s\n", FormatUtils.formatParamCount(getParameterCount()));
         System.out.printf("激活参数: %s (%.1f%%)\n",
-                formatParamCount(config.estimateActiveParameterCount()),
+                FormatUtils.formatParamCount(config.estimateActiveParameterCount()),
                 config.getActivationRatio());
         System.out.println("=".repeat(70));
-    }
-
-    /**
-     * 格式化参数数量
-     */
-    private String formatParamCount(long count) {
-        if (count >= 1_000_000_000) {
-            return String.format("%.2f B", count / 1_000_000_000.0);
-        } else if (count >= 1_000_000) {
-            return String.format("%.2f M", count / 1_000_000.0);
-        } else {
-            return String.format("%,d", count);
-        }
     }
 
     /**
@@ -272,5 +260,23 @@ public class DeepSeekR1Block extends Module {
      */
     public List<DeepSeekV3TransformerBlock> getTransformerBlocks() {
         return transformerBlocks;
+    }
+
+    /**
+     * 在 optimizer.update() 之后调用，执行无辅助损失负载均衡的 expertBias 更新
+     * <p>
+     * 详见 {@link io.leavesfly.tinyai.deepseek.v3.DeepSeekV3MoEBlock#updateExpertBiasAfterStep()}。
+     * 训练循环应在 optimizer.update() 之后调用本方法一次。
+     */
+    public void updateExpertBiasAfterStep() {
+        if (transformerBlocks == null) {
+            return;
+        }
+        for (DeepSeekV3TransformerBlock block : transformerBlocks) {
+            io.leavesfly.tinyai.deepseek.v3.DeepSeekV3MoEBlock moe = block.getMoeLayer();
+            if (moe != null) {
+                moe.updateExpertBiasAfterStep();
+            }
+        }
     }
 }

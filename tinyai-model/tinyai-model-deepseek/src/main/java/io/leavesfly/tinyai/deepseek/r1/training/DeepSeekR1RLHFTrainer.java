@@ -93,12 +93,20 @@ public class DeepSeekR1RLHFTrainer {
     }
     
     /**
-     * 将 R1 模型适配为 V3 模型
-     * 
+     * 将 R1 模型适配为 V3 模型，并迁移 R1 已训练好的权重
+     *
      * R1 基于 V3 底座，核心架构相同（MoE + Transformer），
-     * 通过创建等价配置的 V3 模型来复用 RLHF 训练逻辑。
+     * 通过创建等价配置的 V3 模型并**按参数名深拷贝**迁移权重，
+     * 确保 RLHF 训练从 R1 已有的检查点继续，而不是从零开始。
+     *
+     * 参数名映射规则：
+     * - R1 参数命名以 "{name}_main" 开头（例如 "deepseek-r1_main_transformer_0_attn.weight"）
+     * - V3 参数命名以 "{name}_main" 开头（例如 "deepseek-r1-as-v3-rlhf_main_transformer_0_attn.weight"）
+     * - 去掉模型名前缀后，剩余路径（token_embedding / transformer_i / final_ln / output_proj）结构相同
+     * - MTP 头是 V3 特有，R1 没有，跳过迁移（由 V3 端随机初始化）
      */
     private DeepSeekV3Model adaptR1ModelToV3(DeepSeekR1Model r1Model) {
+        // 1. 构建等价配置的 V3
         DeepSeekV3Config v3Config = DeepSeekV3Config.createTinyConfig();
         v3Config.setVocabSize(r1Model.getConfig().getVocabSize());
         v3Config.setNLayer(r1Model.getConfig().getNLayer());
@@ -106,7 +114,46 @@ public class DeepSeekR1RLHFTrainer {
         v3Config.setNHead(r1Model.getConfig().getNHead());
         v3Config.setNumExperts(r1Model.getConfig().getNumExperts());
         v3Config.setTopK(r1Model.getConfig().getTopK());
-        return new DeepSeekV3Model("deepseek-r1-as-v3-rlhf", v3Config);
+        DeepSeekV3Model v3Model = new DeepSeekV3Model("deepseek-r1-as-v3-rlhf", v3Config);
+
+        // 2. 按参数相对路径（去掉模型名前缀）做深拷贝迁移
+        int matched = 0;
+        int total = 0;
+        java.util.Map<String, io.leavesfly.tinyai.nnet.core.Parameter> r1Params =
+                r1Model.getModule().namedParameters("", true);
+        java.util.Map<String, io.leavesfly.tinyai.nnet.core.Parameter> v3Params =
+                v3Model.getModule().namedParameters("", true);
+
+        // 构建 R1 的 "相对路径 → Parameter" 映射（去掉 "{r1_name}_main" 前缀）
+        String r1Prefix = r1Model.getName() + "_main.";
+        java.util.Map<String, io.leavesfly.tinyai.nnet.core.Parameter> r1Relative = new java.util.HashMap<>();
+        for (java.util.Map.Entry<String, io.leavesfly.tinyai.nnet.core.Parameter> e : r1Params.entrySet()) {
+            String key = e.getKey();
+            String relative = key.startsWith(r1Prefix) ? key.substring(r1Prefix.length()) : key;
+            r1Relative.put(relative, e.getValue());
+        }
+
+        String v3Prefix = v3Model.getName() + "_main.";
+        for (java.util.Map.Entry<String, io.leavesfly.tinyai.nnet.core.Parameter> e : v3Params.entrySet()) {
+            total++;
+            String key = e.getKey();
+            String relative = key.startsWith(v3Prefix) ? key.substring(v3Prefix.length()) : key;
+
+            io.leavesfly.tinyai.nnet.core.Parameter src = r1Relative.get(relative);
+            if (src != null && src.getValue() != null) {
+                io.leavesfly.tinyai.ndarr.NdArray srcValue = src.getValue();
+                io.leavesfly.tinyai.ndarr.NdArray dstValue = e.getValue().getValue();
+                // 形状不一致时跳过，避免静默错误
+                if (dstValue != null && srcValue.getShape().equals(dstValue.getShape())) {
+                    e.getValue().setData(srcValue.copy());
+                    matched++;
+                }
+            }
+        }
+
+        System.out.printf("📌 R1 → V3 参数迁移完成: %d / %d 个参数已复用 R1 权重（MTP 头等 V3 特有参数保持随机初始化）%n",
+                matched, total);
+        return v3Model;
     }
     
     /**

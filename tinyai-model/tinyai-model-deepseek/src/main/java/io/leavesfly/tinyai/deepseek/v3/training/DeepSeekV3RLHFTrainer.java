@@ -172,23 +172,25 @@ public class DeepSeekV3RLHFTrainer extends DeepSeekTrainerBase {
             float totalReward = rewardWeight * avgHumanReward + moeQualityWeight * moeLossReward;
             
             // 应用 Loss Mask 和奖励加权
+            // 关键：mask / reward / effectiveCount 都是常量标量，必须 setRequireGrad(false)，
+            // 否则它们会错误地出现在反向传播链中，浪费计算并可能引发歧义。
             Variable rewardWeightedLoss;
             if (batch.hasLossMask()) {
                 // Answer-only Loss + Reward weighting
                 NdArray maskFlat = batch.getLossMask().reshape(Shape.of(batchSize * seqLen, 1));
-                Variable maskVar = new Variable(maskFlat);
+                Variable maskVar = constant(maskFlat);
                 Variable maskedLoss = elementWiseLoss.mul(maskVar);
-                
+
                 float maskSum = maskFlat.sum().getNumber().floatValue();
                 float effectiveCount = Math.max(maskSum, 1.0f);
-                
+
                 // Reward-weighted: loss = reward * masked_CE / count
-                Variable avgMaskedLoss = maskedLoss.sum().div(new Variable(NdArray.of(new float[]{effectiveCount})));
-                rewardWeightedLoss = avgMaskedLoss.mul(new Variable(NdArray.of(new float[]{totalReward})));
+                Variable avgMaskedLoss = maskedLoss.sum().div(constant(new float[]{effectiveCount}));
+                rewardWeightedLoss = avgMaskedLoss.mul(constant(new float[]{totalReward}));
             } else {
                 // 无 mask 时直接对全序列 loss 加权
                 Variable avgLoss = elementWiseLoss.mean(-1, false).mean(-1, false);
-                rewardWeightedLoss = avgLoss.mul(new Variable(NdArray.of(new float[]{totalReward})));
+                rewardWeightedLoss = avgLoss.mul(constant(new float[]{totalReward}));
             }
             
             // 融合 MoE 负载均衡损失
@@ -200,7 +202,10 @@ public class DeepSeekV3RLHFTrainer extends DeepSeekTrainerBase {
             totalLoss.backward();
             clipGradients();
             optimizer.update();
-            
+
+            // MoE 无辅助损失负载均衡：optimizer step 之后更新专家 bias
+            model.getV3Block().updateExpertBiasAfterStep();
+
             // 释放计算图
             totalLoss.unChainBackward();
             result.logits.unChainBackward();
@@ -236,8 +241,26 @@ public class DeepSeekV3RLHFTrainer extends DeepSeekTrainerBase {
         if (moeLoadBalanceWeight <= 0) {
             return lmLoss;
         }
-        Variable moeLossVar = new Variable(NdArray.of(new float[]{moeLoss * moeLoadBalanceWeight}));
-        return lmLoss.add(moeLossVar);
+        // MoE 负载均衡常量标量不需要梯度
+        return lmLoss.add(constant(new float[]{moeLoss * moeLoadBalanceWeight}));
+    }
+
+    /**
+     * 构造不需要梯度的常量 Variable（避免出现在反向传播链中）
+     */
+    private static Variable constant(float[] data) {
+        Variable v = new Variable(NdArray.of(data));
+        v.setRequireGrad(false);
+        return v;
+    }
+
+    /**
+     * 构造不需要梯度的常量 Variable（基于已有 NdArray）
+     */
+    private static Variable constant(NdArray data) {
+        Variable v = new Variable(data);
+        v.setRequireGrad(false);
+        return v;
     }
     
     @Override

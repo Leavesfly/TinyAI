@@ -83,17 +83,33 @@ public class DeepSeekBaseConfig implements Serializable {
     /** 专家dropout概率，默认0.1 */
     protected double expertDropout = 0.1;
     
-    // ==================== 任务感知配置 ====================
-    
-    /** 是否启用任务感知路由，默认启用 */
+    // ==================== 任务感知配置（占位，当前实现未真正启用）====================
+    //
+    // ⚠️ 重要说明：
+    //   本教学实现的 DeepSeekV3MoEBlock / DeepSeekR1Block 的 gating 计算是 **标准 Sigmoid 路由**，
+    //   并未将 taskType embedding 融入 gating logits。下列 4 个字段当前仅作为：
+    //     1) 元信息保留（便于输出 toString / estimateParameterCount 对齐论文）
+    //     2) 未来扩展位：若要接入 DeepSeekMoE 论文原版任务感知路由，需改动 MoE forward 签名
+    //   暂时不移除这些字段以保持与现有 V3/R1 Config 构造签名的二进制兼容。
+    //
+    //   用户若希望真正启用任务感知路由，需要：
+    //   - 在 MoEBlock 中新增 forward(Variable input, int taskType)
+    //   - 把 taskEmbed[taskType] 与 gating logits 相加后再走 Top-K
+    //   - 对应调整 Dataset.Batch 传入 taskType
+    //   本项目目前未做此扩展，setEnableTaskAwareRouting(true) 不会改变前向行为。
+
+    /**
+     * 是否启用任务感知路由。
+     * <p><b>当前实现未真正启用：</b>参见类级注释。
+     */
     protected boolean enableTaskAwareRouting = true;
-    
-    /** 任务类型嵌入维度，默认128 */
+
+    /** 任务类型嵌入维度，默认128（当前未被 MoE 消费） */
     protected int taskEmbedDim = 128;
-    
-    /** 任务识别器隐藏层维度，默认256 */
+
+    /** 任务识别器隐藏层维度，默认256（当前未被 MoE 消费） */
     protected int taskClassifierHiddenDim = 256;
-    
+
     /** 支持的任务类型数量，默认5种：推理、代码、数学、通用、多模态 */
     protected int numTaskTypes = 5;
     
@@ -116,16 +132,16 @@ public class DeepSeekBaseConfig implements Serializable {
     /** 权重初始化范围，默认0.02 */
     protected double initializerRange = 0.02;
 
-    // ==================== 缓存字段 ====================
+    // ==================== 缓存字段（volatile 保证多线程可见性）====================
 
     /** 参数量缓存 */
-    private Long cachedParameterCount;
+    private volatile Long cachedParameterCount;
 
     /** 激活参数量缓存 */
-    private Long cachedActiveParameterCount;
+    private volatile Long cachedActiveParameterCount;
 
     /** 激活率缓存 */
-    private Double cachedActivationRatio;
+    private volatile Double cachedActivationRatio;
 
     /**
      * 默认构造函数，创建标准DeepSeek基础配置
@@ -294,21 +310,33 @@ public class DeepSeekBaseConfig implements Serializable {
     /**
      * 计算MoE层参数
      * 
+     * 注意：实际 DeepSeek V3 的专家为 SwiGLU 结构（gate_proj + up_proj + down_proj），
+     * 单个专家有 3 个 Linear 而非 2 个，因此参数量估算使用 3 倍 FFN。
+     * 同时包含路由专家(numExperts) + 共享专家(numSharedExperts) + 专家 bias 参数。
+     * 
      * @return MoE层参数数量
      */
     private long calculateMoEParams() {
-        // 门控网络: nEmbd * numExperts + numExperts
-        long gatingParams = (long) nEmbd * numExperts + numExperts;
+        // 门控网络: nEmbd * numExperts（不带 bias，bias 由 expertBias 独立管理）
+        long gatingParams = (long) nEmbd * numExperts;
 
-        // 每个专家的FFN: fc1(nEmbd * expertHiddenDim + expertHiddenDim) + fc2(expertHiddenDim * nEmbd + nEmbd)
-        long paramsPerExpert = (long) nEmbd * expertHiddenDim + expertHiddenDim +
+        // 专家路由 bias（无辅助损失负载均衡）
+        long expertBiasParams = numExperts;
+
+        // 每个专家（SwiGLU）的参数: gate_proj + up_proj + down_proj，均带 bias
+        // gate_proj: nEmbd * expertHiddenDim + expertHiddenDim
+        // up_proj:   nEmbd * expertHiddenDim + expertHiddenDim
+        // down_proj: expertHiddenDim * nEmbd + nEmbd
+        long paramsPerExpert = 2L * ((long) nEmbd * expertHiddenDim + expertHiddenDim) +
                                 (long) expertHiddenDim * nEmbd + nEmbd;
 
-        // 所有专家的参数
-        long allExpertsParams = paramsPerExpert * numExperts;
+        // 路由专家总参数
+        long routedExpertsParams = paramsPerExpert * numExperts;
 
-        // MoE总参数
-        return gatingParams + allExpertsParams;
+        // 共享专家总参数（DeepSeekMoE 核心创新）
+        long sharedExpertsParams = paramsPerExpert * numSharedExperts;
+
+        return gatingParams + expertBiasParams + routedExpertsParams + sharedExpertsParams;
     }
     
     /**
@@ -494,49 +522,55 @@ public class DeepSeekBaseConfig implements Serializable {
     public double getLoadBalanceLossWeight() {
         return loadBalanceLossWeight;
     }
-    
+
     public void setLoadBalanceLossWeight(double loadBalanceLossWeight) {
         this.loadBalanceLossWeight = loadBalanceLossWeight;
+        // 不影响参数量，无需清缓存
     }
-    
+
     public double getExpertDropout() {
         return expertDropout;
     }
-    
+
     public void setExpertDropout(double expertDropout) {
         this.expertDropout = expertDropout;
+        // 不影响参数量，无需清缓存
     }
-    
+
     public boolean isEnableTaskAwareRouting() {
         return enableTaskAwareRouting;
     }
-    
+
     public void setEnableTaskAwareRouting(boolean enableTaskAwareRouting) {
         this.enableTaskAwareRouting = enableTaskAwareRouting;
+        clearCache();
     }
     
     public int getTaskEmbedDim() {
         return taskEmbedDim;
     }
-    
+
     public void setTaskEmbedDim(int taskEmbedDim) {
         this.taskEmbedDim = taskEmbedDim;
+        clearCache();
     }
-    
+
     public int getTaskClassifierHiddenDim() {
         return taskClassifierHiddenDim;
     }
-    
+
     public void setTaskClassifierHiddenDim(int taskClassifierHiddenDim) {
         this.taskClassifierHiddenDim = taskClassifierHiddenDim;
+        clearCache();
     }
-    
+
     public int getNumTaskTypes() {
         return numTaskTypes;
     }
-    
+
     public void setNumTaskTypes(int numTaskTypes) {
         this.numTaskTypes = numTaskTypes;
+        clearCache();
     }
     
     public double getResidPdrop() {

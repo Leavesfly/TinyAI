@@ -10,6 +10,8 @@
 
 </div>
 
+> **最后更新**：2026-05-01 &nbsp;·&nbsp; **版本**：v3（对标论文 arXiv:2501.12948）
+
 ## 📋 目录
 
 - [概述](#-概述)
@@ -50,6 +52,8 @@ DeepSeek-R1 是 TinyAI 框架中的**推理增强语言模型**实现，基于 [
 | **Small** | 512 | 8 | 8 | 8 | 2 | 1024 |
 | **Standard** | 768 | 12 | 12 | 8 | 2 | 2048 |
 
+> 所有规格均附带 **1 个共享专家**（`numSharedExperts=1`），每次前向必激活；路由专家使用 Sigmoid 路由 + 无辅助损失负载均衡（`expertBias`）。
+
 ## 🏗️ 架构设计
 
 ### 整体架构
@@ -66,7 +70,7 @@ DeepSeek-R1 模型架构（MoE）
 │       │   ├── MultiHeadAttention（含 RoPE）
 │       │   ├── 残差连接
 │       │   ├── Pre-RMSNorm
-│       │   ├── DeepSeekV3MoELayer（共享专家 + Top-K 路由专家）
+│       │   ├── DeepSeekV3MoEBlock（共享专家 + Top-K 路由专家，Sigmoid 路由）
 │       │   └── 残差连接
 │       ├── Final RMSNorm
 │       └── Linear 输出投影 [nEmbd → vocabSize]
@@ -167,6 +171,17 @@ for (int i = 0; i < config.getNLayer(); i++) {
 `DetailedForwardResult` 包含两个字段：
 - **`logits`** — 最终 logits 输出
 - **`avgMoELoss`** — 各 Transformer 层 MoE 负载均衡损失的均值
+
+**MoE expertBias 延迟更新**：`DeepSeekR1Block` 暴露 `updateExpertBiasAfterStep()`，转发至内部所有 `DeepSeekV3MoEBlock`。训练循环应在 `optimizer.update()` 之后调用一次：
+
+```java
+loss.backward();
+clipGradients();
+optimizer.update();
+model.getR1Block().updateExpertBiasAfterStep();   // 延迟更新无辅助损失负载均衡 bias
+```
+
+> `DeepSeekR1SFTrainer` / `DeepSeekR1RLVRTrainer` 内部已经按此顺序调用，无需业务代码额外处理。
 
 ### 3. Token 嵌入层（`DeepSeekR1TokenEmbedding`）
 
@@ -314,13 +329,13 @@ System.out.println(standardModel);
   DeepSeekR1Pretrain — SGD 优化器（内存效率优于 Adam）
     ↓
 阶段2: 后训练（监督微调 SFT）
-  DeepSeekR1Posttrain — 推理质量监督优化
+  DeepSeekR1SFTrainer — Answer-only Loss Mask + 早停机制
     ↓
 阶段3: 人类反馈强化学习（RLHF）
   DeepSeekR1RLHFTrainer → 委托 DeepSeekV3RLHFTrainer 执行
     ↓
 阶段4: 可验证奖励强化学习（RLVR）
-  DeepSeekR1RLVRTrainer — GRPO 算法，R1 独有
+  DeepSeekR1RLVRTrainer — GRPO 算法（含 KL 约束 + 参考模型），R1 独有
 ```
 
 ### 预训练（`DeepSeekR1Pretrain`）
@@ -337,6 +352,24 @@ pretrainer.train();
 - **SGD 优化器** — 相比 Adam 减少临时 NdArray 创建，降低内存占用
 - 支持 Warmup + Cosine 衰减学习率调度
 - 支持可选的**并行训练模式**（多线程）
+- 沿用基类 `DeepSeekTrainerBase.clipGradients()`：NaN/Inf 检测 + L2 范数等比缩放
+
+### 后训练 SFT（`DeepSeekR1SFTrainer`）
+
+```java
+DeepSeekR1SFTrainer sfTrainer = new DeepSeekR1SFTrainer(model, trainDataset, valDataset);
+sfTrainer.configure(
+    5,       // maxEpochs
+    2.5e-5f, // learningRate（比预训练低 10 倍）
+    3        // patience（早停耐心值）
+);
+sfTrainer.train();
+```
+
+核心特性：
+- **Answer-only Loss Mask** — 仅对 assistant 回复区域计算损失（由 `DeepSeekR1Dataset` 的 `hasLossMasks()` 开关控制）
+- **早停机制** — `patience` 轮无改善则停止
+- **低学习率** — 默认 2.5e-5（比预训练低 10 倍）
 
 ### RLHF 训练（`DeepSeekR1RLHFTrainer`）
 
@@ -368,15 +401,37 @@ L = -reward × sum(mask × CE_loss) / sum(mask)
 
 R1 独有的训练阶段，使用 **GRPO（Group Relative Policy Optimization）** 算法，通过自动化验证器评估推理结果，无需人类标注。
 
-**GRPO 训练流程（对标论文第 4 节）**：
+**GRPO 完整训练流程（对标论文第 4 节）**：
 
 ```
-1. 对每个问题 q，从当前策略采样 G 个输出 {o1,...,oG}
+1. 对每个问题 q，从当前策略 π_θ 采样 G 个输出 {o1,...,oG}
 2. 验证器为每个输出计算奖励 {r1,...,rG}
 3. 组内相对优势：A_i = (r_i - mean(r)) / (std(r) + ε)
-4. PPO clip 目标：L = clip(A_g, -ε, +ε) × CE(logits, o_g)
-5. 反向传播更新参数
+4. Importance Sampling Ratio：
+   ratio = exp(log π_new(o|q) - log π_old(o|q))
+   （log π_old 为采样时刻的 detach 快照）
+5. PPO-clip 策略损失：
+   L_policy = -E[min(ratio·A, clip(ratio, 1-ε, 1+ε)·A)]
+6. KL 约束（π_ref 来自 GRPOReferenceModel 快照）：
+   L_kl = β · E[log π_new - log π_ref]
+7. 多轮内部更新：同一批 rollout 执行 K 次梯度更新（innerUpdatesPerBatch）
+8. 参考模型同步：每 N 个 epoch 同步一次 π_ref ← π_θ（refSyncEpochInterval）
+9. Fallback CE：组内无差异信号时退化为监督学习，保证训练稳定性
 ```
+
+**GRPO 超参（`DeepSeekR1Config` 新增，R1 RLVR 专用）**：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `grpoGroupSize` | 4 | 组采样大小 G（论文默认 16，教学简化为 4） |
+| `grpoClipEps` | 0.2 | PPO-clip 范围 ε |
+| `grpoKlWeight` | 0.04 | KL 约束权重 β |
+| `grpoAdvantageEps` | 1e-8 | 组内优势归一化的数值稳定项 |
+| `grpoTemperature` | 1.0 | 采样温度，>1 鼓励多样性 |
+| `grpoInnerUpdatesPerBatch` | 2 | 每批 rollout 的内部梯度更新次数 K |
+| `grpoRefSyncEpochInterval` | 1 | 参考模型同步周期（epoch） |
+
+> K=1 时 ratio 恒为 1，clip 不发挥作用；K>1 时后续更新的 ratio 真实偏离 1，PPO-clip 的安全护栏才会真正生效。
 
 **GRPO vs 简单策略梯度对比**：
 
@@ -386,9 +441,20 @@ R1 独有的训练阶段，使用 **GRPO（Group Relative Policy Optimization）
 | 基线 | 固定基线或无 | 组内均值奖励（相对优势） |
 | 优势函数 | r 或 r-b | (r_i-mean)/std（组内归一化） |
 | 策略更新 | 无约束 | PPO-clip 防止策略剧变 |
+| 稳定约束 | 无 | KL(π_new ‖ π_ref) 显式约束策略漂移 |
 | 值函数网络 | 需要 | **不需要**（GRPO 的核心优势） |
 
-**支持的验证器类型**：
+**奖励组成（综合奖励）**：
+
+```
+r = correctnessWeight · r_verify       （验证器 0/1 奖励）
+  + reasoningQualityWeight · r_proximity（组内差异信号）
+  - verificationWeight · moeLoss       （MoE 负载均衡惩罚）
+```
+
+默认权重：`correctnessWeight=0.7`、`reasoningQualityWeight=0.2`、`verificationWeight=0.1`。
+
+**支持的验证器类型**（均实现 `Verifier` 接口，返回 `VerificationResult`）：
 
 | 验证器 | 类 | 说明 |
 |--------|-----|------|
@@ -396,16 +462,42 @@ R1 独有的训练阶段，使用 **GRPO（Group Relative Policy Optimization）
 | 代码验证器 | `CodeVerifier` | 验证代码语法和逻辑正确性 |
 | 逻辑验证器 | `LogicVerifier` | 验证逻辑推理过程的有效性 |
 
+**使用示例**：
+
 ```java
-// RLVR 训练
-DeepSeekR1RLVRDataset rlvrDataset = new DeepSeekR1RLVRDataset(...);
-DeepSeekR1RLVRTrainer rlvrTrainer = new DeepSeekR1RLVRTrainer(model, rlvrDataset);
-rlvrTrainer.train();
+// 1. 构建 RLVR 数据集（构造签名：batchSize, maxSeqLen）
+DeepSeekR1RLVRDataset rlvrDataset = new DeepSeekR1RLVRDataset(/*batchSize*/ 4, /*maxSeqLen*/ 64);
+rlvrDataset.addSample("2+3=?", "5", "math");
+rlvrDataset.addSample("判断 p∧¬p 是否恒假", "true", "logic");
+
+// 2. 创建训练器（传入模型与 RLVR 数据集）
+DeepSeekR1RLVRTrainer trainer = new DeepSeekR1RLVRTrainer(model, rlvrDataset);
+
+// 3. 配置基础超参：(maxEpochs, learningRate, groupSize, temperature)
+trainer.configure(
+    5,       // maxEpochs
+    5e-5f,   // learningRate
+    4,       // groupSize G
+    1.0f     // temperature
+);
+
+// 4. 配置 GRPO 专用超参：(clipEps, klWeight, innerUpdatesPerBatch, refSyncEpochInterval)
+trainer.configureGRPO(
+    0.2f,    // clipEps ε
+    0.04f,   // klWeight β
+    2,       // innerUpdatesPerBatch K
+    1        // refSyncEpochInterval
+);
+
+// 5. （可选）自定义奖励权重：(correctness, quality, verification)
+trainer.configureRewardWeights(0.7f, 0.2f, 0.1f);
+
+trainer.train();
 ```
 
 ### 推理引擎（`DeepSeekR1Inference`）
 
-支持文本生成和推理执行。
+继承 `DeepSeekBaseInference`，支持贪婪解码和多种采样策略（Temperature/Top-K/Top-P，由基类提供），并在生成过程中记录 `ReasoningStep`（每步附带 MoE 质量指标）。
 
 ## 🧪 测试验证
 
@@ -505,24 +597,57 @@ mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.deepseek.r1.DeepSeekR1Demo"
 
 ### 源代码
 
+**核心模型层**：
+
 | 文件 | 说明 |
 |------|------|
-| [`DeepSeekR1Model.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1Model.java) | 模型主类，提供推理 API |
-| [`DeepSeekR1Config.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1Config.java) | 配置类，继承 BaseConfig + RL 参数 |
-| [`DeepSeekR1Block.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1Block.java) | 主体块，直接复用 V3 MoE TransformerBlock |
-| [`DeepSeekR1TokenEmbedding.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1TokenEmbedding.java) | Token 嵌入层（无位置嵌入） |
-| [`DeepSeekR1Demo.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1Demo.java) | 完整示例代码（4 个示例） |
-| [`DeepSeekR1Pretrain.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/DeepSeekR1Pretrain.java) | 预训练器（SGD，支持并行） |
-| [`DeepSeekR1Posttrain.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/DeepSeekR1Posttrain.java) | 后训练器（SFT） |
-| [`DeepSeekR1RLHFTrainer.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/DeepSeekR1RLHFTrainer.java) | RLHF 训练器（委托 V3 RLHF 实现） |
-| [`DeepSeekR1RLVRTrainer.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/DeepSeekR1RLVRTrainer.java) | RLVR 训练器（GRPO 算法） |
-| [`DeepSeekR1Inference.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/DeepSeekR1Inference.java) | 推理引擎 |
-| [`DeepSeekR1Dataset.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/dataset/DeepSeekR1Dataset.java) | 预训练/SFT/RLHF 数据集 |
-| [`DeepSeekR1RLVRDataset.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/dataset/DeepSeekR1RLVRDataset.java) | RLVR 可验证奖励数据集 |
+| [`DeepSeekR1Model.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1Model.java) | 模型主类，提供 `predict` / `performReasoning` / `solveMath` |
+| [`DeepSeekR1Config.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1Config.java) | 配置类，继承 `DeepSeekBaseConfig` + RL/GRPO 参数 |
+| [`DeepSeekR1Block.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1Block.java) | 主体块，直接复用 V3 MoE TransformerBlock，暴露 `updateExpertBiasAfterStep` |
+| [`DeepSeekR1TokenEmbedding.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1TokenEmbedding.java) | Token 嵌入层（无位置嵌入，RoPE 在注意力层提供位置） |
+| [`DeepSeekR1Demo.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/DeepSeekR1Demo.java) | 架构演示程序（4 个示例） |
+
+**训练与推理**：
+
+| 文件 | 说明 |
+|------|------|
+| [`DeepSeekR1Pretrain.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/DeepSeekR1Pretrain.java) | 预训练器（SGD，Warmup+Cosine，支持并行） |
+| [`DeepSeekR1SFTrainer.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/DeepSeekR1SFTrainer.java) | 后训练器（SFT + Answer-only Loss Mask + 早停） |
+| [`DeepSeekR1RLHFTrainer.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/DeepSeekR1RLHFTrainer.java) | RLHF 训练器（委托 `DeepSeekV3RLHFTrainer` 实现） |
+| [`DeepSeekR1RLVRTrainer.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/DeepSeekR1RLVRTrainer.java) | RLVR 训练器（完整 GRPO：采样/优势/IS 比率/PPO-clip/KL/Fallback CE） |
+| [`GRPOReferenceModel.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/GRPOReferenceModel.java) | GRPO 参考模型 π_ref 快照（KL 约束基准） |
+| [`DeepSeekR1Inference.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/DeepSeekR1Inference.java) | 推理引擎（贪婪 / Temperature / Top-K / Top-P，附带 `ReasoningStep`） |
+
+**数据集与验证器**：
+
+| 文件 | 说明 |
+|------|------|
+| [`DeepSeekR1Dataset.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/dataset/DeepSeekR1Dataset.java) | 预训练 / SFT / RLHF 数据集（支持 `hasLossMasks` 开关） |
+| [`DeepSeekR1RLVRDataset.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/dataset/DeepSeekR1RLVRDataset.java) | RLVR 可验证奖励数据集（question + groundTruth + verifierType） |
+| [`Verifier.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/verifier/Verifier.java) | 验证器接口（返回 `VerificationResult`） |
+| [`VerificationResult.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/verifier/VerificationResult.java) | 验证结果（正确性 + 置信度 + 消息） |
 | [`MathVerifier.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/verifier/MathVerifier.java) | 数学验证器 |
 | [`CodeVerifier.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/verifier/CodeVerifier.java) | 代码验证器 |
 | [`LogicVerifier.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/verifier/LogicVerifier.java) | 逻辑验证器 |
+
+**演示程序**：
+
+| 文件 | 说明 |
+|------|------|
+| [`demo/DeepSeekR1TrainDemo.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/demo/DeepSeekR1TrainDemo.java) | 完整训练流程演示（预训练 → SFT → RLHF → RLVR） |
+| [`demo/DeepSeekR1TokenizerUtil.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/demo/DeepSeekR1TokenizerUtil.java) | 演示用简易分词工具 |
+| [`demo/DeepSeekR1DatasetGenerator.java`](../src/main/java/io/leavesfly/tinyai/deepseek/r1/training/demo/DeepSeekR1DatasetGenerator.java) | 演示用数据集生成工具 |
+
+**共享基础层**：
+
+| 文件 | 说明 |
+|------|------|
 | [`DeepSeekBaseConfig.java`](../src/main/java/io/leavesfly/tinyai/deepseek/base/DeepSeekBaseConfig.java) | 基础配置（V3 和 R1 共享） |
+| [`DeepSeekModelBase.java`](../src/main/java/io/leavesfly/tinyai/deepseek/base/DeepSeekModelBase.java) | 模型基类（`predict` / `generateSequence` / `argmax`） |
+| [`DeepSeekTrainerBase.java`](../src/main/java/io/leavesfly/tinyai/deepseek/base/DeepSeekTrainerBase.java) | 训练器基类（梯度裁剪 + 检查点管理） |
+| [`DeepSeekTokenEmbeddingBase.java`](../src/main/java/io/leavesfly/tinyai/deepseek/base/DeepSeekTokenEmbeddingBase.java) | Token 嵌入基类（V3 和 R1 共享） |
+| [`DeepSeekBaseInference.java`](../src/main/java/io/leavesfly/tinyai/deepseek/base/inference/DeepSeekBaseInference.java) | 推理引擎基类（argmax / softmax / Top-K / Top-P 工具） |
+| [`TaskType.java`](../src/main/java/io/leavesfly/tinyai/deepseek/base/TaskType.java) | 任务类型枚举（REASONING / CODING / MATH / GENERAL / MULTIMODAL） |
 
 ---
 

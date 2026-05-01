@@ -4,7 +4,9 @@ import io.leavesfly.tinyai.deepseek.base.dataset.DeepSeekBaseDataset;
 import io.leavesfly.tinyai.ndarr.NdArray;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * DeepSeek-R1 RLVR数据集
@@ -23,10 +25,29 @@ import java.util.List;
  * @version 1.0
  */
 public class DeepSeekR1RLVRDataset extends DeepSeekBaseDataset<DeepSeekR1RLVRDataset.Batch> {
-    
-    /** 词汇表模数大小，用于字符到 token ID 的映射 */
-    private static final int VOCAB_MOD_SIZE = 1000;
-    
+
+    /**
+     * 词汇表上限（token ID 范围：[0, VOCAB_LIMIT)）
+     *
+     * <p><b>重要约束：</b>使用本数据集训练的 DeepSeekR1Model 必须满足
+     * {@code config.getVocabSize() >= VOCAB_LIMIT}，否则 token embedding 会越界访问。
+     * <br>可以通过 {@link #requireCompatibleVocabSize(int)} 做静态校验。
+     */
+    public static final int VOCAB_LIMIT = 1000;
+
+    /** 单条样本最多保留的 token 数（截断长度） */
+    private static final int MAX_TOKENS_PER_SAMPLE = 100;
+
+    /**
+     * 词表：word → token id。
+     * 自动增长，id 从 1 开始分配，0 保留给 &lt;pad&gt;/未知，
+     * 超过 {@link #VOCAB_LIMIT}-1 后退化为 hash 取模（保证不 OOM）。
+     */
+    private final Map<String, Integer> vocab = new HashMap<>();
+
+    /** 下一个可用的 token id（从 1 开始，0 保留） */
+    private int nextTokenId = 1;
+
     private final List<String> questions;       // 问题文本
     private final List<String> groundTruths;    // 标准答案
     private final List<String> verifierTypes;   // 验证器类型
@@ -135,26 +156,92 @@ public class DeepSeekR1RLVRDataset extends DeepSeekBaseDataset<DeepSeekR1RLVRDat
     }
     
     /**
-     * 简单的字符级 tokenization
-     * 将文本转换为 int[] 以适配基类的 sequences 结构
-     * 
+     * 基于空格分词 + 动态词表的 tokenization
+     *
+     * <p>相比原"字符取模"方案：
+     * <ul>
+     *   <li>字符取模会把 "dog"/"god"/"ogd" 映射到同一组 id，token 语义严重坍缩</li>
+     *   <li>中文/数字/标点全都只看低位字节，造成不同 token 碰撞</li>
+     * </ul>
+     *
+     * <p>本实现策略（教学场景够用，不引入 BPE 依赖）：
+     * <ol>
+     *   <li>先按空格 + 常见标点切分</li>
+     *   <li>每个 word 查询词表；不存在则按 {@link #nextTokenId} 自增分配</li>
+     *   <li>词表规模达到上限后，退化为 {@code Math.abs(word.hashCode()) % VOCAB_LIMIT} 的稳定映射</li>
+     *   <li>截断至 {@link #MAX_TOKENS_PER_SAMPLE}，防止超长 prompt 爆内存</li>
+     * </ol>
+     *
+     * <p>空输入返回 <code>[0]</code>（pad token）。
+     *
      * @param text 输入文本
-     * @return token ID 数组
+     * @return token ID 数组（元素范围 [0, VOCAB_LIMIT)）
      */
     private int[] simpleTokenize(String text) {
-        // 添加 null 检查
         if (text == null || text.isEmpty()) {
             return new int[]{0};
         }
-        
-        char[] chars = text.toCharArray();
-        int length = Math.min(chars.length, 100);
-        int[] tokens = new int[length];
-        for (int i = 0; i < length; i++) {
-            // 使用常量 VOCAB_MOD_SIZE 替代魔法数字 1000
-            tokens[i] = chars[i] % VOCAB_MOD_SIZE;
+
+        // 按空格与常见标点切分；保留非空的词单元
+        String[] words = text.toLowerCase().split("[\\s,.;:!?\"'()\\[\\]{}<>]+");
+        List<Integer> ids = new ArrayList<>(Math.min(words.length, MAX_TOKENS_PER_SAMPLE));
+        for (String w : words) {
+            if (w.isEmpty()) continue;
+            if (ids.size() >= MAX_TOKENS_PER_SAMPLE) break;
+            ids.add(wordToTokenId(w));
+        }
+        if (ids.isEmpty()) {
+            return new int[]{0};
+        }
+        int[] tokens = new int[ids.size()];
+        for (int i = 0; i < ids.size(); i++) {
+            tokens[i] = ids.get(i);
         }
         return tokens;
+    }
+
+    /**
+     * 词到 token id 的映射：优先命中词表，已满则 hash 回退。
+     */
+    private int wordToTokenId(String word) {
+        Integer existing = vocab.get(word);
+        if (existing != null) {
+            return existing;
+        }
+        if (nextTokenId < VOCAB_LIMIT) {
+            int id = nextTokenId++;
+            vocab.put(word, id);
+            return id;
+        }
+        // 词表已满，退化为稳定 hash；保证范围 [1, VOCAB_LIMIT-1]，避免与 pad 冲突
+        int h = Math.abs(word.hashCode()) % (VOCAB_LIMIT - 1) + 1;
+        return h;
+    }
+
+    /**
+     * 获取当前词表大小（真实登记词数，不含 hash 回退）。
+     * 主要用于调试与断言。
+     */
+    public int vocabSize() {
+        return nextTokenId;
+    }
+
+    /**
+     * 校验模型配置的 vocabSize 是否与本数据集兼容。
+     *
+     * <p>数据集产出的 token id ∈ [0, {@link #VOCAB_LIMIT}），
+     * 因此模型 embedding 层的 vocabSize 不得小于 {@link #VOCAB_LIMIT}。
+     *
+     * @param modelVocabSize 模型（{@code DeepSeekR1Config.getVocabSize()}）配置的词表大小
+     * @throws IllegalArgumentException 当 {@code modelVocabSize < VOCAB_LIMIT} 时抛出
+     */
+    public static void requireCompatibleVocabSize(int modelVocabSize) {
+        if (modelVocabSize < VOCAB_LIMIT) {
+            throw new IllegalArgumentException(String.format(
+                    "DeepSeekR1RLVRDataset 要求 model.config.vocabSize >= %d，实际为 %d，" +
+                            "这会导致 token embedding 越界。请调大 config.setVocabSize() 或缩小 VOCAB_LIMIT。",
+                    VOCAB_LIMIT, modelVocabSize));
+        }
     }
     
     // ==================== 内部类 ====================

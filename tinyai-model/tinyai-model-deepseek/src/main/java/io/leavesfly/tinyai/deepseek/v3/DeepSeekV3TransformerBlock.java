@@ -6,7 +6,8 @@ import io.leavesfly.tinyai.nnet.core.Module;
 import io.leavesfly.tinyai.nnet.layer.dnn.Dropout;
 import io.leavesfly.tinyai.nnet.layer.norm.RMSNorm;
 
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -37,7 +38,14 @@ public class DeepSeekV3TransformerBlock extends Module {
     private final DeepSeekV3MoEBlock moeLayer;
     private final RMSNorm layerNorm2;
 
-    // 因果掩码缓存（避免每次 forward 都重新生成）
+    /**
+     * 因果掩码 LRU 缓存容量上限（避免训练时变长 seqLen 导致缓存无限膨胀）
+     */
+    private static final int CAUSAL_MASK_CACHE_CAPACITY = 16;
+
+    // 因果掩码缓存：LRU + 同步包装，保证线程安全 + 容量有界
+    // 注：这里不使用 ConcurrentHashMap，因为 LinkedHashMap 自带 access-order 的 LRU 语义，
+    // 而 ConcurrentHashMap 无 LRU，对长时序推理/训练不友好。
     private final Map<Integer, Variable> causalMaskCache;
 
     /**
@@ -73,8 +81,15 @@ public class DeepSeekV3TransformerBlock extends Module {
         registerModule("moe", moeLayer);
         registerModule("ln2", layerNorm2);
 
-        // 初始化因果掩码缓存
-        this.causalMaskCache = new HashMap<>();
+        // 初始化因果掩码缓存（LRU，access-order=true；外层同步包装确保并发安全）
+        LinkedHashMap<Integer, Variable> lru = new LinkedHashMap<Integer, Variable>(
+                CAUSAL_MASK_CACHE_CAPACITY, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<Integer, Variable> eldest) {
+                return size() > CAUSAL_MASK_CACHE_CAPACITY;
+            }
+        };
+        this.causalMaskCache = Collections.synchronizedMap(lru);
     }
 
     /**
@@ -120,15 +135,16 @@ public class DeepSeekV3TransformerBlock extends Module {
      * @return 因果掩码 [1, 1, seqLen, seqLen]
      */
     private Variable getCausalMask(int seqLen) {
-        // 检查缓存
-        if (causalMaskCache.containsKey(seqLen)) {
-            return causalMaskCache.get(seqLen);
+        // synchronized(map) 保证 get/put 的原子性，防止多线程并发下重复生成 & 破坏 LRU 顺序
+        synchronized (causalMaskCache) {
+            Variable cached = causalMaskCache.get(seqLen);
+            if (cached != null) {
+                return cached;
+            }
+            Variable causalMask = DeepSeekV3Attention.generateCausalMask(seqLen);
+            causalMaskCache.put(seqLen, causalMask);
+            return causalMask;
         }
-
-        // 生成新的因果掩码
-        Variable causalMask = DeepSeekV3Attention.generateCausalMask(seqLen);
-        causalMaskCache.put(seqLen, causalMask);
-        return causalMask;
     }
 
     /**

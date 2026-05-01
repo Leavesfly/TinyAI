@@ -1,5 +1,6 @@
 package io.leavesfly.tinyai.deepseek.base;
 
+import io.leavesfly.tinyai.deepseek.base.utils.FormatUtils;
 import io.leavesfly.tinyai.func.Variable;
 import io.leavesfly.tinyai.ml.model.Model;
 import io.leavesfly.tinyai.ndarr.NdArray;
@@ -46,19 +47,14 @@ public abstract class DeepSeekModelBase extends Model {
     /**
      * 格式化参数数量为可读字符串
      *
+     * <p>为保持历史 API 兼容，保留此 protected 方法；具体实现委托给 {@link FormatUtils#formatParamCount}，
+     * 全仓库仅一套格式化逻辑。
+     *
      * @param count 参数数量
      * @return 格式化后的字符串（如 "1.23B"、"45.67M"）
      */
     protected static String formatParamCount(long count) {
-        if (count >= 1_000_000_000) {
-            return String.format("%.2fB", count / 1_000_000_000.0);
-        } else if (count >= 1_000_000) {
-            return String.format("%.2fM", count / 1_000_000.0);
-        } else if (count >= 1_000) {
-            return String.format("%.2fK", count / 1_000.0);
-        } else {
-            return String.format("%,d", count);
-        }
+        return FormatUtils.formatParamCount(count);
     }
 
     /**

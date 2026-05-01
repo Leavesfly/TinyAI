@@ -1,9 +1,11 @@
 package io.leavesfly.tinyai.deepseek.r1.training.verifier;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * 逻辑验证器
@@ -169,53 +171,109 @@ public class LogicVerifier implements Verifier {
         return normalized;
     }
     
+    /** 语义匹配停用词集合（不参与 Jaccard 相似度与词序对比） */
+    private static final Set<String> STOP_WORDS = new HashSet<>();
+    static {
+        STOP_WORDS.add("the");
+        STOP_WORDS.add("a");
+        STOP_WORDS.add("an");
+        STOP_WORDS.add("is");
+        STOP_WORDS.add("are");
+        STOP_WORDS.add("was");
+        STOP_WORDS.add("were");
+        STOP_WORDS.add("be");
+        STOP_WORDS.add("of");
+        STOP_WORDS.add("to");
+    }
+
+    /** Jaccard 相似度阈值 */
+    private static final double JACCARD_THRESHOLD = 0.7;
+    /** 词序匹配最低重叠率 */
+    private static final double ORDER_OVERLAP_MIN = 0.5;
     /**
-     * 语义匹配
-     * 
-     * 当字面匹配失败时，尝试语义级别的匹配
-     * 
+     * 词序校验的最少词数。
+     * <p>当去停用词后的有效 token 数少于此阈值（典型如单词 "true"/"false"），
+     * LCS 词序校验无意义，退化为纯 Jaccard 判定。
+     */
+    private static final int ORDER_CHECK_MIN_WORDS = 3;
+
+    /**
+     * 语义匹配（词集 Jaccard 相似度 + 词序敏感度校验）
+     *
+     * <p>当字面匹配失败时，尝试语义级别的匹配。相较于简单的 Jaccard，
+     * 额外引入词序校验：对于逻辑结论 "A implies B" 与 "B implies A" 是截然相反的，
+     * 仅用词集比较会误判为等价。本实现通过 <b>最长公共子序列（LCS）</b> 的长度
+     * 与较短序列长度的比值作为词序保留率，低于 {@link #ORDER_OVERLAP_MIN} 时拒绝匹配。
+     *
      * @param conclusion 提取的结论
-     * @param truth 标准答案
+     * @param truth      标准答案
      * @return 是否语义匹配
      */
     private boolean semanticMatch(String conclusion, String truth) {
-        // 移除连接词和冠词
-        Set<String> stopWords = new HashSet<>();
-        stopWords.add("the");
-        stopWords.add("a");
-        stopWords.add("an");
-        stopWords.add("is");
-        stopWords.add("are");
-        
         String[] conclusionWords = conclusion.split("\\s+");
         String[] truthWords = truth.split("\\s+");
-        
+
+        // 1. 构建去停用词后的集合 + 有序列表
         Set<String> conclusionSet = new HashSet<>();
         Set<String> truthSet = new HashSet<>();
-        
+        List<String> conclusionList = new ArrayList<>();
+        List<String> truthList = new ArrayList<>();
+
         for (String word : conclusionWords) {
-            if (!stopWords.contains(word) && !word.isEmpty()) {
+            if (!word.isEmpty() && !STOP_WORDS.contains(word)) {
                 conclusionSet.add(word);
+                conclusionList.add(word);
             }
         }
-        
         for (String word : truthWords) {
-            if (!stopWords.contains(word) && !word.isEmpty()) {
+            if (!word.isEmpty() && !STOP_WORDS.contains(word)) {
                 truthSet.add(word);
+                truthList.add(word);
             }
         }
-        
-        // 计算Jaccard相似度
+
+        // 2. Jaccard 相似度
         Set<String> intersection = new HashSet<>(conclusionSet);
         intersection.retainAll(truthSet);
-        
         Set<String> union = new HashSet<>(conclusionSet);
         union.addAll(truthSet);
-        
         if (union.isEmpty()) return false;
-        
-        double similarity = (double) intersection.size() / union.size();
-        return similarity >= 0.7; // 70% 相似度阈值
+        double jaccard = (double) intersection.size() / union.size();
+        if (jaccard < JACCARD_THRESHOLD) return false;
+
+        // 3. 词序敏感度校验
+        int minLen = Math.min(conclusionList.size(), truthList.size());
+        if (minLen == 0) return false;
+
+        // 短句（如 "true"/"false"、单词结论）：LCS 无意义，跳过词序校验，仅凭 Jaccard 判定。
+        // 这避免单词级结论被误判为不匹配（长度 <3 时 LCS/minLen 会被任意波动放大）。
+        if (minLen < ORDER_CHECK_MIN_WORDS) {
+            return true;
+        }
+
+        int lcs = longestCommonSubsequence(conclusionList, truthList);
+        double orderOverlap = (double) lcs / minLen;
+        return orderOverlap >= ORDER_OVERLAP_MIN;
+    }
+
+    /**
+     * 最长公共子序列长度（经典动态规划）
+     */
+    private static int longestCommonSubsequence(List<String> a, List<String> b) {
+        int m = a.size();
+        int n = b.size();
+        if (m == 0 || n == 0) return 0;
+        int[][] dp = new int[m + 1][n + 1];
+        for (int i = 1; i <= m; i++) {
+            for (int j = 1; j <= n; j++) {
+                if (a.get(i - 1).equals(b.get(j - 1))) {
+                    dp[i][j] = dp[i - 1][j - 1] + 1;
+                } else {
+                    dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+                }
+            }
+        }
+        return dp[m][n];
     }
     
     /**

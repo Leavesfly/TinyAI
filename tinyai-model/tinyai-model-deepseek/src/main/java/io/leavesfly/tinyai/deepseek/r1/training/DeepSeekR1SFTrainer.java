@@ -107,19 +107,20 @@ public class DeepSeekR1SFTrainer extends DeepSeekTrainerBase {
             valLossHistory.add(valLoss);
             
             System.out.printf("Epoch %d 验证损失: %.4f%n", currentEpoch + 1, valLoss);
-            
-//            if (valLoss < bestValLoss) {
-//                bestValLoss = valLoss;
-//                stepsWithoutImprovement = 0;
-//                saveCheckpoint("best");
-//                System.out.println("✓ 保存最佳模型 (val_loss: " + String.format("%.4f", bestValLoss) + ")");
-//            } else {
-//                stepsWithoutImprovement++;
-//                if (stepsWithoutImprovement >= patience) {
-//                    System.out.println("触发早停,训练结束");
-//                    break;
-//                }
-//            }
+
+            // 早停检查（防止过拟合）
+            if (valLoss < bestValLoss) {
+                bestValLoss = valLoss;
+                stepsWithoutImprovement = 0;
+                saveCheckpoint("best");
+                System.out.printf("✓ 保存最佳模型 (val_loss: %.4f)%n", bestValLoss);
+            } else {
+                stepsWithoutImprovement++;
+                if (stepsWithoutImprovement >= patience) {
+                    System.out.println("触发早停（连续 " + patience + " 个 epoch 验证损失未改善），训练结束");
+                    break;
+                }
+            }
         }
         
         System.out.println("\n后训练完成! 最佳验证损失: " + bestValLoss);
@@ -146,26 +147,42 @@ public class DeepSeekR1SFTrainer extends DeepSeekTrainerBase {
         if (batch.hasLossMask()) {
             // Answer-only Loss: 使用逐元素 loss 乘以 mask，只对 assistant 回复部分计算梯度
             Variable elementWiseLoss = elementWiseLossFunction.loss(targetVar, logits2D);
-            
+
             // 将 mask reshape 为 [batchSize * seqLen, 1] 与逐元素 loss 对齐
+            // mask 是常量，不应参与梯度传播
             NdArray maskFlat = batch.getLossMask().reshape(Shape.of(batchSize * seqLen, 1));
-            Variable maskVar = new Variable(maskFlat);
-            
+            Variable maskVar = constant(maskFlat);
+
             // masked loss = elementWiseLoss * mask
             Variable maskedLoss = elementWiseLoss.mul(maskVar);
-            
+
             // 计算有效位置数量，避免除以零
             float maskSum = maskFlat.sum().getNumber().floatValue();
             float effectiveCount = Math.max(maskSum, 1.0f);
-            
+
             // 对有效位置求平均: sum(maskedLoss) / count(mask==1)
-            loss = maskedLoss.sum().div(new Variable(NdArray.of(new float[]{effectiveCount})));
+            loss = maskedLoss.sum().div(constant(new float[]{effectiveCount}));
         } else {
             // 无 mask 时使用标准 MEAN 归约
             loss = lossFunction.loss(targetVar, logits2D);
         }
-        
+
         return loss;
+    }
+
+    /**
+     * 构造不需要梯度的常量 Variable
+     */
+    private static Variable constant(float[] data) {
+        Variable v = new Variable(NdArray.of(data));
+        v.setRequireGrad(false);
+        return v;
+    }
+
+    private static Variable constant(NdArray data) {
+        Variable v = new Variable(data);
+        v.setRequireGrad(false);
+        return v;
     }
     
     private void trainOneEpoch() {
@@ -190,7 +207,10 @@ public class DeepSeekR1SFTrainer extends DeepSeekTrainerBase {
             loss.backward();
             clipGradients();
             optimizer.update();
-            
+
+            // MoE 无辅助损失负载均衡：optimizer step 之后更新专家 bias
+            model.getR1Block().updateExpertBiasAfterStep();
+
             // 彻底断开计算图，释放内存
             loss.unChainBackward();
             result.logits.unChainBackward();

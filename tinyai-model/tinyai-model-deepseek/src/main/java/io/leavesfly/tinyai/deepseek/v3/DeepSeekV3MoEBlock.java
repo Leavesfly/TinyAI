@@ -71,6 +71,13 @@ public class DeepSeekV3MoEBlock extends Module {
     private Dropout expertDropout;
 
     /**
+     * 最近一次 forward 的专家选择统计（用于 optimizer.update 后延迟更新 expertBias）
+     * 这样能保证 forward 过程中 bias 值保持稳定，避免同一次前向/反向传播中 bias 被"读完又写"。
+     */
+    private int[] lastSelectionCount;
+    private int lastTotalTokens;
+
+    /**
      * 构造函数
      *
      * @param name   模块名称
@@ -132,20 +139,26 @@ public class DeepSeekV3MoEBlock extends Module {
     }
 
     /**
-     * 前向传播
+     * 前向传播（标准 Sigmoid 路由，无任务感知）
      *
-     * @param inputs inputs[0]为输入张量 [batch_size, seq_len, nEmbd]
-     *               inputs[1](可选)为任务类型 TaskType
-     * @return MoE输出结果
+     * <p><b>注意：</b>当前实现 <b>不支持</b> 任务感知路由。配置项 {@code config.enableTaskAwareRouting} 与
+     * {@code taskEmbedDim}/{@code taskClassifierHiddenDim}/{@code numTaskTypes} 仅保留为元数据占位，
+     * 不会真正作用于 gating 计算。如需任务感知，请参考论文 DeepSeekMoE 自行扩展 {@link #computeMoE(Variable)}：
+     * 将任务 embedding 与 gating logits 融合即可，但会破坏与预训练权重的兼容性。
+     *
+     * <p>历史 javadoc 曾声称 inputs[1] 可传 TaskType，属于<b>文档与实现不一致</b>的过期描述，已删除。
+     *
+     * @param inputs inputs[0] 为输入张量 [batch_size, seq_len, nEmbd]
+     * @return MoE 输出（经 dropout 后的 Variable）
      */
     @Override
     public Variable forward(Variable... inputs) {
         if (inputs == null || inputs.length == 0) {
             throw new IllegalArgumentException("输入不能为空");
         }
-        // 执行MoE计算（标准路由模式）
+        // 执行 MoE 计算（当前仅支持标准路由模式，inputs[1] 之后的参数会被忽略）
         MoEOutput moeOutput = computeMoE(inputs[0]);
-        // 应用dropout
+        // 应用 dropout
         return expertDropout.forward(moeOutput.output);
     }
 
@@ -186,10 +199,70 @@ public class DeepSeekV3MoEBlock extends Module {
         // 7. 共享专家输出 + 路由专家输出
         Variable expertOutputs = sharedOutput.add(routedOutput);
 
-        // 8. 无辅助损失负载均衡：根据专家负载动态更新 bias
-        updateExpertBias(topKResult);
+        // 8. 记录专家选择统计（真正的 bias 更新延迟到 optimizer.update() 之后执行，
+        //    由训练循环或模型主动调用 updateExpertBiasAfterStep()。
+        //    这样可以保证同一次 forward+backward 期间 bias 值保持不变，不污染自动微分。）
+        recordSelectionCount(topKResult);
 
         return new MoEOutput(expertOutputs, sigmoidProbs, topKResult, 0.0);
+    }
+
+    /**
+     * 记录最近一次 forward 的专家选择统计（供 updateExpertBiasAfterStep 使用）
+     */
+    private void recordSelectionCount(TopKResult topKResult) {
+        int numExperts = config.getNumExperts();
+        int batchSize = topKResult.indices.length;
+        int seqLen = topKResult.indices[0].length;
+        int topK = config.getTopK();
+
+        int[] count = new int[numExperts];
+        for (int b = 0; b < batchSize; b++) {
+            for (int t = 0; t < seqLen; t++) {
+                for (int ki = 0; ki < topK; ki++) {
+                    count[topKResult.indices[b][t][ki]]++;
+                }
+            }
+        }
+        this.lastSelectionCount = count;
+        this.lastTotalTokens = batchSize * seqLen;
+    }
+
+    /**
+     * 在优化器 step 之后更新专家 bias（无辅助损失负载均衡）
+     * <p>
+     * 对标 DeepSeek-V3 论文的核心创新：
+     * - 过载专家（频率高于均匀分布）：降低 bias，使其更难被选中
+     * - 欠载专家（频率低于均匀分布）：提高 bias，使其更容易被选中
+     * <p>
+     * 训练循环应在 optimizer.update() 之后调用本方法。这样做的好处：
+     * 1. 不会在 forward 内部修改 bias，避免和自动微分产生交互
+     * 2. bias 更新与主优化器 step 同频率，语义清晰
+     * 3. 推理时（model.eval()）默认跳过，不会污染推理结果
+     *
+     * 注：如未调用过 forward，本方法不执行任何操作。
+     */
+    public void updateExpertBiasAfterStep() {
+        if (lastSelectionCount == null || lastTotalTokens <= 0) {
+            return;
+        }
+        int numExperts = config.getNumExperts();
+        int topK = config.getTopK();
+        float idealCount = (float) lastTotalTokens * topK / numExperts;
+
+        // NdArrayCpu.getArray() 返回底层 float[] 的直接引用（见 NdArrayCpu#getArray），
+        // 因此原地修改 biasValues 即可直接更新 expertBias 的内容。
+        // 因 expertBias.requireGrad=false，此写入不会产生梯度副作用。
+        NdArray biasData = expertBias.data();
+        float[] biasValues = biasData.getArray();
+        for (int e = 0; e < numExperts; e++) {
+            float deviation = lastSelectionCount[e] - idealCount;
+            biasValues[e] -= BIAS_UPDATE_SPEED * deviation;
+        }
+
+        // 用完即清，避免同一次统计被错误地多次应用（例如多次 optimizer.update 只 forward 一次的异常情况）
+        lastSelectionCount = null;
+        lastTotalTokens = 0;
     }
 
     /**
@@ -382,50 +455,6 @@ public class DeepSeekV3MoEBlock extends Module {
         // 权重 = expertProb * selectionMask * normFactor
         // expertProb 保持在计算图中，梯度可以回传到门控网络
         return expertProbExpanded.mul(selectionVar).mul(normVar);
-    }
-
-    /**
-     * 无辅助损失负载均衡：根据专家负载动态更新 bias
-     * <p>
-     * 对标 DeepSeek-V3 论文的核心创新：
-     * - 统计每个专家被 Top-K 选中的频率
-     * - 过载专家（频率高于均匀分布）：降低 bias，使其更难被选中
-     * - 欠载专家（频率低于均匀分布）：提高 bias，使其更容易被选中
-     * - 更新步长由 BIAS_UPDATE_SPEED 控制
-     * <p>
-     * 优势：不引入额外的辅助损失项，避免干扰主训练目标
-     *
-     * @param topKResult Top-K 选择结果
-     */
-    private void updateExpertBias(TopKResult topKResult) {
-        int numExperts = config.getNumExperts();
-        int batchSize = topKResult.indices.length;
-        int seqLen = topKResult.indices[0].length;
-        int totalTokens = batchSize * seqLen;
-        int topK = config.getTopK();
-
-        // 统计每个专家被选中的次数
-        int[] selectionCount = new int[numExperts];
-        for (int b = 0; b < batchSize; b++) {
-            for (int t = 0; t < seqLen; t++) {
-                for (int ki = 0; ki < topK; ki++) {
-                    selectionCount[topKResult.indices[b][t][ki]]++;
-                }
-            }
-        }
-
-        // 理想频率：每个专家被选中的期望次数 = totalTokens * topK / numExperts
-        float idealCount = (float) totalTokens * topK / numExperts;
-
-        // 根据负载偏差更新 bias
-        NdArray biasData = expertBias.data();
-        float[] biasValues = biasData.getArray();
-        for (int e = 0; e < numExperts; e++) {
-            float deviation = selectionCount[e] - idealCount;
-            // 过载专家降低 bias，欠载专家提高 bias
-            biasValues[e] -= BIAS_UPDATE_SPEED * deviation;
-        }
-        expertBias.setData(NdArray.of(biasValues));
     }
 
     /**

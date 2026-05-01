@@ -371,18 +371,27 @@ public class DeepSeekR1TrainDemo {
         );
         
         rlvrTrainer.configure(
-            20,         // maxEpochs (增加训练轮次以充分学习)
-            0.001f,      // learningRate (降低学习率提高稳定性)
-            4,          // groupSize G (GRPO每个问题采样数)
-            0.2f,       // clipEps   (PPO clip范围)
+            20,         // maxEpochs (训练轮次)
+            0.001f,     // learningRate (学习率)
+            4,          // groupSize G (GRPO 每个问题采样数)
             1.0f        // temperature (采样温度)
         );
-        
-        System.out.println("  ✓ 最大轮次: 50");
-        System.out.println("  ✓ 学习率: 0.05");
-        System.out.println("  ✓ 算法: GRPO（Group Relative Policy Optimization）");
-        System.out.println("  ✓ 组采样大小: 4");
-        System.out.println("  ✓ PPO clip ε: 0.2");
+
+        // 配置完整 GRPO 超参数（PPO-clip + KL 约束 + 多轮内部更新 + 参考模型同步）
+        rlvrTrainer.configureGRPO(
+            0.2f,       // clipEps ε：PPO-clip 范围（论文默认 0.2）
+            0.04f,      // klWeight β：KL 约束权重（论文默认 0.04）
+            2,          // innerUpdatesPerBatch K：每个 rollout 的内部梯度更新次数
+            1           // refSyncEpochInterval：参考模型每 1 个 epoch 同步一次
+        );
+
+        System.out.println("  ✓ 最大轮次: 20");
+        System.out.println("  ✓ 学习率: 0.001");
+        System.out.println("  ✓ 算法: GRPO 完整实现（PPO-clip + KL 约束）");
+        System.out.println("  ✓ 组采样大小 G: 4");
+        System.out.println("  ✓ PPO-clip ε: 0.2");
+        System.out.println("  ✓ KL 权重 β: 0.04");
+        System.out.println("  ✓ 内部更新轮数 K: 2");
         
         // 4. 开始RLVR训练
         System.out.println("\n📝 开始RLVR强化学习训练...");

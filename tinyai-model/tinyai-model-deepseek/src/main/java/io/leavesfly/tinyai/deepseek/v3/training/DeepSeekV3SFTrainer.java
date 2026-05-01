@@ -129,20 +129,20 @@ public class DeepSeekV3SFTrainer extends DeepSeekTrainerBase {
             valLossHistory.add(valLoss);
             
             System.out.printf("Epoch %d 验证损失: %.4f%n", currentEpoch + 1, valLoss);
-            
-//            // 早停检查
-//            if (valLoss < bestValLoss) {
-//                bestValLoss = valLoss;
-//                stepsWithoutImprovement = 0;
-//                saveCheckpoint("best");
-//                System.out.println("新的最佳模型已保存!");
-//            } else {
-//                stepsWithoutImprovement++;
-//                if (stepsWithoutImprovement >= patience) {
-//                    System.out.println("触发早停,训练结束");
-//                    break;
-//                }
-//            }
+
+            // 早停检查（防止过拟合）
+            if (valLoss < bestValLoss) {
+                bestValLoss = valLoss;
+                stepsWithoutImprovement = 0;
+                saveCheckpoint("best");
+                System.out.printf("✓ 保存最佳模型 (val_loss: %.4f)%n", bestValLoss);
+            } else {
+                stepsWithoutImprovement++;
+                if (stepsWithoutImprovement >= patience) {
+                    System.out.println("触发早停（连续 " + patience + " 个 epoch 验证损失未改善），训练结束");
+                    break;
+                }
+            }
         }
         
         // 保存最终模型
@@ -232,6 +232,10 @@ public class DeepSeekV3SFTrainer extends DeepSeekTrainerBase {
         clipGradients();
         optimizer.update();
 
+        // MoE 无辅助损失负载均衡：optimizer step 之后更新专家 bias
+        // 必须在 optimizer.update() 之后调用，保证 forward/backward 期间 bias 稳定
+        model.getV3Block().updateExpertBiasAfterStep();
+
         // 彻底断开计算图，释放内存
         totalLoss.unChainBackward();
         result.logits.unChainBackward();
@@ -297,19 +301,19 @@ public class DeepSeekV3SFTrainer extends DeepSeekTrainerBase {
         // 1. 获取逐位置 loss（不归约）
         Variable elementWiseLoss = elementWiseLossFunction.loss(targets2D, logits2D);
         
-        // 2. 将 mask reshape 为 1D 并与 loss 相乘
+        // 2. 将 mask reshape 为 1D 并与 loss 相乘（mask 是常量，不需要梯度）
         NdArray lossMask = batch.getLossMask();
-        Variable mask1D = new Variable(lossMask).reshape(Shape.of(batchSize * seqLen, 1));
+        Variable mask1D = constant(lossMask).reshape(Shape.of(batchSize * seqLen, 1));
         Variable maskedLoss = elementWiseLoss.mul(mask1D);
-        
+
         // 3. 计算有效位置数量，对有效位置求均值
         float maskSum = lossMask.sum().getNumber().floatValue();
         if (maskSum <= 0) {
             // 安全兜底：如果没有有效位置，返回 0 loss
-            return new Variable(NdArray.of(new float[]{0.0f}));
+            return constant(new float[]{0.0f});
         }
         Variable totalMaskedLoss = maskedLoss.sum();
-        Variable validCount = new Variable(NdArray.of(new float[]{maskSum}));
+        Variable validCount = constant(new float[]{maskSum});
         return totalMaskedLoss.div(validCount);
     }
 
@@ -318,8 +322,23 @@ public class DeepSeekV3SFTrainer extends DeepSeekTrainerBase {
      */
     private Variable buildTotalLoss(Variable lmLoss, float moeLoss) {
         if (moeLoadBalanceWeight <= 0) return lmLoss;
-        Variable moeLossVar = new Variable(NdArray.of(new float[]{moeLoss * moeLoadBalanceWeight}));
-        return lmLoss.add(moeLossVar);
+        // MoE 负载均衡损失以常量加到主损失上
+        return lmLoss.add(constant(new float[]{moeLoss * moeLoadBalanceWeight}));
+    }
+
+    /**
+     * 构造不需要梯度的常量 Variable
+     */
+    private static Variable constant(float[] data) {
+        Variable v = new Variable(NdArray.of(data));
+        v.setRequireGrad(false);
+        return v;
+    }
+
+    private static Variable constant(NdArray data) {
+        Variable v = new Variable(data);
+        v.setRequireGrad(false);
+        return v;
     }
 
     private void updateLearningRate() {

@@ -20,9 +20,13 @@ import java.util.regex.Pattern;
  * @version 1.0
  */
 public class MathVerifier implements Verifier {
-    
-    private static final double TOLERANCE = 1e-6;
-    
+
+    /** 绝对容差（答案接近 0 时的最小可接受误差） */
+    private static final double ABS_TOLERANCE = 1e-9;
+
+    /** 相对容差（答案远离 0 时使用相对误差判定，应对浮点累积误差） */
+    private static final double REL_TOLERANCE = 1e-6;
+
     // 匹配数字的正则表达式（支持整数、小数、负数、科学计数法）
     private static final Pattern NUMBER_PATTERN = Pattern.compile(
         "-?\\d+\\.?\\d*(?:[eE][+-]?\\d+)?"
@@ -60,17 +64,22 @@ public class MathVerifier implements Verifier {
             // 2. 转换为数值
             double predicted = parseNumber(predictedAnswer);
             double expected = parseNumber(groundTruth);
-            
-            // 3. 数值比较（带容差）
-            boolean isCorrect = Math.abs(predicted - expected) < TOLERANCE;
-            
+
+            // 3. 数值比较（绝对容差 + 相对容差，max(abs, rel·|expected|)）
+            //    - 答案接近 0：用 ABS_TOLERANCE 判定（1e-9，防止 |0.0000001|<1e-6 这种假阳性）
+            //    - 答案远离 0：用 REL_TOLERANCE·|expected| 判定（1e-6 的相对误差，抗浮点累积误差）
+            double diff = Math.abs(predicted - expected);
+            double effectiveTolerance = Math.max(ABS_TOLERANCE, REL_TOLERANCE * Math.abs(expected));
+            boolean isCorrect = diff <= effectiveTolerance;
+
             // 4. 构建验证详情
             String details = String.format(
-                "数值比较: |%.6f - %.6f| = %.6e %s %.6e",
-                predicted, expected, 
-                Math.abs(predicted - expected),
-                isCorrect ? "<" : ">=",
-                TOLERANCE
+                "数值比较: |%.6f - %.6f| = %.6e %s %.6e (abs=%.1e, rel=%.1e)",
+                predicted, expected,
+                diff,
+                isCorrect ? "<=" : ">",
+                effectiveTolerance,
+                ABS_TOLERANCE, REL_TOLERANCE
             );
             
             return new VerificationResult(
@@ -127,25 +136,75 @@ public class MathVerifier implements Verifier {
     }
     
     /**
-     * 解析数字字符串
-     * 
+     * 解析数字字符串（健全化版本）
+     *
+     * <p>支持以下输入：
+     * <ul>
+     *   <li>常规数字：{@code "42"}, {@code "-3.14"}, {@code "1.23e-5"}, {@code "1.23E+10"}</li>
+     *   <li>布尔值：{@code "true"/"yes"} → 1.0，{@code "false"/"no"} → 0.0</li>
+     *   <li>中文对错：{@code "对"} → 1.0，{@code "错"} → 0.0</li>
+     *   <li>前缀空白、千位分隔符（{@code 1,234}）、正号前缀（{@code +42}）</li>
+     *   <li>全角数字：会被替换为半角后再解析</li>
+     * </ul>
+     *
      * @param numberStr 数字字符串
-     * @return double值
-     * @throws NumberFormatException 如果无法解析
+     * @return double 值
+     * @throws NumberFormatException 当无法解析为上述任何形式时抛出
      */
     private double parseNumber(String numberStr) throws NumberFormatException {
-        if (numberStr == null || numberStr.trim().isEmpty()) {
+        if (numberStr == null) {
+            throw new NumberFormatException("数字字符串为 null");
+        }
+        String trimmed = numberStr.trim();
+        if (trimmed.isEmpty()) {
             throw new NumberFormatException("数字字符串为空");
         }
-        String str = numberStr.trim().toLowerCase();
-        // 支持布尔值
-        if (str.equals("true") || str.equals("yes")) {
-            return 1.0;
+        String lower = trimmed.toLowerCase();
+
+        // 1) 中英文布尔 / 对错
+        switch (lower) {
+            case "true":
+            case "yes":
+            case "对":
+            case "是":
+                return 1.0;
+            case "false":
+            case "no":
+            case "错":
+            case "否":
+                return 0.0;
+            default:
+                // 不是布尔值，走数值解析
+                break;
         }
-        if (str.equals("false") || str.equals("no")) {
-            return 0.0;
+
+        // 2) 规范化：全角 → 半角，去除千位分隔符，去除正号前缀
+        StringBuilder normalized = new StringBuilder(lower.length());
+        for (int i = 0; i < lower.length(); i++) {
+            char c = lower.charAt(i);
+            if (c >= '\uFF10' && c <= '\uFF19') {           // 全角数字 ０-９
+                normalized.append((char) (c - '\uFF10' + '0'));
+            } else if (c == '\uFF0E' || c == '。') {        // 全角点 / 中文句号
+                normalized.append('.');
+            } else if (c == '\uFF0D' || c == '－') {        // 全角减号
+                normalized.append('-');
+            } else if (c == ',' || c == '\u00A0' || c == ' ') {
+                // 跳过千位分隔符、不换行空格、普通空格
+                continue;
+            } else {
+                normalized.append(c);
+            }
         }
-        return Double.parseDouble(str);
+        String cleaned = normalized.toString();
+        if (cleaned.startsWith("+")) {
+            cleaned = cleaned.substring(1);
+        }
+        if (cleaned.isEmpty()) {
+            throw new NumberFormatException("规范化后数字字符串为空: " + numberStr);
+        }
+
+        // 3) 交给 JDK 解析（JDK 的 Double.parseDouble 自身支持大小写 "e"/"E" 科学计数法）
+        return Double.parseDouble(cleaned);
     }
     
     /**
@@ -172,7 +231,9 @@ public class MathVerifier implements Verifier {
                 double c = parseNumber(matcher.group(4));
                 
                 double leftSide = a * x + (op.equals("+") ? b : -b);
-                return Math.abs(leftSide - c) < TOLERANCE;
+                double diff = Math.abs(leftSide - c);
+                double effectiveTolerance = Math.max(ABS_TOLERANCE, REL_TOLERANCE * Math.abs(c));
+                return diff <= effectiveTolerance;
             }
             
             return false;

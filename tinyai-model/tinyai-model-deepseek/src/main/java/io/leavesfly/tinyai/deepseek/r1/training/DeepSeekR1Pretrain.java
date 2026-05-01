@@ -218,21 +218,31 @@ public class DeepSeekR1Pretrain extends DeepSeekTrainerBase {
         
         // 创建检查点目录
         createCheckpointDir();
-        
-        // 训练循环
-        for (currentEpoch = 0; currentEpoch < maxEpochs; currentEpoch++) {
-            trainOneEpoch();
+
+        try {
+            // 训练循环
+            for (currentEpoch = 0; currentEpoch < maxEpochs; currentEpoch++) {
+                trainOneEpoch();
+            }
+
+            // 保存最终模型
+            saveCheckpoint("final");
+
+            System.out.println("\n训练完成!");
+            System.out.println("最终损失: " + getAverageLoss(lossHistory, 100));
+            System.out.println("平均推理置信度: " + getAverageLoss(reasoningConfidenceHistory, 100));
+        } catch (RuntimeException e) {
+            System.err.println("\n❌ 训练过程中出现异常，尝试保存中间 checkpoint...");
+            try {
+                saveCheckpoint("crash_epoch_" + currentEpoch);
+            } catch (Exception saveEx) {
+                System.err.println("  保存 checkpoint 失败: " + saveEx.getMessage());
+            }
+            throw e;
+        } finally {
+            // 无论训练成功、异常还是中断，都必须关闭线程池，防止 JVM 无法退出
+            shutdownParallelTraining();
         }
-        
-        // 保存最终模型
-        saveCheckpoint("final");
-        
-        // 关闭并行训练环境
-        shutdownParallelTraining();
-        
-        System.out.println("\n训练完成!");
-        System.out.println("最终损失: " + getAverageLoss(lossHistory, 100));
-        System.out.println("平均推理置信度: " + getAverageLoss(reasoningConfidenceHistory, 100));
     }
     
     /**
@@ -409,7 +419,7 @@ public class DeepSeekR1Pretrain extends DeepSeekTrainerBase {
                         totalLoss[0] += result.loss;
                         totalConfidence[0] += result.confidence;
                         successCount++;
-                        
+
                         // 聚合梯度
                         for (Map.Entry<String, NdArray> entry : result.gradients.entrySet()) {
                             String key = entry.getKey();
@@ -420,9 +430,16 @@ public class DeepSeekR1Pretrain extends DeepSeekTrainerBase {
                                 aggregatedGradients.put(key, grad);
                             }
                         }
-                        
-                        lossHistory.add(result.loss);
-                        reasoningConfidenceHistory.add(result.confidence);
+
+                        // lossHistory / reasoningConfidenceHistory 是共享 ArrayList，
+                        // 即便当前 for 循环本身单线程收集结果，外层仍可能并发查询/统计，
+                        // 且这两个字段在基类和其他 get 方法中会被并发读取；统一用 synchronized 保护写入。
+                        synchronized (lossHistory) {
+                            lossHistory.add(result.loss);
+                        }
+                        synchronized (reasoningConfidenceHistory) {
+                            reasoningConfidenceHistory.add(result.confidence);
+                        }
                     }
                 } catch (ExecutionException e) {
                     // 解包 ExecutionException 获取原始异常

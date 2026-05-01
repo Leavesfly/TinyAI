@@ -1,5 +1,7 @@
 # DeepSeek-V3 技术文档
 
+> **最后更新**：2026-05-01 &nbsp;·&nbsp; **版本**：v3（对标论文 arXiv:2412.19437）
+
 ## 📋 模型概述
 
 DeepSeek-V3 是一个基于**混合专家模型（MoE, Mixture of Experts）**的大语言模型。V3 采用 **Pre-RMSNorm + RoPE + 纯 MoE** 架构，推理和代码生成能力通过 MoE 专家网络自然涌现，而非显式的专用模块。
@@ -38,16 +40,15 @@ R1 与 V3 使用完全相同的 MoE TransformerBlock，区别仅在于训练方�
 ```
 DeepSeekV3Model (extends DeepSeekModelBase)
 └── DeepSeekV3Block (Module)
-    ├── DeepSeekV3TokenEmbedding
+    ├── DeepSeekV3TokenEmbedding (extends DeepSeekTokenEmbeddingBase)
     │   ├── Token 嵌入 [vocabSize, nEmbd]  (Parameter)
-    │   ├── 位置嵌入 [nPositions, nEmbd]  (Parameter)
-    │   └── Dropout
+    │   └── Dropout  (位置信息由注意力层内的 RoPE 提供)
     ├── N × DeepSeekV3TransformerBlock
     │   ├── Pre-RMSNorm
     │   ├── MultiHeadAttention（含 RoPE）
     │   ├── 残差连接
     │   ├── Pre-RMSNorm
-    │   ├── DeepSeekV3MoELayer（共享专家 + 路由专家）
+    │   ├── DeepSeekV3MoEBlock（共享专家 + 路由专家，Sigmoid 路由）
     │   └── 残差连接
     ├── Final RMSNorm
     ├── Linear 输出投影 [nEmbd → vocabSize]
@@ -60,10 +61,10 @@ DeepSeekV3Model (extends DeepSeekModelBase)
 输入 Token IDs [batch, seq]
     ↓
 DeepSeekV3TokenEmbedding
-    Token 嵌入 + 位置嵌入 → [batch, seq, embd]
+    Token 嵌入（位置由注意力层内的 RoPE 提供） → [batch, seq, embd]
     ↓
-N × DeepSeekV3TransformerBlock（MoE 架构）
-    MHA（RoPE）→ MoE FFN → 残差连接
+N × DeepSeekV3TransformerBlock（Pre-RMSNorm + RoPE + MoE）
+    MHA（RoPE）→ MoE FFN（SwiGLU 专家）→ 残差连接
     ↓
 Final RMSNorm
     ↓
@@ -145,39 +146,58 @@ DeepSeekV3Config.createStandardConfig();
 
 ### 3. Token 嵌入层（`DeepSeekV3TokenEmbedding`）
 
-完全在 Variable 层面实现，确保梯度正确回传：
+V3 的 Token 嵌入层继承自 `DeepSeekTokenEmbeddingBase`，与 R1 **共享相同的嵌入基类**。
+**注意：不包含学习式位置嵌入**，位置信息由注意力层内部的 RoPE（旋转位置编码）提供。
 
-```java
-// Token 嵌入：使用 indexSelect 算子
-Variable flatIds = tokenIds.reshape(Shape.of(batchSize * seqLen));
-Variable flatEmbeds = tokenEmbedParam.indexSelect(0, flatIds);
-Variable tokenEmbeds = flatEmbeds.reshape(Shape.of(batchSize, seqLen, nEmbd));
-
-// 位置嵌入：repeat 扩展 batch 维度
-Variable posEmbeds = posEmbedParam.indexSelect(0, posIds);
-Variable posEmbeds3D = posEmbeds.reshape(Shape.of(1, seqLen, nEmbd));
-Variable posExpanded = posEmbeds3D.repeat(batchSize, 1, 1);
-
-// 合并并 Dropout
-Variable combined = tokenEmbeds.add(posExpanded);
-return dropout.forward(combined);
-```
+职责：
+- **Token Embedding** — 使用 `indexSelect` 算子将 token ID 映射为嵌入向量
+- **Dropout** — 嵌入层正则化
 
 **Variable 算子使用**：
 - `indexSelect` — 索引选择嵌入向量
 - `reshape` — 形状变换
-- `repeat` — 维度重复扩展
-- `add` — 嵌入合并
 
-### 4. MTP Head（`DeepSeekV3MTPHead`）
+### 4. MoE 专家层（`DeepSeekV3MoEBlock`）
+
+DeepSeek-V3 的核心 MoE 实现，对标官方论文的三大创新：
+
+1. **Sigmoid 路由** — 用 `sigmoid(gate(x))` 替代传统 Softmax 路由，每个专家独立计算激活概率
+2. **无辅助损失负载均衡** — 通过可学习的 `expertBias` 向量动态调节专家选择
+   - 路由分数 = `sigmoid(gate(x)) + expertBias`（`expertBias` 仅影响 Top-K 选择，不影响最终权重）
+   - 训练时在优化器 `step()` 之后调用 `updateExpertBiasAfterStep()`，根据负载动态调节 bias（过载专家降低 bias，欠载专家提高 bias）
+3. **共享专家 + 路由专家** — 共享专家每次必激活，路由专家 Top-K 选择
+
+**专家网络结构（SwiGLU FFN）**：
+
+```
+output = down_proj( SiLU(gate_proj(x)) ⊙ up_proj(x) )
+```
+
+- `gate_proj` / `up_proj` / `down_proj` — 三个线性层
+- `SiLU` — Swish 激活函数
+- `⊙` — 逐元素乘（Hadamard 积）
+
+**训练侧注意事项**：
+
+```java
+// 训练循环中的正确调用顺序
+optimizer.update();                      // 1. 参数更新
+v3Block.updateExpertBiasAfterStep();     // 2. 延迟更新 expertBias
+```
+
+> 之所以把 bias 更新放在 optimizer.update 之后：保证 forward/backward 期间 bias 值稳定，
+> 不影响自动微分；同时推理阶段（不调用此方法）也不会改变 bias。
+
+### 5. MTP Head（`DeepSeekV3MTPHead`）
 
 DeepSeek-V3 论文的核心创新，在训练时预测额外的多个 token，提升模型的预测能力。
 
-- 与主 LM 头**共享** Token 嵌入权重和输出投影层
+- 与主 LM 头**共享** Token 嵌入权重和输出投影层（减少参数量）
 - 仅在 `mtpDepth > 0` 时初始化
 - 训练时计算 MTP 辅助损失（权重由 `mtpLossWeight` 控制）
+- 推理时 MTP Head 不参与计算，也可用于推测解码（speculative decoding）加速
 
-### 5. 模型类（`DeepSeekV3Model`）
+### 6. 模型类（`DeepSeekV3Model`）
 
 提供高层 API：
 
@@ -288,28 +308,30 @@ DeepSeekV3Inference.GenerationResult sampledResult =
 | **Small** | 512 | 8 | 8 | 6 | 2 | 1024 | 学习实验 |
 | **Standard** | 768 | 12 | 12 | 8 | 2 | 2048 | 标准应用 |
 
+> 所有规格均附带 **1 个共享专家**（`numSharedExperts=1`），每次前向必激活。
+
 ## 🔬 训练流程
 
 ### 多阶段训练
 
 ```
 阶段1: 预训练（因果语言建模 + MTP 辅助损失）
-  DeepSeekV3Pretrain — Adam 优化器，Warmup + Cosine 衰减
+  DeepSeekV3Pretrainer — Adam 优化器，Warmup + Cosine 衰减
     ↓
 阶段2: 后训练（监督微调 SFT）
-  DeepSeekV3Posttrain — Answer-only Loss Mask，早停机制
+  DeepSeekV3SFTrainer — Answer-only Loss Mask，早停机制
     ↓
 阶段3: 强化学习（RLHF）
   DeepSeekV3RLHFTrainer — Reward-weighted Regression
 ```
 
-### 预训练（`DeepSeekV3Pretrain`）
+### 预训练（`DeepSeekV3Pretrainer`）
 
 ```java
 DeepSeekV3Model model = DeepSeekV3Model.createTinyModel("V3-Pretrain");
 DeepSeekV3Dataset dataset = new DeepSeekV3Dataset(...);
 
-DeepSeekV3Pretrain trainer = new DeepSeekV3Pretrain(model, dataset);
+DeepSeekV3Pretrainer trainer = new DeepSeekV3Pretrainer(model, dataset);
 trainer.configure(
     10,        // maxEpochs
     2.5e-4f,   // learningRate（支持 Warmup + Cosine 衰减）
@@ -323,13 +345,18 @@ trainer.train();
 - **Adam 优化器** — β1=0.9, β2=0.999
 - **MoE 负载均衡损失** — 权重由 `loadBalanceLossWeight` 控制
 - **Warmup + Cosine 衰减** — 学习率调度
-- **梯度裁剪** — 防止梯度爆炸
+- **梯度裁剪** — 沿用基类 `DeepSeekTrainerBase.clipGradients()`，包含 NaN/Inf 检测 + L2 范数等比缩放
 
-### 后训练（`DeepSeekV3Posttrain`）
+### 后训练 SFT（`DeepSeekV3SFTrainer`）
 
 ```java
-DeepSeekV3Posttrain posttrain = new DeepSeekV3Posttrain(model, trainDataset, valDataset);
-posttrain.train();
+DeepSeekV3SFTrainer sfTrainer = new DeepSeekV3SFTrainer(model, trainDataset, valDataset);
+sfTrainer.configure(
+    5,       // maxEpochs
+    2.5e-5f, // learningRate（比预训练低 10 倍）
+    3        // patience（早停耐心值）
+);
+sfTrainer.train();
 ```
 
 核心特性：
@@ -389,14 +416,24 @@ mvn exec:java -Dexec.mainClass="io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Demo"
 
 | 示例 | 说明 |
 |------|------|
-| **示例1** | 创建 Small 模型，打印架构信息和配置摘要 |
-| **示例5** | MoE 分析 — 打印专家配置、参数激活率，执行推理 |
+| **示例 1（createModel）** | 创建 Small 模型，打印架构信息和配置摘要 |
+| **示例 2（MoEAnalysis）** | MoE 分析 — 打印专家配置、参数激活率，执行推理 |
+
+> 完整训练演示请参见 `training/demo/DeepSeekV3TrainDemo.java`，演示预训练 → SFT → RLHF 的完整流程。
 
 ## 🔍 关键设计说明
 
 ### 纯 MoE 架构
 
 V3 不包含显式的推理模块或代码模块，推理和代码生成能力**通过 MoE 专家网络自然涌现**。这与旧版本（有独立的 `ReasoningBlock`/`CodeBlock`）有本质区别。
+
+### Sigmoid 路由 + 无辅助损失负载均衡
+
+对标官方 DeepSeek-V3 论文的路由创新：
+
+- **Sigmoid 路由**：每个专家独立计算激活概率，取代传统 Softmax 互斥路由
+- **无辅助损失负载均衡**：通过可学习的 `expertBias` 动态调节专家选择频率，避免 Softmax 路由对辅助损失的依赖
+- **训练要求**：调用 `DeepSeekV3Block.updateExpertBiasAfterStep()` 在 optimizer 更新之后同步 bias
 
 ### MTP 辅助训练机制
 
@@ -407,6 +444,12 @@ MTP Head 与主模型**共享权重**（Token 嵌入 + 输出投影），训练�
 DeepSeekMoE 的核心创新：
 - **路由专家** — Top-K 选择，每次激活 `topK` 个
 - **共享专家** — 每次必激活，提供稳定的通用知识基础
+
+### R1 复用 V3 TransformerBlock
+
+`DeepSeekV3TransformerBlock` 的构造函数接受 `DeepSeekBaseConfig`（而非 `DeepSeekV3Config`），
+使得 `DeepSeekR1Config` 可以直接传入，**无需任何 config 转换**。R1 的 Block 内部直接实例化
+V3 的 TransformerBlock，实现最大化的代码复用。
 
 ## 📚 参考资料
 
@@ -423,21 +466,41 @@ DeepSeekMoE 的核心创新：
 
 ### 源代码
 
+**核心模型层**：
+
 | 文件 | 说明 |
 |------|------|
 | [`DeepSeekV3Model.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Model.java) | 模型主类 |
 | [`DeepSeekV3Config.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Config.java) | 配置类（V3 特有参数） |
-| [`DeepSeekV3Block.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Block.java) | 主体块（含 MTP Head） |
-| [`DeepSeekV3TransformerBlock.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3TransformerBlock.java) | Transformer 块（R1 复用此组件） |
-| [`DeepSeekV3MoELayer.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3MoELayer.java) | MoE 专家层 |
+| [`DeepSeekV3Block.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Block.java) | 主体块（含 MTP Head，暴露 `updateExpertBiasAfterStep`） |
+| [`DeepSeekV3TransformerBlock.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3TransformerBlock.java) | Transformer 块（Pre-RMSNorm + RoPE + MoE，R1 直接复用） |
+| [`DeepSeekV3Attention.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Attention.java) | 注意力模块（含 RoPE 旋转位置编码） |
+| [`DeepSeekV3MoEBlock.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3MoEBlock.java) | MoE 专家层（Sigmoid 路由 + 无辅助损失负载均衡 + SwiGLU 专家） |
 | [`DeepSeekV3MTPHead.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3MTPHead.java) | Multi-Token Prediction 头 |
-| [`DeepSeekV3TokenEmbedding.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3TokenEmbedding.java) | Token + 位置嵌入层 |
+| [`DeepSeekV3TokenEmbedding.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3TokenEmbedding.java) | Token 嵌入层（无位置嵌入，RoPE 在注意力层） |
 | [`DeepSeekV3Demo.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/DeepSeekV3Demo.java) | 演示程序 |
-| [`DeepSeekV3Pretrain.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/training/DeepSeekV3Pretrain.java) | 预训练器 |
-| [`DeepSeekV3Posttrain.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/training/DeepSeekV3Posttrain.java) | 后训练器（SFT） |
-| [`DeepSeekV3RLHFTrainer.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/training/DeepSeekV3RLHFTrainer.java) | RLHF 训练器 |
-| [`DeepSeekV3Inference.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/training/DeepSeekV3Inference.java) | 推理引擎 |
+
+**训练与推理**：
+
+| 文件 | 说明 |
+|------|------|
+| [`DeepSeekV3Pretrainer.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/training/DeepSeekV3Pretrainer.java) | 预训练器（Adam + MoE 负载均衡 + Warmup/Cosine） |
+| [`DeepSeekV3SFTrainer.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/training/DeepSeekV3SFTrainer.java) | 后训练器（SFT + Answer-only Loss + 早停） |
+| [`DeepSeekV3RLHFTrainer.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/training/DeepSeekV3RLHFTrainer.java) | RLHF 训练器（Reward-weighted Regression，R1 RLHF 委托本类） |
+| [`DeepSeekV3Inference.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/training/DeepSeekV3Inference.java) | 推理引擎（4 种生成策略） |
+| [`DeepSeekV3Dataset.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/training/DeepSeekV3Dataset.java) | 数据集（支持预训练/SFT/RLHF 三种模式） |
+| [`demo/DeepSeekV3TrainDemo.java`](../src/main/java/io/leavesfly/tinyai/deepseek/v3/training/demo/DeepSeekV3TrainDemo.java) | 完整训练流程演示 |
+
+**共享基础层**：
+
+| 文件 | 说明 |
+|------|------|
 | [`DeepSeekBaseConfig.java`](../src/main/java/io/leavesfly/tinyai/deepseek/base/DeepSeekBaseConfig.java) | 基础配置（V3 和 R1 共享） |
+| [`DeepSeekModelBase.java`](../src/main/java/io/leavesfly/tinyai/deepseek/base/DeepSeekModelBase.java) | 模型基类（提供 `predict` / `generateSequence` / `argmax`） |
+| [`DeepSeekTrainerBase.java`](../src/main/java/io/leavesfly/tinyai/deepseek/base/DeepSeekTrainerBase.java) | 训练器基类（梯度裁剪 + 检查点管理） |
+| [`DeepSeekTokenEmbeddingBase.java`](../src/main/java/io/leavesfly/tinyai/deepseek/base/DeepSeekTokenEmbeddingBase.java) | Token 嵌入基类（V3 和 R1 共享） |
+| [`DeepSeekBaseInference.java`](../src/main/java/io/leavesfly/tinyai/deepseek/base/inference/DeepSeekBaseInference.java) | 推理引擎基类（通用采样策略） |
+| [`TaskType.java`](../src/main/java/io/leavesfly/tinyai/deepseek/base/TaskType.java) | 任务类型枚举（5 种：推理、代码、数学、通用、多模态） |
 
 ---
 

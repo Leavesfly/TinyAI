@@ -1,6 +1,7 @@
 package io.leavesfly.tinyai.deepseek.v3.training;
 
 import io.leavesfly.tinyai.deepseek.base.DeepSeekTrainerBase;
+import io.leavesfly.tinyai.deepseek.base.utils.FormatUtils;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Block;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3Config;
 import io.leavesfly.tinyai.deepseek.v3.DeepSeekV3MTPHead;
@@ -228,6 +229,10 @@ public class DeepSeekV3Pretrainer extends DeepSeekTrainerBase {
         totalLoss.backward();
         clipGradients();
         optimizer.update();
+
+        // MoE 无辅助损失负载均衡：optimizer step 之后更新专家 bias
+        model.getV3Block().updateExpertBiasAfterStep();
+
         totalLoss.unChainBackward();
 
         return new StepResult(lmLossValue, moeLossValue, confidenceValue);
@@ -388,16 +393,10 @@ public class DeepSeekV3Pretrainer extends DeepSeekTrainerBase {
     }
 
     /**
-     * 格式化参数数量
+     * 格式化参数数量（委托给 {@link FormatUtils#formatParamCount}，保持全仓库格式一致）
      */
     private String formatParamCount(long count) {
-        if (count >= 1_000_000_000) {
-            return String.format("%.2fB", count / 1_000_000_000.0);
-        } else if (count >= 1_000_000) {
-            return String.format("%.2fM", count / 1_000_000.0);
-        } else {
-            return String.format("%,d", count);
-        }
+        return FormatUtils.formatParamCount(count);
     }
 
     @Override

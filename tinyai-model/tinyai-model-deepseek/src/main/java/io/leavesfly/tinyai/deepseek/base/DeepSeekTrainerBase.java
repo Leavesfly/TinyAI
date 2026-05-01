@@ -69,24 +69,57 @@ public abstract class DeepSeekTrainerBase {
     // ==================== 公共方法 ====================
 
     /**
-     * 梯度裁剪（全局梯度范数裁剪）
+     * 梯度裁剪（全局梯度范数裁剪 + NaN/Inf 保护）
      *
-     * 计算所有可训练参数的梯度 L2 范数，
-     * 若超过 maxGradNorm 阈值则等比缩放所有梯度，防止梯度爆炸。
+     * <p>执行流程：
+     * <ol>
+     *   <li><b>NaN/Inf 检测</b>：遍历所有梯度，检测到 NaN 或 Inf 时将本参数梯度清零并告警（而非将整个 totalNorm 污染为 NaN）</li>
+     *   <li><b>L2 范数计算</b>：对清理后的梯度求全局 L2 范数</li>
+     *   <li><b>等比缩放</b>：若范数超过 {@link #maxGradNorm} 则等比缩放全部梯度</li>
+     * </ol>
+     *
+     * <p>NaN/Inf 通常由 learning rate 过大、数值溢出、loss 设计缺陷导致；
+     * 这里选择 <b>清零而非中断训练</b>，让训练能够从数值异常中恢复（此 step 相当于跳过该参数更新）。
      */
     protected void clipGradients() {
-        double totalNorm = 0.0;
         Map<String, Parameter> params = model.getModule().namedParameters("", true);
 
+        // Step 1: NaN/Inf 检测 + 清零被污染的梯度
+        int nanInfCount = 0;
+        for (Map.Entry<String, Parameter> entry : params.entrySet()) {
+            Parameter param = entry.getValue();
+            if (!param.requiresGrad() || param.grad() == null) continue;
+
+            float[] flat = param.grad().getArray();
+            boolean polluted = false;
+            for (float g : flat) {
+                if (Float.isNaN(g) || Float.isInfinite(g)) {
+                    polluted = true;
+                    break;
+                }
+            }
+            if (polluted) {
+                // 清零本参数梯度，避免污染全局范数计算 & 避免 NaN 传播到参数
+                param.setGrad(NdArray.zeros(param.grad().getShape()));
+                nanInfCount++;
+            }
+        }
+        if (nanInfCount > 0) {
+            System.err.printf("[clipGradients] 检测到 %d 个参数梯度含 NaN/Inf，已清零（step=%d）%n",
+                    nanInfCount, globalStep);
+        }
+
+        // Step 2: 计算全局 L2 范数
+        double totalNorm = 0.0;
         for (Parameter param : params.values()) {
             if (param.requiresGrad() && param.grad() != null) {
                 double norm = param.grad().mul(param.grad()).sum().getNumber().doubleValue();
                 totalNorm += norm;
             }
         }
-
         totalNorm = Math.sqrt(totalNorm);
 
+        // Step 3: 等比缩放
         if (totalNorm > 0.0 && totalNorm > maxGradNorm) {
             float scale = (float) (maxGradNorm / totalNorm);
             for (Parameter param : params.values()) {

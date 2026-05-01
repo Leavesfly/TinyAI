@@ -82,6 +82,15 @@ public class VerificationResult {
     public String getVerificationDetails() {
         return verificationDetails;
     }
+
+    /**
+     * 获取验证详情（别名方法，等价于 {@link #getVerificationDetails()}）
+     *
+     * <p>为测试及调用方提供更简洁的访问方式，避免命名冗余。
+     */
+    public String getDetails() {
+        return verificationDetails;
+    }
     
     @Override
     public String toString() {

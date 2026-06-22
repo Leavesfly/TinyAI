@@ -17,7 +17,7 @@
         <module>tinyai-deeplearning/tinyai-deeplearning-nnet</module>
         <module>tinyai-deeplearning/tinyai-deeplearning-ml</module>
         <module>tinyai-deeplearning/tinyai-deeplearning-rl</module>
-        <module>tinyai-deeplearning/tinyai-deeplearning-nl</module>
+<!--        <module>tinyai-deeplearning/tinyai-deeplearning-nl</module>-->
         <module>tinyai-deeplearning/tinyai-deeplearning-case</module>
 
         <!--        模型层-->

@@ -1,16 +1,15 @@
 package io.leavesfly.tinyai.minimind.training.lora;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.minimind.model.MiniMindBlock;
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
 import io.leavesfly.tinyai.minimind.training.BaseTrainer;
 import io.leavesfly.tinyai.minimind.training.dataset.SFTDataset;
-import io.leavesfly.tinyai.ml.loss.MaskedSoftmaxCELoss;
+import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
 import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.ndarr.NdArray;
+import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.core.Parameter;
-
-import java.io.File;
-import java.nio.file.Paths;
 
 /**
  * LoRA训练器
@@ -23,12 +22,18 @@ import java.nio.file.Paths;
  */
 public class LoRATrainer extends BaseTrainer {
     
+    /**
+     * 标签忽略位标记（对齐 SoftmaxCE 的 ignore_index 约定）
+     */
+    private static final int IGNORE_INDEX = -100;
+    
     private final SFTDataset dataset;
     private final LoRAConfig loraConfig;
-    private final MaskedSoftmaxCELoss lossFunction;
+    private final SoftmaxCrossEntropy lossFunction;
     private final Adam optimizer;
     
     private float learningRate;
+    private float currentLearningRate;
     
     /**
      * 构造函数
@@ -37,17 +42,19 @@ public class LoRATrainer extends BaseTrainer {
         super(model);
         this.dataset = dataset;
         this.loraConfig = loraConfig;
-        this.lossFunction = new MaskedSoftmaxCELoss();
+        this.lossFunction = new SoftmaxCrossEntropy();
         
         // 默认配置(LoRA通常使用更高的学习率)
         this.maxEpochs = 3;
         this.learningRate = 1e-4f;
+        this.currentLearningRate = learningRate;
         this.maxGradNorm = 1.0f;
         this.logInterval = 50;
         this.saveInterval = 500;
         this.checkpointDir = "./checkpoints/minimind/lora";
         
-        // 创建优化器(仅优化LoRA参数)
+        // 创建优化器(Adam，本框架未实现权重衰减)
+        // 实际只有 LoRA 参数会拿到梯度，其余参数在 update 前被清零，Adam 对 null 梯度会跳过
         this.optimizer = new Adam(model, learningRate, 0.9f, 0.999f, 1e-8f);
         
         // 冻结非LoRA参数
@@ -130,6 +137,7 @@ public class LoRATrainer extends BaseTrainer {
     public LoRATrainer configure(int maxEpochs, float learningRate, float maxGradNorm) {
         this.maxEpochs = maxEpochs;
         this.learningRate = learningRate;
+        this.currentLearningRate = learningRate;
         this.maxGradNorm = maxGradNorm;
         
         optimizer.setLearningRate(learningRate);
@@ -137,123 +145,89 @@ public class LoRATrainer extends BaseTrainer {
     }
     
     /**
-     * 开始训练
-     */
-    @Override
-    public void train() {
-        printTrainingInfo();
-        
-        createCheckpointDir();
-        
-        for (currentEpoch = 0; currentEpoch < maxEpochs; currentEpoch++) {
-            trainOneEpoch();
-        }
-        
-        System.out.println("LoRA微调完成!");
-    }
-    
-    /**
-     * 训练一个epoch
-     */
-    @Override
-    protected void trainOneEpoch() {
-        prepareDataset();
-        model.setTraining(true);
-        
-        double epochLoss = 0.0;
-        int batchCount = 0;
-        
-        long epochStartTime = System.currentTimeMillis();
-        
-        while (hasNextBatch()) {
-            Object batch = getNextBatch();
-            float stepLoss = trainStep(batch);
-            
-            epochLoss += stepLoss;
-            batchCount++;
-            currentStep++;
-            
-            lossHistory.add(stepLoss);
-            
-            // 打印日志
-            if (currentStep % logInterval == 0) {
-                printTrainingLog();
-            }
-            
-            // 保存检查点
-            if (currentStep % saveInterval == 0) {
-                saveCheckpoint();
-            }
-        }
-        
-        long epochEndTime = System.currentTimeMillis();
-        double avgEpochLoss = batchCount > 0 ? epochLoss / batchCount : 0.0;
-        
-        System.out.printf("Epoch %d 完成 | 平均损失: %.4f | 耗时: %d ms%n",
-            currentEpoch + 1, avgEpochLoss, epochEndTime - epochStartTime);
-        
-        resetDataset();
-    }
-    
-    /**
      * 训练一步
+     * <p>
+     * 关键顺序：backward → 清零非 LoRA 梯度 → 梯度裁剪 → update。
+     * 裁剪必须放在清零之后：否则裁剪系数是按"全参数梯度范数"算的（基座梯度通常
+     * 比 LoRA 大好几个量级），会把实际参与更新的 LoRA 梯度无谓地缩小。
      */
     @Override
     protected float trainStep(Object batch) {
+        // 更新学习率（余弦退火 with 10% floor，与其他训练器保持一致）
+        updateLearningRate();
+        
         SFTDataset.Batch sftBatch = (SFTDataset.Batch) batch;
         NdArray inputArray = sftBatch.getInput();
-        NdArray labelArray = sftBatch.getLabels();
+        // answer-only：prompt / padding 位置置 -100（仅按 pad token 屏蔽会漏掉 prompt 部分）
+        NdArray labelArray = applyIgnoreIndex(
+            sftBatch.getLabels(), sftBatch.getLossMask(), IGNORE_INDEX);
         
         Variable input = new Variable(inputArray);
         Variable labels = new Variable(labelArray);
+        labels.setRequireGrad(false);
         
-        // 前向传播
-        Variable logits = model.predict(input);
+        // 前向传播（同时取出 MoE 负载均衡损失；LoRA 不支持 MoE 时为 0 常量）
+        MiniMindBlock.MoEOutput output = forwardWithAux(input);
+        Variable logits = output.getOutput();
         
-        // 使用 MaskedSoftmaxCELoss 计算损失（内置处理 3D logits 和 mask）
-        // labels: [batch, seqLen], logits: [batch, seqLen, vocabSize]
-        Variable loss = lossFunction.loss(labels, logits);
+        int[] logitsShape = logits.getValue().getShape().getShapeDims();
+        int totalTokens = logitsShape[0] * logitsShape[1];
+        int vocabSize = logitsShape[2];
         
+        Variable logitsReshaped = logits.reshape(Shape.of(totalTokens, vocabSize));
+        Variable labelsReshaped = labels.reshape(Shape.of(totalTokens, 1));
+        
+        Variable ceLoss = lossFunction.loss(labelsReshaped, logitsReshaped);
+        Variable loss = withMoeAuxLoss(ceLoss, output);
         float lossValue = loss.getValue().getNumber().floatValue();
         
-        // 清除梯度
-        model.clearGrads();
+        if (Float.isNaN(lossValue) || Float.isInfinite(lossValue)) {
+            System.err.println("警告: 损失值异常 (" + lossValue + "), 跳过此batch");
+            loss.unChainBackward();
+            model.clearGrads();
+            return Float.NaN;
+        }
         
         // 反向传播
         loss.backward();
         
-        // 梯度裁剪 (继承自 BaseTrainer)
-        clipGradients();
-        
-        // 关键修复：在 Adam.update 之前将非 LoRA 参数的梯度清零，
-        // 实现真正的参数冻结。否则 backward 会给所有参数填充梯度，
-        // Adam 将更新所有参数，相当于全参数微调。
+        // 先将非 LoRA 参数的梯度清零，实现真正的参数冻结；
+        // 否则 backward 会给所有参数填充梯度，Adam 将更新所有参数，相当于全参数微调
         zeroOutNonLoRAGrads();
+        
+        // 再做梯度裁剪：此时范数只统计 LoRA 梯度，裁剪系数才是对的
+        clipGradients();
         
         // 更新参数（仅 LoRA 参数会被实际更新，其他参数梯度为 null）
         optimizer.update();
         
-        // 断开计算图
+        // 清除梯度 + 断开计算图
+        model.clearGrads();
         loss.unChainBackward();
         
         return lossValue;
     }
     
     /**
-     * 保存检查点
+     * 更新学习率（余弦退火 with 10% floor）
      */
+    private void updateLearningRate() {
+        int totalSteps = maxEpochs * dataset.getBatchCount();
+        currentLearningRate = computeScheduledLearningRate(
+            learningRate, currentStep, totalSteps, 0);
+        optimizer.setLearningRate(currentLearningRate);
+    }
+    
     @Override
-    protected void saveCheckpoint() {
-        String filename = String.format("%s_checkpoint_epoch%d_step%d.model", 
-            getCheckpointPrefix(), currentEpoch, currentStep);
-        String filepath = Paths.get(checkpointDir, filename).toString();
+    protected void printTrainingLog() {
+        double avgLoss = lossHistory.stream()
+            .skip(Math.max(0, lossHistory.size() - logInterval))
+            .mapToDouble(Float::doubleValue)
+            .average()
+            .orElse(0.0);
         
-        try {
-            model.save(new File(filepath));
-            System.out.println(getTrainerName() + "检查点已保存: " + filepath);
-        } catch (Exception e) {
-            System.err.println("保存检查点失败: " + e.getMessage());
-        }
+        System.out.printf("Epoch %d/%d | Step %d | Loss: %.4f | LR: %.6f%n",
+            currentEpoch + 1, maxEpochs, currentStep, avgLoss, currentLearningRate);
     }
     
     /**
@@ -284,10 +258,6 @@ public class LoRATrainer extends BaseTrainer {
         System.out.println("  可训练参数: " + trainableParams + (loraParams == 0 ? " (全参数微调)" : " (LoRA)"));
         System.out.println("  训练参数占比: " + String.format("%.2f%%", percentage));
         System.out.println("=".repeat(60));
-    }
-    
-    public void setCheckpointDir(String checkpointDir) {
-        this.checkpointDir = checkpointDir;
     }
     
     // ==================== 实现 BaseTrainer 的抽象方法 ====================

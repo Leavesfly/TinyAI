@@ -36,23 +36,61 @@ public class AgentRolloutEngine {
         private final boolean unfinished;
         /** 完整上下文（prompt + 所有轮次输出） */
         private final String fullContext;
+        /**
+         * 最后一轮<b>实际喂给模型</b>的 prompt token（已按模型窗口左截断）
+         * <p>
+         * 训练侧应当直接用这些 token，而不是对 {@link #fullContext} 重新编码：
+         * 后者会受 tokenizer 自身 maxSeqLen 截断、BOS/EOS 拼接、BPE 跨边界合并
+         * 三重影响，得到的序列与模型真正看到的并不一致。
+         */
+        private final List<Integer> finalPromptTokenIds;
+        /** 最后一轮生成的 token（不包含 prompt），生成失败时为 null */
+        private final List<Integer> finalCompletionTokenIds;
 
         public RolloutResult(String finalOutput, List<String> turnOutputs,
                              boolean unfinished, String fullContext) {
+            this(finalOutput, turnOutputs, unfinished, fullContext, null, null);
+        }
+
+        public RolloutResult(String finalOutput, List<String> turnOutputs,
+                             boolean unfinished, String fullContext,
+                             List<Integer> finalPromptTokenIds,
+                             List<Integer> finalCompletionTokenIds) {
             this.finalOutput = finalOutput;
             this.turnOutputs = turnOutputs;
             this.unfinished = unfinished;
             this.fullContext = fullContext;
+            this.finalPromptTokenIds = finalPromptTokenIds;
+            this.finalCompletionTokenIds = finalCompletionTokenIds;
         }
 
         public String getFinalOutput() { return finalOutput; }
         public List<String> getTurnOutputs() { return turnOutputs; }
         public boolean isUnfinished() { return unfinished; }
         public String getFullContext() { return fullContext; }
+
+        /**
+         * 最后一轮实际喂给模型的 prompt token；若本次 rollout 没有成功生成，返回 null
+         */
+        public List<Integer> getFinalPromptTokenIds() { return finalPromptTokenIds; }
+
+        /**
+         * 最后一轮生成的 token；若本次 rollout 没有成功生成，返回 null
+         */
+        public List<Integer> getFinalCompletionTokenIds() { return finalCompletionTokenIds; }
+
+        /** prompt 与 completion 的 token 是否都可用（训练侧可直接消费） */
+        public boolean hasTokenTrace() {
+            return finalPromptTokenIds != null
+                    && finalCompletionTokenIds != null
+                    && !finalCompletionTokenIds.isEmpty();
+        }
     }
 
     private final MiniMindModel model;
     private final MiniMindTokenizer tokenizer;
+    /** 生成失败只打印一次，避免每个候选都刷屏 */
+    private boolean generateFailureReported;
 
     public AgentRolloutEngine(MiniMindModel model, MiniMindTokenizer tokenizer) {
         this.model = model;
@@ -81,6 +119,7 @@ public class AgentRolloutEngine {
         List<String> allOutputs = new ArrayList<>();
         boolean unfinished = false;
         StringBuilder fullContext = new StringBuilder();
+        Generation lastGeneration = null;
 
         for (int turn = 0; turn < maxTurns; turn++) {
             // 构建当前上下文（简化版 apply_chat_template）
@@ -89,7 +128,9 @@ public class AgentRolloutEngine {
             fullContext.append(context);
 
             // 模型生成
-            String generated = generateResponse(context, maxGenLen, temperature);
+            Generation generation = generateResponse(context, maxGenLen, temperature);
+            lastGeneration = generation;
+            String generated = generation.text;
             allOutputs.add(generated);
             fullContext.append(generated);
 
@@ -136,7 +177,9 @@ public class AgentRolloutEngine {
         }
 
         String finalOutput = allOutputs.isEmpty() ? "" : allOutputs.get(allOutputs.size() - 1);
-        return new RolloutResult(finalOutput, allOutputs, unfinished, fullContext.toString());
+        return new RolloutResult(finalOutput, allOutputs, unfinished, fullContext.toString(),
+                lastGeneration == null ? null : lastGeneration.promptTokenIds,
+                lastGeneration == null ? null : lastGeneration.completionTokenIds);
     }
 
     /**
@@ -216,25 +259,74 @@ public class AgentRolloutEngine {
     }
 
     /**
+     * 单次生成的结果：文本 + 实际使用的 token
+     * <p>
+     * 同时带回 token 是为了让训练侧能直接复用“模型真正看到的序列”，
+     * 避开 文本 → token 的二次编码带来的截断/特殊 token 不一致。
+     */
+    private static final class Generation {
+        final String text;
+        /** 实际喂给模型的 prompt token（可能已左截断）；失败时为 null */
+        final List<Integer> promptTokenIds;
+        /** 生成的 token；失败或为空时为 null */
+        final List<Integer> completionTokenIds;
+
+        Generation(String text, List<Integer> promptTokenIds, List<Integer> completionTokenIds) {
+            this.text = text;
+            this.promptTokenIds = promptTokenIds;
+            this.completionTokenIds = completionTokenIds;
+        }
+
+        static Generation empty() {
+            return new Generation("", null, null);
+        }
+    }
+
+    /**
      * 使用模型生成响应
      * <p>
      * 简化实现：encode → generate → decode
+     * <p>
+     * 上下文长度按模型的 {@code maxSeqLen} 做<b>左截断</b>，并预留 {@code maxGenLen} 个位置：
+     * tokenizer 自己的 maxSeqLen 通常远大于模型的（尤其是字符级分词），直接把超长 prompt
+     * 交给 {@code generate} 会让位置编码越界抛异常。
+     * <p>
+     * 编码时显式传 {@code addBos=false, addEos=false}：上下文已经以 {@code "[assistant] "}
+     * 结尾，单参 {@code encode(text)} 会在其后补一个 EOS，等于告诉模型"本轮已结束"，
+     * 生成质量会被直接带坏；同时也与 {@code AgentTrainer.encodeRollouts} 的编码口径保持一致。
+     * <p>
+     * 本方法<b>不负责</b>切换模型的训练/评估模式：{@code MiniMindModel.generate} 内部已经
+     * 把 block 置为 eval，而调用方（如 {@code AgentTrainer}）会在 rollout 前后显式设置模式。
+     * 早期实现在这里无条件 {@code setTraining(true)}，会把同一批次的第 2..N 个候选
+     * 变成"带 dropout 的训练态生成"，破坏 rollout 分布的一致性。
      */
-    private String generateResponse(String context, int maxGenLen, float temperature) {
+    private Generation generateResponse(String context, int maxGenLen, float temperature) {
         try {
-            // 编码上下文
-            List<Integer> contextTokens = tokenizer.encode(context);
+            // 编码上下文（不补 BOS/EOS）
+            List<Integer> contextTokens = tokenizer.encode(context, false, false);
             int[] promptIds = contextTokens.stream().mapToInt(Integer::intValue).toArray();
+
+            // 左截断到模型能容纳的 prompt 预算，保留最靠近生成位置的上下文
+            int budget = promptBudget(maxGenLen);
+            if (promptIds.length > budget) {
+                promptIds = Arrays.copyOfRange(promptIds, promptIds.length - budget, promptIds.length);
+            }
             int promptLen = promptIds.length;
+            if (promptLen == 0) {
+                return Generation.empty();
+            }
 
             // 生成（使用模型的 generate 方法）
-            model.setTraining(false);
             int[] result = model.generate(promptIds, maxGenLen, temperature, 0, 0.0f);
-            model.setTraining(true);
+
+            List<Integer> promptTokenIds = new ArrayList<>(promptLen);
+            for (int id : promptIds) {
+                promptTokenIds.add(id);
+            }
 
             // 提取新生成的部分
             if (result.length <= promptLen) {
-                return "";
+                return new Generation("", promptTokenIds, null);
             }
 
             int[] generatedIds = Arrays.copyOfRange(result, promptLen, result.length);
@@ -243,10 +335,24 @@ public class AgentRolloutEngine {
                 generatedList.add(id);
             }
 
-            return tokenizer.decode(generatedList);
+            return new Generation(tokenizer.decode(generatedList), promptTokenIds, generatedList);
         } catch (Exception e) {
-            // 生成失败，返回空字符串
-            return "";
+            // 生成失败会让整条 rollout 变成空 completion，进而被训练侧丢弃；
+            // 静默吞掉会让"参数完全不更新"这类现象无从定位，因此首次失败必须打出来
+            if (!generateFailureReported) {
+                generateFailureReported = true;
+                System.err.println("⚠️ AgentRollout: 生成失败，返回空字符串（后续同类失败不再重复打印）: "
+                        + e.getClass().getSimpleName() + ": " + e.getMessage());
+            }
+            return Generation.empty();
         }
+    }
+
+    /**
+     * prompt 可占用的最大 token 数：模型窗口减去本次要生成的长度，至少保留 1 个 prompt token
+     */
+    private int promptBudget(int maxGenLen) {
+        int modelMaxSeqLen = model.getConfig().getMaxSeqLen();
+        return Math.max(1, modelMaxSeqLen - Math.max(0, maxGenLen));
     }
 }

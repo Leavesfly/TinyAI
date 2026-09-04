@@ -289,61 +289,164 @@ public class Variable implements Serializable {
      * 4. 下一轮迭代前调用 clearGrad()
      */
     public void backward() {
-        // 使用 IdentityHashMap 提升性能（基于引用比较）
-        Set<Variable> visited = Collections.newSetFromMap(new IdentityHashMap<>());
-        backwardInternal(visited);
+        backwardTopological();
     }
 
-    /** 递归反向传播实现 */
-    private void backwardInternal(Set<Variable> visited) {
-        // 已访问则跳过（防止重复处理共享变量）
-        if (visited.contains(this)) {
-            return;
-        }
-        visited.add(this);
-
+    /**
+     * 反向拓扑序反向传播（Kahn 算法 + 引用计数）
+     * <p>
+     * <b>为什么不能用"visited 集合 + 递归"</b>：当计算图存在菱形依赖（同一个<b>非叶子</b>
+     * 节点被多条路径使用，典型如残差连接 {@code out = h + f(h)}）时，深度优先递归会先沿
+     * 第一条路径把该节点标记为已访问并立即向它的 creator 传播；第二条路径随后把梯度
+     * 累加到该节点上，却因"已访问"而提前返回，<b>这部分梯度永远不会传到上游参数</b>。
+     * <p>
+     * 实测例：{@code w -> x = 3w -> {y = 5x, 直连} -> z = x + y}，数学上 dz/dw = 18，
+     * 旧实现只得到 3（仅残差直连那一条）；Transformer 每一层的残差都会丢失分支梯度。
+     * <p>
+     * 正确做法（与 PyTorch / Chainer 一致）：一个节点只有在它的<b>全部</b>下游消费者
+     * 都把梯度累加完毕后才向上传播。这里用"剩余消费者计数 + 就绪队列"实现：
+     * <ul>
+     *   <li>{@code pendingConsumers[v]}：可达图中把 v 当输入的节点个数（按重数计，
+     *       如 {@code x.mul(x)} 算 2）；归零时 v 的梯度已终态。</li>
+     *   <li>{@code pendingOutputs[F]}：F 在可达图中的输出个数。多输出算子（如 TopK、
+     *       SplitBySize）的 {@code backwardMulti} 必须且只能调一次，因此要等最后一个
+     *       输出就绪才执行；否则两个输出各自触发一次，输入梯度会被重复累加。</li>
+     * </ul>
+     */
+    private void backwardTopological() {
         if (!requireGrad) {
             this.grad = null;
             return;
         }
 
-        // 初始化梯度为 1
+        // 1. 收集从损失出发可达的全部节点
+        List<Variable> nodes = new ArrayList<>();
+        Set<Variable> nodeSet = Collections.newSetFromMap(new IdentityHashMap<>());
+        collectReachable(nodes, nodeSet);
+
+        // 2. 起点梯度：标量损失为 1；非标量沿用 ones(shape)，等价于对每个元素分别求导后求和
         if (grad == null) {
             setGrad(NdArray.ones(value.getShape()));
         }
 
-        Function func = creator;
-        if (func == null) {
-            return;
+        // 3. 统计每个节点的剩余消费者数、每个 Function 的剩余输出数
+        Map<Variable, Integer> pendingConsumers = new IdentityHashMap<>();
+        Map<Function, Integer> pendingOutputs = new IdentityHashMap<>();
+        for (Variable node : nodes) {
+            pendingConsumers.putIfAbsent(node, 0);
+            Function func = node.creator;
+            if (func == null) {
+                continue;
+            }
+            pendingOutputs.merge(func, 1, Integer::sum);
+            for (Variable input : func.getInputs()) {
+                if (input != null && nodeSet.contains(input)) {
+                    pendingConsumers.merge(input, 1, Integer::sum);
+                }
+            }
         }
 
-        Variable[] funcInputs = func.getInputs();
-        List<NdArray> grads = func.isMultiOutput()
-                ? buildOutputGradsForMulti(func, this)
-                : func.backward(grad);
-
-        if (funcInputs.length != grads.size()) {
-            throw new RuntimeException(String.format(
-                    "backward grads size error! Function: %s, inputs: %d, grads: %d",
-                    func.getClass().getSimpleName(), funcInputs.length, grads.size()));
+        // 4. 就绪队列：没有可达消费者的节点，即损失本身
+        //（其余可达节点必然位于某条通往损失的路径上，至少有 1 个消费者）
+        Deque<Variable> ready = new ArrayDeque<>();
+        for (Variable node : nodes) {
+            if (pendingConsumers.get(node) == 0) {
+                ready.add(node);
+            }
         }
 
-        for (int i = 0; i < funcInputs.length; i++) {
-            Variable input = funcInputs[i];
-            NdArray inputGrad = grads.get(i);
+        int processed = 0;
+        while (!ready.isEmpty()) {
+            Variable node = ready.poll();
+            processed++;
 
-            // 梯度为 null 表示不可导，跳过
-            if (inputGrad == null) {
+            Function func = node.creator;
+            // 叶子节点（参数/常量）没有上游，无需传播；它自己的计数已在本轮释放完毕
+            if (func == null) {
                 continue;
             }
 
-            // 累加梯度（支持梯度复用）
-            if (input.getGrad() != null) {
-                input.setGrad(input.getGrad().add(inputGrad));
-            } else {
-                input.setGrad(inputGrad);
+            // 多输出算子：等全部可达输出都就绪后统一反向，且只反向一次
+            if (pendingOutputs.merge(func, -1, Integer::sum) > 0) {
+                continue;
             }
-            input.backwardInternal(visited);
+
+            Variable[] funcInputs = func.getInputs();
+            List<NdArray> grads;
+            if (func.isMultiOutput()) {
+                // buildOutputGradsForMulti 会为 grad 仍为 null 的输出补 zeros
+                grads = buildOutputGradsForMulti(func, node);
+            } else if (node.getGrad() != null) {
+                grads = func.backward(node.getGrad());
+            } else {
+                // 没有梯度流到该节点（如 detach 后的旁支），上游也拿不到梯度；
+                // 但仍需释放上游计数，否则它们永远不会就绪
+                grads = null;
+            }
+
+            if (grads != null && funcInputs.length != grads.size()) {
+                throw new RuntimeException(String.format(
+                        "backward grads size error! Function: %s, inputs: %d, grads: %d",
+                        func.getClass().getSimpleName(), funcInputs.length, grads.size()));
+            }
+
+            for (int i = 0; i < funcInputs.length; i++) {
+                Variable input = funcInputs[i];
+                if (input == null || !nodeSet.contains(input)) {
+                    continue;
+                }
+
+                if (grads != null) {
+                    NdArray inputGrad = grads.get(i);
+                    // 梯度为 null 表示该输入不可导（如 Where 的 condition），不累加
+                    if (inputGrad != null) {
+                        // 累加梯度：菱形依赖下同一输入会从多条路径收到梯度，必须全部累加
+                        if (input.getGrad() != null) {
+                            input.setGrad(input.getGrad().add(inputGrad));
+                        } else {
+                            input.setGrad(inputGrad);
+                        }
+                    }
+                }
+
+                if (pendingConsumers.merge(input, -1, Integer::sum) == 0) {
+                    ready.add(input);
+                }
+            }
+        }
+
+        if (processed != nodes.size()) {
+            // 计算图必须是 DAG；出现环意味着部分节点永远不会就绪，梯度会被静默丢弃
+            throw new RuntimeException(String.format(
+                    "backward 拓扑排序未完成：计算图中存在环（已处理 %d/%d 个节点）",
+                    processed, nodes.size()));
+        }
+    }
+
+    /**
+     * 迭代 DFS 收集从当前节点出发、沿 creator 输入方向可达的全部变量
+     *
+     * @param nodes   输出参数，收集到的节点（含自身）
+     * @param nodeSet 输出参数，与 nodes 同内容的身份集合，用于 O(1) 判存
+     */
+    private void collectReachable(List<Variable> nodes, Set<Variable> nodeSet) {
+        Deque<Variable> stack = new ArrayDeque<>();
+        nodeSet.add(this);
+        stack.push(this);
+
+        while (!stack.isEmpty()) {
+            Variable node = stack.pop();
+            nodes.add(node);
+
+            Function func = node.creator;
+            if (func == null) {
+                continue;
+            }
+            for (Variable input : func.getInputs()) {
+                if (input != null && nodeSet.add(input)) {
+                    stack.push(input);
+                }
+            }
         }
     }
 
@@ -351,59 +454,13 @@ public class Variable implements Serializable {
      * 迭代式反向传播
      *
      * 使用栈模拟递归，避免深层网络栈溢出。
-     * 通过 visited 集合防止共享节点被重复处理导致梯度重复累加。
+     * <p>
+     * 与 {@link #backward()} 等价：两者都走反向拓扑序，天然对共享节点的多条入边
+     * 梯度做累加，不会出现重复累加，也不会漏掉菱形依赖的第二条路径。
+     * 保留此方法名仅为兼容既有调用方。
      */
     public void backwardIterative() {
-        if (!requireGrad) {
-            this.grad = null;
-            return;
-        }
-
-        if (grad == null) {
-            setGrad(NdArray.ones(value.getShape()));
-        }
-
-        Set<Function> visited = new HashSet<>();
-        Stack<Variable> stack = new Stack<>();
-        stack.push(this);
-
-        while (!stack.isEmpty()) {
-            Variable current = stack.pop();
-            Function func = current.getCreator();
-
-            if (func == null || visited.contains(func)) {
-                continue;
-            }
-            visited.add(func);
-
-            Variable[] funcInputs = func.getInputs();
-            List<NdArray> grads = func.isMultiOutput()
-                    ? buildOutputGradsForMulti(func, current)
-                    : func.backward(current.getGrad());
-
-            if (funcInputs.length != grads.size()) {
-                throw new RuntimeException("backward grads size error!");
-            }
-
-            for (int i = 0; i < funcInputs.length; i++) {
-                Variable input = funcInputs[i];
-                NdArray inputGrad = grads.get(i);
-
-                if (inputGrad == null) {
-                    continue;
-                }
-
-                if (input.getGrad() != null) {
-                    input.setGrad(input.getGrad().add(inputGrad));
-                } else {
-                    input.setGrad(inputGrad);
-                }
-
-                if (input.getCreator() != null) {
-                    stack.push(input);
-                }
-            }
-        }
+        backwardTopological();
     }
 
     /** 为多输出函数构造梯度列表 */

@@ -25,10 +25,13 @@ public class Adam extends Optimizer {
     private float learningRate = 0.001f;
     private float beta1 = 0.9f;
     private float beta2 = 0.999f;
-    private float epsilon = 1e-3f; // 使用更大的epsilon值确保数值稳定性，避免除零异常
+    private float epsilon = 1e-8f; // Adam 标准 epsilon，防止除零并保证数值稳定性
 
-    private Map<Integer, NdArray> ms;
-    private Map<Integer, NdArray> vs;
+    // 以 Parameter 对象本身为键（依赖身份 equals）：即使两个参数的身份 hashCode 相同，
+    // HashMap 也能借 equals 正确区分；若用 Integer(hashCode) 作键，哈希碰撞会让两个参数
+    // 共享同一份 m/v 状态，导致动量串号、更新被静默污染。
+    private Map<Parameter, NdArray> ms;
+    private Map<Parameter, NdArray> vs;
     private int t = 0;
 
     /**
@@ -75,20 +78,19 @@ public class Adam extends Optimizer {
             return;
         }
 
-        int key = parameter.hashCode();
-        if (!ms.containsKey(key)) {
-            ms.put(key, NdArray.zeros(parameter.getValue().getShape()));
-            vs.put(key, NdArray.zeros(parameter.getValue().getShape()));
+        if (!ms.containsKey(parameter)) {
+            ms.put(parameter, NdArray.zeros(parameter.getValue().getShape()));
+            vs.put(parameter, NdArray.zeros(parameter.getValue().getShape()));
         }
-        NdArray m = ms.get(key);
-        NdArray v = vs.get(key);
+        NdArray m = ms.get(parameter);
+        NdArray v = vs.get(parameter);
 
         m = m.add(grad.sub(m).mulNum(1 - beta1));
         v = v.add(grad.mul(grad).sub(v).mulNum(1 - beta2));
-        ms.put(key, m);
-        vs.put(key, v);
+        ms.put(parameter, m);
+        vs.put(parameter, v);
 
-        // 为了数值稳定性，使用更大的epsilon值
+        // epsilon 防止分母为零，保证数值稳定性
         NdArray denominator = v.pow(0.5f).add(NdArray.like(v.getShape(), epsilon));
         NdArray delat = m.mulNum(lr()).div(denominator);
         parameter.setValue(parameter.getValue().sub(delat));

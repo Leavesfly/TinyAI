@@ -90,12 +90,21 @@ public class TokenEmbedding extends Module {
      * Embedding weight shape: [vocabSize, embeddingDim]
      * Linear weight shape:    [vocabSize, hiddenSize]（outFeatures=vocabSize, inFeatures=hiddenSize）
      * 两者形状一致（embeddingDim == hiddenSize），可以共享同一份参数。
+     * <p>
+     * 注意：除了替换字段引用，还必须同步替换参数注册表里的条目。
+     * 否则注册表中会遗留构造时创建的孤儿参数：它不参与前向、永远拿不到梯度，
+     * 却会被计入参数量统计并被序列化进每个 checkpoint（白白多占一份 vocab*hidden 内存）。
      *
      * @param lmHead LM Head 线性层
      */
     public void shareWeightWith(Linear lmHead) {
         // 替换为 lmHead 的 weight 参数
-        this.weight = lmHead.getWeight();
+        Parameter shared = lmHead.getWeight();
+        this.weight = shared;
+        // 同步注册表，消除孤儿参数（共享后由 namedParameters 的按实例去重保证只出现一次）
+        if (_parameters.containsKey("weight")) {
+            _parameters.put("weight", shared);
+        }
     }
 
     /**

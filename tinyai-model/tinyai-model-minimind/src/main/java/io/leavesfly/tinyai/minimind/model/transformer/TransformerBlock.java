@@ -170,9 +170,15 @@ public class TransformerBlock extends Module {
 
     /**
      * 设置训练模式
+     * <p>
+     * 必须递归传播到全部子模块：forwardWithCache 中 attentionDropout 与 ffnDropout
+     * 均会实际参与前向，若只切 attention，则 eval 模式下这两个 Dropout 仍然生效。
      */
     public void setTraining(boolean training) {
+        // MultiHeadAttention 重写了 setTraining，需单独调用以同步其内部标记
         attention.setTraining(training);
+        // 递归同步所有已注册子模块的 _training（含 attentionDropout / ffnDropout）
+        train(training);
     }
 
     public MultiHeadAttention getAttention() {

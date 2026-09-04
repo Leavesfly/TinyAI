@@ -1,29 +1,61 @@
 package io.leavesfly.tinyai.minimind.training.rlaif.ppo;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.minimind.model.MiniMindBlock;
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
-
 import io.leavesfly.tinyai.minimind.training.dataset.RLAIFDataset;
 import io.leavesfly.tinyai.minimind.training.rlaif.BaseRLTrainer;
 import io.leavesfly.tinyai.ml.model.Model;
 import io.leavesfly.tinyai.ml.optimize.Adam;
 import io.leavesfly.tinyai.ndarr.NdArray;
+import io.leavesfly.tinyai.ndarr.Shape;
 
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * PPO (Proximal Policy Optimization) 训练器
  * <p>
- * Actor-Critic架构:
- * - Actor: 策略网络(MiniMindModel)
- * - Critic: 价值网络(ValueNetwork)
+ * Actor-Critic 架构:
+ * - Actor: 策略网络 (MiniMindModel)
+ * - Critic: 价值网络 (ValueNetwork)，独立的参数与独立的优化器
  * <p>
  * 训练流程:
- * 1. 收集经验(生成K个候选回答)
- * 2. 计算GAE优势和回报
- * 3. 多轮PPO更新(使用经验重放)
- * 4. 更新Actor和Critic
+ * 1. 采集经验: 用旧策略对 K 个候选各做一次前向，记录逐样本 logProb 与价值估计（均为 detach 的数值）
+ * 2. 计算优势与价值目标: bandit 形式 A_i = R_i - V_i, return_i = R_i
+ * 3. 多轮 PPO 更新: 复用同一批 rollout，用新策略重新前向并构建有梯度的计算图
+ * 4. 分别更新 Actor 与 Critic
+ * <p>
+ * 计算图连通性保证（Actor 侧）:
+ * {@code forwardWithAux(input) → computePerSampleLogProbs(logits, label) → computePolicyLoss → backward}
+ * 整条链路全部通过 Variable 算子连接，梯度可以正确回传到 Actor 参数。
+ * <p>
+ * Critic 与 Actor 的解耦（刻意设计）:
+ * Critic 的输入是从 Actor 隐藏状态里"取值后重建"的常量（requireGrad=false），因此价值损失
+ * 只更新 Critic 参数，不会回传进 Actor。若让 value loss 流入 Actor，Actor 会被优化成
+ * "产出容易被价值头预测的隐藏状态"，这与策略梯度目标冲突；标准做法是共享主干时才让
+ * 价值头参与主干更新，且此时应使用同一个优化器与同一份裁剪范数。本实现是独立 Critic，故 detach。
+ * <p>
+ * 内存与正确性策略: 每个候选单独 backward（梯度在各自参数上自然累积），全部候选完成后
+ * 再统一裁剪与更新。这样既避免同时持有 K 份计算图，也让 K 个候选的梯度按 1/K 等权合并。
+ * <p>
+ * 训练循环、日志、检查点、NaN 保护、结束后复位 eval 模式均复用基类实现，本类不再重复声明
+ * maxEpochs/logInterval/currentEpoch/currentStep 等状态字段（重复声明会遮蔽基类字段，
+ * 导致基类的检查点保存与日志读到永远为 0/空的另一份状态）。
+ * <p>
+ * 检查点: {@link #saveCheckpoint()} 在保存 Actor 的同时，会把 Critic 状态一并落盘为
+ * {@code <prefix>_critic_epoch<E>_step<S>.state}；断点续训时用 {@link #loadCriticState(String)}
+ * 恢复 Critic，与 Actor 检查点配套使用，避免续训时价值网络被重置。
+ * <p>
+ * 优势语义（刻意设计）: 本实现是 contextual-bandit 形式的 PPO —— 优势 {@code A_i = R_i - V_i}、
+ * 回报 {@code return_i = R_i}，不含 GAE / 多步时序信用分配。适用于“整段回答给一个标量奖励”的
+ * 候选排序场景；若需要序列决策的逐步信用分配，需另行引入 GAE。
  *
  * @author leavesfly
  * @since 2024
@@ -39,17 +71,17 @@ public class PPOTrainer extends BaseRLTrainer {
     private final Adam actorOptimizer;
     private final Adam criticOptimizer;
 
-    private int maxEpochs;
-    private int logInterval;
-    private int currentEpoch;
-    private int currentStep;
-
     private final List<Float> policyLossHistory;
     private final List<Float> valueLossHistory;
-    private final List<Float> totalLossHistory;
+    private final List<Float> rewardHistory;
 
     /**
      * 构造函数
+     *
+     * @param actor   策略网络
+     * @param critic  价值网络（隐藏层维度应与模型 hiddenSize 一致）
+     * @param dataset RLAIF 数据集
+     * @param config  PPO 配置
      */
     public PPOTrainer(MiniMindModel actor, ValueNetwork critic,
                       RLAIFDataset dataset, PPOConfig config) {
@@ -63,19 +95,21 @@ public class PPOTrainer extends BaseRLTrainer {
         // 创建优化器
         this.actorOptimizer = new Adam(actor, config.getActorLearningRate(),
                 0.9f, 0.999f, 1e-8f);
-        // 修复: 将 ValueNetwork 包装为 Model 后创建优化器
+        // ValueNetwork 是 Module 而非 Model，包装后再交给 Adam
         Model criticModel = new Model("critic", critic);
         this.criticOptimizer = new Adam(criticModel, config.getCriticLearningRate(),
                 0.9f, 0.999f, 1e-8f);
 
+        // 训练配置写入基类字段，保证基类的训练循环/日志/检查点逻辑读到同一份状态
         this.maxEpochs = 1;
         this.logInterval = 10;
-        this.currentEpoch = 0;
-        this.currentStep = 0;
+        this.saveInterval = 500;
+        this.maxGradNorm = config.getMaxGradNorm();
+        this.checkpointDir = "./checkpoints/minimind/ppo";
 
         this.policyLossHistory = new ArrayList<>();
         this.valueLossHistory = new ArrayList<>();
-        this.totalLossHistory = new ArrayList<>();
+        this.rewardHistory = new ArrayList<>();
     }
 
     /**
@@ -87,69 +121,39 @@ public class PPOTrainer extends BaseRLTrainer {
         return this;
     }
 
+    // ==================== 核心训练逻辑 ====================
+
     /**
-     * 训练
+     * 训练一步：采集 rollout，再执行 ppoEpochs 轮更新
      */
-    public void train() {
-        System.out.println("=".repeat(70));
-        System.out.println("开始PPO训练");
-        System.out.println("配置: " + config);
-        System.out.println("样本数: " + dataset.getSampleCount());
-        System.out.println("=".repeat(70));
+    @Override
+    protected float trainStep(Object batch) {
+        RLAIFDataset.Batch rlBatch = (RLAIFDataset.Batch) batch;
 
-        for (currentEpoch = 0; currentEpoch < maxEpochs; currentEpoch++) {
-            trainOneEpoch();
+        // 1. 用旧策略 + 旧 Critic 采集经验，并计算优势与价值目标
+        Rollout rollout = collectRollout(rlBatch);
+
+        // 记录平均奖励，便于观察 RL 是否真的在提升
+        rewardHistory.add(averageReward(rollout.rewards));
+
+        // 2. 多轮 PPO 更新（复用同一批 rollout，每轮各自完成一次参数更新）
+        int innerEpochs = Math.max(1, config.getPpoEpochs());
+        float totalLoss = 0.0f;
+        for (int epoch = 0; epoch < innerEpochs; epoch++) {
+            totalLoss += ppoUpdate(rollout);
         }
-
-        System.out.println("\nPPO训练完成!");
+        return totalLoss / innerEpochs;
     }
 
     /**
-     * 训练一个epoch
+     * 采集一次 rollout（旧策略 + 旧 Critic，全部 detach）
+     * <p>
+     * 每个候选只做一次前向，得到该候选下 batch 内每个样本的 logProb 与 value。
+     * 必须保留 batch 维：优势是 per-sample 信号，与该样本自己的 logProb 相乘才有意义；
+     * 若归约成标量，整个 batch 会退化成"一个样本"，credit assignment 完全丢失。
      */
-    protected void trainOneEpoch() {
-        dataset.prepare(true);
-        float epochLoss = 0.0f;
-        int batchCount = 0;
-
-        while (dataset.hasNext()) {
-            RLAIFDataset.Batch batch = dataset.nextBatch();
-
-            // 1. 收集经验并计算优势
-            ExperienceBuffer experience = collectExperience(batch);
-
-            // 2. 多轮PPO更新
-            float avgLoss = 0.0f;
-            for (int epoch = 0; epoch < config.getPpoEpochs(); epoch++) {
-                float loss = ppoUpdate(experience);
-                avgLoss += loss;
-            }
-            avgLoss /= config.getPpoEpochs();
-
-            epochLoss += avgLoss;
-            batchCount++;
-            currentStep++;
-            totalLossHistory.add(avgLoss);
-
-            if (currentStep % logInterval == 0) {
-                System.out.printf("Epoch %d | Step %d | Loss: %.4f%n",
-                        currentEpoch + 1, currentStep, avgLoss);
-            }
-        }
-
-        System.out.printf("Epoch %d 完成 | 平均损失: %.4f%n",
-                currentEpoch + 1, epochLoss / batchCount);
-
-        dataset.reset();
-    }
-
-    /**
-     * 收集经验（旧策略，detach，不需要梯度）
-     *
-     * 只收集旧策略的 logProb 和 value 的 float 值，以及原始输入/标签/奖励数据。
-     * 后续 ppoUpdate 会重新前向传播来构建有梯度的计算图。
-     */
-    private ExperienceBuffer collectExperience(RLAIFDataset.Batch batch) {
+    private Rollout collectRollout(RLAIFDataset.Batch batch) {
+        // rollout 阶段关闭 dropout，保证旧策略 logProb 是可复现的参考值
         actor.setTraining(false);
 
         int numCandidates = batch.getNumCandidates();
@@ -158,170 +162,248 @@ public class PPOTrainer extends BaseRLTrainer {
         NdArray[] candidateLabels = batch.getCandidateLabels();
         float[][] rewards = batch.getRewards();
 
-        ExperienceBuffer buffer = new ExperienceBuffer(batchSize * numCandidates);
+        float[][] oldLogProbs = new float[batchSize][numCandidates];
+        float[][] oldValues = new float[batchSize][numCandidates];
 
         for (int k = 0; k < numCandidates; k++) {
             Variable inputVar = new Variable(candidateInputs[k]);
             Variable labelVar = new Variable(candidateLabels[k]);
+            labelVar.setRequireGrad(false);
 
-            // 旧策略前向传播（detach，仅取 float 值）
-            Variable logits = actor.predict(inputVar);
-            Variable logProb = computeLogProb(logits, labelVar);
-            float oldLogProbValue = logProb.getValue().getNumber().floatValue();
+            // 同时取出 logits 与 lm_head 之前的隐藏状态（Critic 的输入）
+            MiniMindBlock.MoEOutput output = forwardWithAux(inputVar);
+            Variable logits = output.getOutput();
 
-            // 旧 Critic 前向传播（detach，仅取 float 值）
-            Variable hidden = extractHiddenState(logits);
-            Variable value = critic.forward(hidden);
-            float oldValueFloat = value.getValue().getNumber().floatValue();
+            // 旧策略 logProb：detach 后计算，只保留数值
+            Variable detachedLogits = logits.detach();
+            Variable logProbVar = computePerSampleLogProbs(detachedLogits, labelVar);
+            float[] perSampleLogProb = logProbVar.getValue().getArray().clone();
+            logProbVar.unChainBackward();
 
-            // 存储原始输入数据和 detach 的旧策略值
+            // 旧 Critic 价值：输入是重建出来的常量，天然与 Actor 计算图断开
+            Variable criticInput = buildCriticInput(output.getHiddenState(), candidateLabels[k]);
+            Variable valueVar = critic.forward(criticInput);
+            float[] perSampleValue = valueVar.getValue().getArray().clone();
+            valueVar.unChainBackward();
+
             for (int i = 0; i < batchSize; i++) {
-                buffer.add(
-                        oldLogProbValue,
-                        oldValueFloat,
-                        rewards[i][k],
-                        candidateInputs[k],
-                        candidateLabels[k]
-                );
+                if (i < perSampleLogProb.length) {
+                    oldLogProbs[i][k] = perSampleLogProb[i];
+                }
+                if (i < perSampleValue.length) {
+                    oldValues[i][k] = perSampleValue[i];
+                }
             }
+
+            // 释放本次前向的计算图
+            logits.unChainBackward();
         }
 
-        // 计算 GAE 优势和回报
-        buffer.computeAdvantages(ppoLoss, config);
+        // bandit 形式的优势与价值目标（纯数值，不参与梯度）
+        float[][][] advantageAndReturn = ppoLoss.computeBanditAdvantages(rewards, oldValues);
 
-        return buffer;
+        return new Rollout(candidateInputs, candidateLabels, rewards,
+                oldLogProbs, oldValues, advantageAndReturn[0], advantageAndReturn[1],
+                batchSize, numCandidates);
     }
 
     /**
-     * PPO更新
+     * 一轮 PPO 更新（计算图连通版本）
+     * <p>
+     * 关键: 新策略的 logProb 必须保持为 Variable 且保留 batch 维，不能提取为 float，
+     * 否则计算图断裂，梯度无法回传到 Actor 参数。
      *
-     * 关键修复: 重新通过 actor/critic 前向传播，保持计算图连通。
-     *
-     * 计算图链路:
-     * actor.predict(input) → logits [Variable, 有 creator]
-     *   → computeLogProb(logits, label) → newLogProb [Variable, 有 creator]
-     *     → ppoLoss.computeTotalLoss(...) → totalLoss [Variable, 有 creator]
-     *       → totalLoss.backward() → 梯度回传到 actor/critic 参数 ✓
+     * @return 本轮的策略损失 + 价值损失
      */
-    private float ppoUpdate(ExperienceBuffer experience) {
+    private float ppoUpdate(Rollout rollout) {
         actor.setTraining(true);
-
-        int experienceSize = experience.size();
-
-        // 累加所有经验的损失，保持计算图连通
-        Variable totalPolicyLoss = null;
-        Variable totalValueLoss = null;
-        Variable lastLogits = null;
-
-        for (int i = 0; i < experienceSize; i++) {
-            NdArray inputData = experience.inputDataList.get(i);
-            NdArray labelData = experience.labelDataList.get(i);
-
-            // ===== Actor 重新前向传播（计算图连通）=====
-            Variable inputVar = new Variable(inputData);
-            Variable labelVar = new Variable(labelData);
-            Variable logits = actor.predict(inputVar);
-            lastLogits = logits;
-
-            // computeLogProb 返回 Variable，计算图连通
-            Variable newLogProb = computeLogProb(logits, labelVar);
-
-            // 计算概率比: r_t = exp(log π_new - log π_old)
-            // oldLogProb是旧策略的值,不需要梯度
-            Variable oldLogProbVar = new Variable(NdArray.of(experience.logProbs[i]));
-            oldLogProbVar.setRequireGrad(false);
-            Variable logRatio = newLogProb.sub(oldLogProbVar);
-            Variable ratio = logRatio.exp();
-
-            // 计算 clipped surrogate objective
-            // advantage是外部信号常量,不参与反向传播
-            Variable advVar = new Variable(NdArray.of(experience.advantages[i]));
-            advVar.setRequireGrad(false);
-            Variable surrogate1 = ratio.mul(advVar);
-
-            // 使用Variable.clip()保持计算图连通
-            float clipEps = config.getClipEpsilon();
-            Variable clippedRatio = ratio.clip(1.0f - clipEps, 1.0f + clipEps);
-            Variable surrogate2 = clippedRatio.mul(advVar);
-
-            // min(surrogate1, surrogate2)，取负值（最大化 → 最小化）
-            Variable condition = surrogate1.lt(surrogate2);
-            Variable candidatePolicyLoss = Variable.where(condition, surrogate1, surrogate2).neg();
-
-            totalPolicyLoss = (totalPolicyLoss == null)
-                    ? candidatePolicyLoss
-                    : totalPolicyLoss.add(candidatePolicyLoss);
-
-            // ===== Critic 重新前向传播（计算图连通）=====
-            Variable hidden = extractHiddenState(logits);
-            Variable newValue = critic.forward(hidden);
-
-            // 价值损失: 0.5 * (V - R)^2, returns是外部信号不需要梯度
-            Variable returnVar = new Variable(NdArray.of(experience.returns[i]));
-            returnVar.setRequireGrad(false);
-            Variable valueDiff = newValue.sub(returnVar);
-            Variable half = new Variable(NdArray.of(0.5f));
-            half.setRequireGrad(false);
-            Variable candidateValueLoss = valueDiff.squ().mul(half);
-
-            totalValueLoss = (totalValueLoss == null)
-                    ? candidateValueLoss
-                    : totalValueLoss.add(candidateValueLoss);
-        }
-
-        // 平均损失
-        Variable count = new Variable(NdArray.of((float) experienceSize));
-        count.setRequireGrad(false);
-        Variable avgPolicyLoss = totalPolicyLoss.div(count);
-        Variable avgValueLoss = totalValueLoss.div(count);
-
-        // 熵正则化（鼓励探索）
-        Variable entropyLoss = ppoLoss.computeEntropyLoss(lastLogits);
-
-        // 总损失 = 策略损失 + c1*价值损失 - c2*熵损失
-        Variable valueLossCoef = new Variable(NdArray.of(config.getValueLossCoef()));
-        valueLossCoef.setRequireGrad(false);
-        Variable entropyCoef = new Variable(NdArray.of(config.getEntropyCoef()));
-        entropyCoef.setRequireGrad(false);
-        Variable totalLoss = avgPolicyLoss
-                .add(avgValueLoss.mul(valueLossCoef))
-                .sub(entropyLoss.mul(entropyCoef));
-
-        // 反向传播: totalLoss → avgPolicyLoss/avgValueLoss → newLogProb/newValue → actor/critic 参数
         actor.clearGrads();
         critic.clearGrads();
-        totalLoss.backward();
 
-        // 梯度裁剪
+        int numCandidates = rollout.numCandidates;
+        int batchSize = rollout.batchSize;
+        float entropyCoef = config.getEntropyCoef();
+        float valueLossCoef = config.getValueLossCoef();
+
+        float policyLossSum = 0.0f;
+        float valueLossSum = 0.0f;
+        int validCandidates = 0;
+
+        for (int k = 0; k < numCandidates; k++) {
+            Variable inputVar = new Variable(rollout.candidateInputs[k]);
+            Variable labelVar = new Variable(rollout.candidateLabels[k]);
+            labelVar.setRequireGrad(false);
+
+            // ===== Actor: 新策略前向（同时取出 MoE 负载均衡损失与隐藏状态）=====
+            MiniMindBlock.MoEOutput output = forwardWithAux(inputVar);
+            Variable logits = output.getOutput();
+
+            // 逐样本 logProb [batch]，计算图连通
+            Variable newLogProbs = computePerSampleLogProbs(logits, labelVar);
+
+            // clipped surrogate（与 GRPO / Agent RL 共用同一份权威实现）
+            Variable policyLoss = ppoLoss.computePolicyLoss(newLogProbs,
+                    column(rollout.oldLogProbs, k, batchSize),
+                    column(rollout.advantages, k, batchSize));
+
+            // 熵正则化（鼓励探索）：标量平均熵，避免损失退化为非标量张量
+            Variable entropy = computeScalarEntropy(logits);
+            Variable actorLoss = policyLoss.sub(entropy.mul(constant(entropyCoef)));
+
+            // 并入 MoE 辅助损失，并按候选数等权平均
+            actorLoss = withMoeAuxLoss(actorLoss, output).mul(constant(1.0f / numCandidates));
+
+            float policyLossValue = actorLoss.getValue().getNumber().floatValue();
+            if (!Float.isFinite(policyLossValue)) {
+                System.err.printf("警告: PPO 候选 %d 策略损失异常(%s)，已跳过%n",
+                        k, Float.isNaN(policyLossValue) ? "NaN" : "Inf");
+                actorLoss.unChainBackward();
+                continue;
+            }
+
+            // 逐候选反向传播：梯度在 Actor 参数上累积，避免同时持有 K 份计算图
+            actorLoss.backward();
+
+            // ===== Critic: 输入 detach，价值损失不污染 Actor =====
+            Variable criticInput = buildCriticInput(output.getHiddenState(),
+                    rollout.candidateLabels[k]);
+            Variable newValues = critic.forward(criticInput);
+            Variable valueLoss = ppoLoss
+                    .computeValueLoss(newValues, column(rollout.returns, k, batchSize))
+                    .mul(constant(valueLossCoef / numCandidates));
+
+            float valueLossValue = valueLoss.getValue().getNumber().floatValue();
+            if (Float.isFinite(valueLossValue)) {
+                valueLoss.backward();
+                valueLossSum += valueLossValue;
+            } else {
+                System.err.printf("警告: PPO 候选 %d 价值损失异常(%s)，已跳过 Critic 累积%n",
+                        k, Float.isNaN(valueLossValue) ? "NaN" : "Inf");
+            }
+
+            // 释放本候选的计算图
+            valueLoss.unChainBackward();
+            actorLoss.unChainBackward();
+
+            policyLossSum += policyLossValue;
+            validCandidates++;
+        }
+
+        // 全部候选累积完成后统一裁剪与更新（Actor / Critic 各自独立裁剪，范数互不干扰）
         clipGradients(actor, config.getMaxGradNorm());
         clipGradients(critic, config.getMaxGradNorm());
-
-        // 更新参数
         actorOptimizer.update();
         criticOptimizer.update();
+        actor.clearGrads();
+        critic.clearGrads();
 
-        float lossValue = totalLoss.getValue().getNumber().floatValue();
-        totalLoss.unChainBackward();
+        float avgPolicyLoss = validCandidates > 0 ? policyLossSum / validCandidates : 0.0f;
+        float avgValueLoss = validCandidates > 0 ? valueLossSum / validCandidates : 0.0f;
+        policyLossHistory.add(avgPolicyLoss);
+        valueLossHistory.add(avgValueLoss);
 
-        return lossValue;
+        return avgPolicyLoss + avgValueLoss;
     }
 
-
+    // ==================== Critic 输入构造 ====================
 
     /**
-     * 从 logits 提取隐藏状态供 Critic 使用
+     * 从 Actor 隐藏状态构造 Critic 的输入 [batch, hidden]
+     * <p>
+     * 取每个样本"最后一个被监督位置"的隐藏状态——该位置是模型看完整条回答之后的状态，
+     * 是 bandit 形式下最自然的 V(s)。padding 位置（标签为 ignore_index）不参与选取，
+     * 避免 Critic 学到的是 pad token 的表征。
+     * <p>
+     * 返回的 Variable 由复制出来的数据重建，requireGrad=false，因此与 Actor 的计算图完全断开：
+     * 价值损失只更新 Critic 参数。
      *
-     * 通过 Variable 算子（mean）操作，保持计算图连通。
-     * 这样 Critic 的梯度可以通过 hidden → logits → actor 参数回传。
-     *
-     * @param logits actor 前向传播输出的 logits Variable（有 creator）
-     * @return 隐藏状态 Variable（计算图连通）
+     * @param hiddenState lm_head 之前的隐藏状态 [batch, seq, hidden]（可能为 [batch, hidden]）
+     * @param labels      该候选的标签 [batch, seq]，用于定位最后一个有效位置
+     * @return Critic 输入 [batch, hidden]
      */
-    private Variable extractHiddenState(Variable logits) {
-        // 使用 mean 算子对 logits 做降维，保持计算图连通
-        // logits shape 可能是 [batch_size, seq_len, vocab_size] 或 [batch_size, vocab_size]
-        // mean 后得到 [batch_size, 1] 或标量，作为 Critic 的输入近似
-        return logits.mean(0, true);
+    private Variable buildCriticInput(Variable hiddenState, NdArray labels) {
+        if (hiddenState == null) {
+            throw new IllegalStateException(
+                    "PPO 需要模型暴露 lm_head 之前的隐藏状态，但 MoEOutput.hiddenState 为 null；"
+                            + "请确认前向走的是 MiniMindBlock.forwardWithMoEOutput");
+        }
+
+        int[] dims = hiddenState.getValue().getShape().getShapeDims();
+        float[] hiddenData = hiddenState.getValue().getArray();
+
+        if (dims.length == 2) {
+            // 已经是 [batch, hidden]
+            return constantMatrix(hiddenData.clone(), dims[0], dims[1]);
+        }
+        if (dims.length != 3) {
+            throw new IllegalStateException(
+                    "隐藏状态应为 [batch, seq, hidden] 或 [batch, hidden]，实际维度: " + dims.length);
+        }
+
+        int batchSize = dims[0];
+        int seqLen = dims[1];
+        int hiddenDim = dims[2];
+        float[] labelData = labels.getArray();
+
+        float[] gathered = new float[batchSize * hiddenDim];
+        for (int i = 0; i < batchSize; i++) {
+            int position = lastSupervisedPosition(labelData, i, seqLen);
+            System.arraycopy(hiddenData, (i * seqLen + position) * hiddenDim,
+                    gathered, i * hiddenDim, hiddenDim);
+        }
+        return constantMatrix(gathered, batchSize, hiddenDim);
+    }
+
+    /**
+     * 找出该样本最后一个被监督的位置（标签 >= 0 的最大下标）
+     * <p>
+     * 全部位置都被忽略时退回最后一个位置，避免返回非法下标。
+     */
+    private static int lastSupervisedPosition(float[] labelData, int batchIdx, int seqLen) {
+        int offset = batchIdx * seqLen;
+        for (int s = seqLen - 1; s >= 0; s--) {
+            if (offset + s < labelData.length && labelData[offset + s] >= 0) {
+                return s;
+            }
+        }
+        return Math.max(0, seqLen - 1);
+    }
+
+    /**
+     * 构造不参与梯度的矩阵常量 [rows, cols]
+     */
+    private static Variable constantMatrix(float[] data, int rows, int cols) {
+        Variable var = new Variable(NdArray.of(data, Shape.of(rows, cols)));
+        var.setRequireGrad(false);
+        return var;
+    }
+
+    // ==================== 工具方法 ====================
+
+    /**
+     * 取出 [batchSize][numCandidates] 矩阵的第 k 列
+     */
+    private static float[] column(float[][] matrix, int k, int batchSize) {
+        float[] column = new float[batchSize];
+        for (int i = 0; i < batchSize; i++) {
+            column[i] = (i < matrix.length && k < matrix[i].length) ? matrix[i][k] : 0.0f;
+        }
+        return column;
+    }
+
+    /**
+     * 计算平均奖励
+     */
+    private static float averageReward(float[][] rewards) {
+        float sum = 0.0f;
+        int count = 0;
+        for (float[] row : rewards) {
+            for (float r : row) {
+                sum += r;
+                count++;
+            }
+        }
+        return count > 0 ? sum / count : 0.0f;
     }
 
     public List<Float> getPolicyLossHistory() {
@@ -332,18 +414,20 @@ public class PPOTrainer extends BaseRLTrainer {
         return new ArrayList<>(valueLossHistory);
     }
 
+    /**
+     * 总损失历史
+     * <p>
+     * 直接复用基类的 {@code lossHistory}，避免维护两份可能不同步的状态。
+     */
     public List<Float> getTotalLossHistory() {
-        return new ArrayList<>(totalLossHistory);
+        return getLossHistory();
+    }
+
+    public List<Float> getRewardHistory() {
+        return new ArrayList<>(rewardHistory);
     }
 
     // ==================== BaseTrainer 抽象方法实现 ====================
-
-    @Override
-    protected float trainStep(Object batch) {
-        RLAIFDataset.Batch rlBatch = (RLAIFDataset.Batch) batch;
-        ExperienceBuffer experience = collectExperience(rlBatch);
-        return ppoUpdate(experience);
-    }
 
     @Override
     protected String getTrainerName() {
@@ -352,7 +436,40 @@ public class PPOTrainer extends BaseRLTrainer {
 
     @Override
     protected void printTrainingInfo() {
-        System.out.println("PPO训练器 | 配置: " + config);
+        System.out.println("=".repeat(70));
+        System.out.println("开始PPO训练");
+        System.out.println("配置: " + config);
+        System.out.println("样本数: " + dataset.getSampleCount());
+        System.out.println("最大轮次: " + maxEpochs);
+        System.out.println("Critic: " + critic);
+        System.out.println("=".repeat(70));
+    }
+
+    @Override
+    protected void printTrainingLog() {
+        double avgPolicy = averageOfLast(policyLossHistory, logInterval);
+        double avgValue = averageOfLast(valueLossHistory, logInterval);
+        double avgReward = averageOfLast(rewardHistory, logInterval);
+
+        System.out.printf("Epoch %d/%d | Step %d | Policy: %.4f | Value: %.4f | Reward: %.4f%n",
+                currentEpoch + 1, maxEpochs, currentStep, avgPolicy, avgValue, avgReward);
+    }
+
+    private static double averageOfLast(List<Float> history, int window) {
+        return history.stream()
+                .skip(Math.max(0, history.size() - window))
+                .mapToDouble(Float::doubleValue)
+                .average()
+                .orElse(0.0);
+    }
+
+    /**
+     * epoch 收尾：同时清掉 Actor 与 Critic 的残留梯度
+     */
+    @Override
+    protected void onEpochEnd() {
+        actor.clearGrads();
+        critic.clearGrads();
     }
 
     @Override
@@ -381,52 +498,82 @@ public class PPOTrainer extends BaseRLTrainer {
     }
 
     /**
-     * 经验缓冲区
-     *
-     * 存储旧策略的 detach 值（float）和原始输入/标签数据（NdArray），
-     * 以便 ppoUpdate 时重新前向传播构建有梯度的计算图。
+     * 保存检查点：Actor（沿用基类 Model 序列化）+ Critic 状态
+     * <p>
+     * 基类只序列化 Actor，独立 Critic 的价值权重会丢失，导致续训时价值估计从零开始、
+     * 优势 A=R-V 失真。这里在 Actor 检查点旁额外落盘一份 Critic 状态。
      */
-    private static class ExperienceBuffer {
-        float[] logProbs;       // 旧策略的 logProb（detach）
-        float[] values;         // 旧 Critic 的 value（detach）
-        float[] rewards;
-        float[] advantages;
-        float[] returns;
-        List<NdArray> inputDataList;   // 原始输入数据，用于重新前向传播
-        List<NdArray> labelDataList;   // 原始标签数据，用于重新前向传播
-        int size;
-        int capacity;
+    @Override
+    protected void saveCheckpoint() {
+        super.saveCheckpoint();
+        saveCriticState();
+    }
 
-        ExperienceBuffer(int capacity) {
-            this.capacity = capacity;
-            this.logProbs = new float[capacity];
-            this.values = new float[capacity];
-            this.rewards = new float[capacity];
-            this.advantages = new float[capacity];
-            this.returns = new float[capacity];
-            this.inputDataList = new ArrayList<>(capacity);
-            this.labelDataList = new ArrayList<>(capacity);
-            this.size = 0;
+    /**
+     * 将 Critic 状态写入 {@code <prefix>_critic_epoch<E>_step<S>.state}
+     */
+    private void saveCriticState() {
+        String filename = String.format("%s_critic_epoch%d_step%d.state",
+                getCheckpointPrefix(), currentEpoch, currentStep);
+        String filepath = Paths.get(checkpointDir, filename).toString();
+        try (ObjectOutputStream oos =
+                     new ObjectOutputStream(new FileOutputStream(filepath))) {
+            oos.writeObject(critic.getState());
+            System.out.println(getTrainerName() + " Critic 状态已保存: " + filepath);
+        } catch (Exception e) {
+            System.err.println("保存 Critic 状态失败: " + filepath);
+            e.printStackTrace();
         }
+    }
 
-        void add(float logProb, float value, float reward, NdArray inputData, NdArray labelData) {
-            if (size < capacity) {
-                logProbs[size] = logProb;
-                values[size] = value;
-                rewards[size] = reward;
-                inputDataList.add(inputData);
-                labelDataList.add(labelData);
-                size++;
-            }
+    /**
+     * 从文件恢复 Critic 状态（断点续训时与 Actor 检查点配套调用）
+     *
+     * @param filepath {@link #saveCriticState()} 生成的 {@code .state} 文件路径
+     */
+    public void loadCriticState(String filepath) {
+        try (ObjectInputStream ois =
+                     new ObjectInputStream(new FileInputStream(filepath))) {
+            @SuppressWarnings("unchecked")
+            Map<String, float[]> state = (Map<String, float[]>) ois.readObject();
+            critic.loadState(state);
+            System.out.println(getTrainerName() + " Critic 状态已恢复: " + filepath);
+        } catch (Exception e) {
+            System.err.println("恢复 Critic 状态失败: " + filepath);
+            e.printStackTrace();
         }
+    }
 
-        void computeAdvantages(PPOLoss ppoLoss, PPOConfig config) {
-            advantages = ppoLoss.computeGAE(rewards, values, 0.0f);
-            returns = ppoLoss.computeReturns(advantages, values);
-        }
+    /**
+     * 一次 rollout 的快照
+     * <p>
+     * 只保存数值（float）与原始输入/标签，ppoUpdate 时会重新前向以构建有梯度的计算图。
+     * 所有 [batchSize][numCandidates] 矩阵的第 k 列对应第 k 个候选。
+     */
+    private static final class Rollout {
+        final NdArray[] candidateInputs;
+        final NdArray[] candidateLabels;
+        final float[][] rewards;
+        final float[][] oldLogProbs;
+        final float[][] oldValues;
+        final float[][] advantages;
+        final float[][] returns;
+        final int batchSize;
+        final int numCandidates;
 
-        int size() {
-            return size;
+        Rollout(NdArray[] candidateInputs, NdArray[] candidateLabels, float[][] rewards,
+                float[][] oldLogProbs, float[][] oldValues,
+                float[][] advantages, float[][] returns,
+                int batchSize, int numCandidates) {
+            this.candidateInputs = candidateInputs;
+            this.candidateLabels = candidateLabels;
+            this.rewards = rewards;
+            this.oldLogProbs = oldLogProbs;
+            this.oldValues = oldValues;
+            this.advantages = advantages;
+            this.returns = returns;
+            this.batchSize = batchSize;
+            this.numCandidates = numCandidates;
         }
     }
 }

@@ -1,7 +1,7 @@
 package io.leavesfly.tinyai.minimind.training.rlaif.grpo;
 
 import io.leavesfly.tinyai.func.Variable;
-import io.leavesfly.tinyai.ndarr.NdArray;
+import io.leavesfly.tinyai.minimind.training.rlaif.BaseRLTrainer;
 
 /**
  * GRPO (Group Relative Policy Optimization) 损失函数
@@ -17,6 +17,10 @@ import io.leavesfly.tinyai.ndarr.NdArray;
  * <p>
  * 注意: 所有涉及策略概率的计算必须通过 Variable 算子完成,
  * 以保持计算图连通, 确保梯度能正确回传到 actor 参数。
+ * <p>
+ * 形状约定: 优势与 logProb 均以 [batchSize] 为单位逐样本计算。
+ * 绝不能把整个 batch 的 logProb 归约成标量后再乘各样本的优势——那样梯度会退化成
+ * (Σ_i A_i)·∂f(batch级logprob)/∂θ，per-sample 的 credit assignment 完全丢失。
  *
  * @author leavesfly
  * @since 2024
@@ -30,97 +34,104 @@ public class GRPOLoss {
     }
 
     /**
-     * 计算单个候选的 Clipped 策略损失（保持计算图连通）
+     * 计算单个候选的 Clipped 策略损失（保持计算图连通，逐样本）
      * <p>
-     * 对于单个候选 k, 计算:
-     * ratio = exp(newLogProb - oldLogProb)
-     * surrogate1 = ratio * advantage
-     * surrogate2 = clip(ratio, 1-ε, 1+ε) * advantage
-     * loss = -min(surrogate1, surrogate2)
+     * 对于单个候选 k, 对 batch 内每个样本 i 计算:
+     * ratio_i = exp(newLogProb_i - oldLogProb_i)
+     * surrogate1_i = ratio_i * advantage_i
+     * surrogate2_i = clip(ratio_i, 1-ε, 1+ε) * advantage_i
+     * loss = -mean_i(min(surrogate1_i, surrogate2_i))
      *
-     * @param newLogProb 新策略对数概率（Variable, 保持计算图）
-     * @param oldLogProb 旧策略对数概率（float, 已 detach）
-     * @param advantage  组相对优势值（float, 常量）
-     * @return 该候选的策略损失（Variable, 计算图连通到 actor）
+     * @param newLogProbs 新策略逐样本对数概率 [batchSize]（Variable, 保持计算图）
+     * @param oldLogProbs 旧策略逐样本对数概率 [batchSize]（float, 已 detach）
+     * @param advantages  该候选的组相对优势 [batchSize]（float, 常量）
+     * @return 该候选的策略损失（标量 Variable, 计算图连通到 actor）
      */
-    public Variable computeCandidateLoss(Variable newLogProb, float oldLogProb, float advantage) {
-        // ratio = exp(log π_new - log π_old)，计算图连通
-        // oldLogProb是旧策略的值,不需要梯度
-        Variable oldLogProbVar = new Variable(NdArray.of(oldLogProb));
-        oldLogProbVar.setRequireGrad(false);
-        Variable logRatio = newLogProb.sub(oldLogProbVar);
-        Variable ratio = logRatio.exp();
-
-        // surrogate1 = ratio * advantage，advantage是外部信号常量
-        Variable advantageVar = new Variable(NdArray.of(advantage));
-        advantageVar.setRequireGrad(false);
-        Variable surrogate1 = ratio.mul(advantageVar);
-
-        // surrogate2 = clip(ratio, 1-ε, 1+ε) * advantage，计算图连通
-        float clipEpsilon = config.getClipEpsilon();
-        Variable clippedRatio = ratio.clip(1.0f - clipEpsilon, 1.0f + clipEpsilon);
-        Variable surrogate2 = clippedRatio.mul(advantageVar);
-
-        // min(surrogate1, surrogate2): 通过 Variable.where 实现
-        // 当 surrogate1 < surrogate2 时取 surrogate1, 否则取 surrogate2
-        Variable condition = surrogate1.lt(surrogate2);
-        Variable minSurrogate = Variable.where(condition, surrogate1, surrogate2);
-
-        // 取负值（最大化 surrogate → 最小化 -surrogate）
-        return minSurrogate.neg();
+    public Variable computeCandidateLoss(Variable newLogProbs, float[] oldLogProbs,
+                                         float[] advantages) {
+        // 委派给 BaseRLTrainer 的权威实现，GRPO / PPO / Agent RL 共用同一份
+        // clipped surrogate 逻辑，避免多处实现不一致（例如漏掉 clip、归约成非标量）
+        return BaseRLTrainer.clippedSurrogateLoss(
+                newLogProbs, oldLogProbs, advantages, config.getClipEpsilon());
     }
 
     /**
-     * 计算组相对优势
+     * 计算优势
      * <p>
-     * 对于每组, 计算: A_relative(y_i) = R(y_i) - mean_group(R)
-     * 优势值是纯数值计算, 不需要梯度, 使用 float 即可。
+     * useGroupContrast = true（默认，GRPO）:
+     * 对每个 prompt 的 K 个候选按 groupSize 分组，A[i][k] = R̃[i][k] - mean_group(R̃[i])
+     * <p>
+     * useGroupContrast = false（REINFORCE + 全局基线）:
+     * A[i][k] = R̃[i][k] - mean(全 batch 所有候选的 R̃)
      *
      * @param rewards 奖励 [batchSize, numCandidates]
-     * @return 组相对优势 [batchSize, numCandidates]
+     * @return 优势 [batchSize, numCandidates]
      */
     public float[][] computeGroupRelativeAdvantages(float[][] rewards) {
         int batchSize = rewards.length;
+        if (batchSize == 0) {
+            return new float[0][0];
+        }
         int numCandidates = rewards[0].length;
-        int groupSize = config.getGroupSize();
 
         float[][] advantages = new float[batchSize][numCandidates];
         float[][] normalizedRewards = normalizeRewards(rewards);
 
-        for (int i = 0; i < batchSize; i++) {
-            int numGroups = (numCandidates + groupSize - 1) / groupSize;
+        if (config.isUseGroupContrast()) {
+            int groupSize = Math.max(1, config.getGroupSize());
+            for (int i = 0; i < batchSize; i++) {
+                int numGroups = (numCandidates + groupSize - 1) / groupSize;
 
-            for (int g = 0; g < numGroups; g++) {
-                int groupStart = g * groupSize;
-                int groupEnd = Math.min(groupStart + groupSize, numCandidates);
-                int actualGroupSize = groupEnd - groupStart;
+                for (int g = 0; g < numGroups; g++) {
+                    int groupStart = g * groupSize;
+                    int groupEnd = Math.min(groupStart + groupSize, numCandidates);
+                    int actualGroupSize = groupEnd - groupStart;
 
-                // 计算组内平均奖励
-                float groupMeanReward = 0.0f;
-                for (int k = groupStart; k < groupEnd; k++) {
-                    groupMeanReward += normalizedRewards[i][k];
-                }
-                groupMeanReward /= actualGroupSize;
+                    // 计算组内平均奖励
+                    float groupMeanReward = 0.0f;
+                    for (int k = groupStart; k < groupEnd; k++) {
+                        groupMeanReward += normalizedRewards[i][k];
+                    }
+                    groupMeanReward /= actualGroupSize;
 
-                // 组内相对优势
-                for (int k = groupStart; k < groupEnd; k++) {
-                    advantages[i][k] = normalizedRewards[i][k] - groupMeanReward;
+                    // 组内相对优势
+                    for (int k = groupStart; k < groupEnd; k++) {
+                        advantages[i][k] = normalizedRewards[i][k] - groupMeanReward;
+                    }
                 }
             }
+        } else {
+            // 全局基线：所有样本所有候选的均值
+            float globalMean = 0.0f;
+            int total = 0;
+            for (int i = 0; i < batchSize; i++) {
+                for (int k = 0; k < numCandidates; k++) {
+                    globalMean += normalizedRewards[i][k];
+                    total++;
+                }
+            }
+            globalMean = total > 0 ? globalMean / total : 0.0f;
+            for (int i = 0; i < batchSize; i++) {
+                for (int k = 0; k < numCandidates; k++) {
+                    advantages[i][k] = normalizedRewards[i][k] - globalMean;
+                }
+            }
+        }
 
-            // 可选: 归一化优势
-            if (config.isNormalizeAdvantage()) {
+        // 可选: 逐样本归一化优势
+        if (config.isNormalizeAdvantage()) {
+            for (int i = 0; i < batchSize; i++) {
                 float mean = 0.0f;
                 for (float a : advantages[i]) {
                     mean += a;
                 }
                 mean /= numCandidates;
 
-                float std = 0.0f;
+                float variance = 0.0f;
                 for (float a : advantages[i]) {
-                    std += (a - mean) * (a - mean);
+                    variance += (a - mean) * (a - mean);
                 }
-                std = (float) Math.sqrt(std / numCandidates + 1e-8f);
+                float std = (float) Math.sqrt(variance / numCandidates + 1e-8f);
 
                 for (int k = 0; k < numCandidates; k++) {
                     advantages[i][k] = (advantages[i][k] - mean) / std;
@@ -129,22 +140,6 @@ public class GRPOLoss {
         }
 
         return advantages;
-    }
-
-    /**
-     * 计算熵正则化损失（保持计算图连通）
-     *
-     * @param logits 模型输出 logits（Variable）
-     * @return 熵损失
-     */
-    public Variable computeEntropyLoss(Variable logits) {
-        // 使用框架内置的logSoftmax,在vocab维度(axis=-1)上计算
-        Variable logProbs = logits.logSoftmax();
-        // softMax结果detach,避免梯度通过两条路径重复回传
-        Variable probs = logits.softMax().detach();
-        // entropy = -sum(p * log(p)), p已detach,梯度只通过logProbs流回
-        Variable entropy = probs.mul(logProbs).neg();
-        return entropy.mean(-1, true);
     }
 
     /**

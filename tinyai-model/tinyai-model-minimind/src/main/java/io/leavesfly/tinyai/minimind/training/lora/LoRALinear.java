@@ -40,7 +40,16 @@ public class LoRALinear extends Module {
     private final float alpha;
     private final float scaling;  // scaling = alpha / rank
     private final boolean useBias;
-    
+
+    /**
+     * 原始权重是否已由外部显式写入
+     * <p>
+     * 用于保护 {@link #resetParameters()}：一旦通过 {@link #setOriginalWeight(NdArray)}
+     * 载入了预训练权重，后续任何 init()/resetParameters() 调用都不得再将其随机化，
+     * 否则会毁掉 LoRA 注入前训练好的基座权重。
+     */
+    private boolean originalWeightLoaded = false;
+
     // Dropout层(可选)
     private Dropout dropout;
     
@@ -66,12 +75,13 @@ public class LoRALinear extends Module {
         this.useBias = useBias;
         
         // 创建原始权重(冻结,不参与训练)
+        // requireGrad=false：反向传播到此叶子即终止，既不会被优化器更新，也不浪费算力累积梯度
         NdArray weightData = NdArray.of(Shape.of(outFeatures, inFeatures));
-        this.originalWeight = new Parameter(weightData);
+        this.originalWeight = new Parameter(weightData, false);
         
         if (useBias) {
             NdArray biasData = NdArray.of(Shape.of(outFeatures));
-            this.originalBias = new Parameter(biasData);
+            this.originalBias = new Parameter(biasData, false);
         } else {
             this.originalBias = null;
         }
@@ -135,10 +145,9 @@ public class LoRALinear extends Module {
      * 设置原始权重
      */
     public void setOriginalWeight(NdArray weight) {
-        // 复制权重数据
-        float[] src = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) weight).buffer;
-        float[] dst = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) this.originalWeight.data()).buffer;
-        System.arraycopy(src, 0, dst, 0, src.length);
+        // 复制权重数据（仅用 NdArray 公开接口，不假设 CPU 后端）
+        this.originalWeight.setValue(weight.copy());
+        this.originalWeightLoaded = true;
     }
     
     /**
@@ -146,18 +155,19 @@ public class LoRALinear extends Module {
      */
     public void setOriginalBias(NdArray bias) {
         if (this.originalBias != null && bias != null) {
-            // 复制偏置数据
-            float[] src = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) bias).buffer;
-            float[] dst = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) this.originalBias.data()).buffer;
-            System.arraycopy(src, 0, dst, 0, src.length);
+            // 复制偏置数据（仅用 NdArray 公开接口，不假设 CPU 后端）
+            this.originalBias.setValue(bias.copy());
         }
     }
     
     @Override
     public void resetParameters() {
         // 初始化原始权重(Kaiming初始化)
-        Initializers.kaimingUniform(originalWeight.data(), 0, "fan_in", "relu");
-        if (originalBias != null) {
+        // 已由外部载入预训练权重时跳过，避免 init() 被重复调用时毁掉基座权重
+        if (!originalWeightLoaded) {
+            Initializers.kaimingUniform(originalWeight.data(), 0, "fan_in", "relu");
+        }
+        if (originalBias != null && !originalWeightLoaded) {
             Initializers.zeros(originalBias.data());
         }
         
@@ -173,40 +183,39 @@ public class LoRALinear extends Module {
         Variable x = inputs[0];  // shape: (batch, in_features)
         
         // 1. 原始线性变换: y = xW^T
+        // 直接使用 Parameter 本身参与计算图（Parameter extends Variable）。
+        // 该参数 requireGrad=false，因此反向传播到此终止，实现真正的"冻结"。
         // originalWeight.shape: (out_features, in_features)
-        Variable y = x.matMul(transposeWeight(originalWeight.data()));
+        Variable y = x.matMul(originalWeight.transpose());
         
         // 2. 添加原始偏置
         if (originalBias != null) {
-            y = y.add(new Variable(originalBias.data()));
+            y = y.add(originalBias);
         }
         
-        // 3. LoRA低秩调整: delta = x * A^T * B^T * (α/r)
-        // Step 3.1: x * A^T -> (batch, r)
-        Variable loraX = x.matMul(transposeWeight(loraA.data()));
+        // 3. LoRA低秩调整: delta = dropout(x) * A^T * B^T * (α/r)
+        // 关键：loraA / loraB 必须以 Parameter 对象本身进入计算图。
+        // 若写成 new Variable(loraA.data())，图里的叶子会是这个临时 Variable，
+        // 梯度落在临时对象上被丢弃，loraA.getGrad() 恒为 null，优化器跳过 null 梯度
+        // → LoRA 参数永远不更新，训练完全空转。
+        // Step 3.1: 对输入应用 Dropout(训练模式)，对标标准 LoRA: lora_B(lora_A(dropout(x)))
+        Variable loraInput = (dropout != null && _training) ? dropout.forward(x) : x;
         
-        // Step 3.2: 应用Dropout(训练模式)
-        if (dropout != null && _training) {
-            loraX = dropout.forward(loraX);
-        }
+        // Step 3.2: dropout(x) * A^T -> (batch, r)
+        Variable loraX = loraInput.matMul(loraA.transpose());
         
         // Step 3.3: (x * A^T) * B^T -> (batch, out_features)
-        Variable loraDelta = loraX.matMul(transposeWeight(loraB.data()));
+        Variable loraDelta = loraX.matMul(loraB.transpose());
         
         // Step 3.4: 应用缩放因子
-        loraDelta = loraDelta.mul(new Variable(NdArray.of(scaling)));
+        Variable scalingVar = new Variable(NdArray.of(scaling));
+        scalingVar.setRequireGrad(false);
+        loraDelta = loraDelta.mul(scalingVar);
         
         // 4. 合并: y = y_orig + lora_delta
         y = y.add(loraDelta);
         
         return y;
-    }
-    
-    /**
-     * 转置权重矩阵
-     */
-    private Variable transposeWeight(NdArray weight) {
-        return new Variable(weight).transpose();
     }
     
     /**

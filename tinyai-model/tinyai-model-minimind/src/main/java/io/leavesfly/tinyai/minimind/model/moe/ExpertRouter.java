@@ -37,6 +37,9 @@ public class ExpertRouter extends Module {
     
     private final Linear gateLinear;  // 门控线性层: input_dim -> num_experts
     
+    /** 噪声采样复用的随机源（避免每次前向都 new Random()） */
+    private final Random random = new Random();
+    
     /**
      * 构造函数
      * 
@@ -145,7 +148,7 @@ public class ExpertRouter extends Module {
 
         // 2) 从 NdArray 层面读取数据做离散的 Top-K 排序（这一步本就不可导）
         NdArray allWeightsData = allWeightsVar.getValue();
-        float[] softmaxBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) allWeightsData).buffer;
+        float[] softmaxBuffer = allWeightsData.getArray();
 
         int[][] topKIndices = new int[batchSize][topK];
         float[][] allWeights = new float[batchSize][numExperts];
@@ -191,7 +194,7 @@ public class ExpertRouter extends Module {
 
         // 同步回 float[][] 形式（供统计/负载均衡兼容使用）
         float[][] topKWeightsFloat = new float[batchSize][topK];
-        float[] normalizedBuffer = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) topKWeightsVar.getValue()).buffer;
+        float[] normalizedBuffer = topKWeightsVar.getValue().getArray();
         for (int b = 0; b < batchSize; b++) {
             System.arraycopy(normalizedBuffer, b * topK, topKWeightsFloat[b], 0, topK);
         }
@@ -229,9 +232,8 @@ public class ExpertRouter extends Module {
             totalElements *= dim;
         }
         
-        // 创建噪声数组
+        // 创建噪声数组（复用字段级 Random，避免每次前向都新建实例）
         float[] noiseBuffer = new float[totalElements];
-        Random random = new Random();
         for (int i = 0; i < totalElements; i++) {
             noiseBuffer[i] = (float) random.nextGaussian() * noiseFactor;
         }

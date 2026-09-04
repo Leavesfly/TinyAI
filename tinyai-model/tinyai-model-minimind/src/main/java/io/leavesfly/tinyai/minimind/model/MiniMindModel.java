@@ -12,9 +12,11 @@ import io.leavesfly.tinyai.ndarr.Shape;
 import io.leavesfly.tinyai.nnet.core.Parameter;
 import io.leavesfly.tinyai.nnet.layer.dnn.Linear;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -117,6 +119,20 @@ public class MiniMindModel extends Model {
     public MiniMindBlock.MoEOutput predictWithLoss(NdArray tokenIds) {
         Variable input = new Variable(tokenIds);
         return miniMindBlock.forwardWithMoEOutput(input, null, 0);
+    }
+
+    /**
+     * 带负载均衡损失与隐藏状态的前向传播（训练循环专用）
+     * <p>
+     * 训练器应使用本方法而非 {@link #predict(Variable)}：
+     * {@code predict} 走 {@code MiniMindBlock.forward}，会丢弃 {@code balanceLossVar}，
+     * 导致 MoE 模式下负载均衡辅助损失永远不参与反向传播，专家路由容易塌缩。
+     *
+     * @param tokenIds Token IDs Variable,形状 [batch_size, seq_len]
+     * @return MoE 输出结果（含 logits、可微的 balanceLossVar、最终 hiddenState）
+     */
+    public MiniMindBlock.MoEOutput predictWithLoss(Variable tokenIds) {
+        return miniMindBlock.forwardWithMoEOutput(tokenIds, null, 0);
     }
 
     /**
@@ -239,7 +255,7 @@ public class MiniMindModel extends Model {
         int seqLen = shape[1];
         int vocabSize = shape[2];
 
-        float[] logitsData = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) logits).buffer;
+        float[] logitsData = logits.getArray();
         float[] lastLogits = new float[vocabSize];
 
         int offset = (batchSize - 1) * seqLen * vocabSize + (seqLen - 1) * vocabSize;
@@ -276,6 +292,67 @@ public class MiniMindModel extends Model {
      */
     public MiniMindConfig getConfig() {
         return config;
+    }
+
+    /**
+     * 从另一个模型深拷贝全部参数（按参数名对齐）
+     * <p>
+     * 使用 {@link Parameter#deepCopy()}，保证两个模型的参数内存完全独立，
+     * 后续对 target 的训练不会改动 source。
+     * <p>
+     * 若存在无法对应的参数名（典型场景：源模型已注入 LoRA，而目标是按原始 config
+     * 新建的、结构不一致），直接报错而不是静默跳过：参考模型与策略模型不一致会让
+     * DPO / Agent RL 的 log ratio 与 KL 完全失去意义，而且这种错误从损失曲线上看不出来。
+     *
+     * @param source 参数来源模型
+     * @throws IllegalStateException 两个模型结构不一致
+     */
+    public void copyParametersFrom(MiniMindModel source) {
+        Map<String, Parameter> sourceParams = source.getAllParams();
+        Map<String, Parameter> targetParams = this.getAllParams();
+
+        List<String> missing = new ArrayList<>();
+        for (Map.Entry<String, Parameter> entry : sourceParams.entrySet()) {
+            Parameter targetParam = targetParams.get(entry.getKey());
+            if (targetParam == null) {
+                missing.add(entry.getKey());
+                continue;
+            }
+            targetParam.setData(entry.getValue().deepCopy().data());
+        }
+
+        if (!missing.isEmpty()) {
+            throw new IllegalStateException(
+                "无法从 " + source.getName() + " 拷贝参数到 " + getName()
+                + "，缺失 " + missing.size() + " 个参数: " + missing
+                + "。常见原因：源模型已注入 LoRA（LoRALinear 的结构与原始 Linear 不同）。"
+                + "请先调用 mergeLoRA() 将 LoRA 权重合入基座，再执行拷贝。");
+        }
+    }
+
+    /**
+     * 创建一个与自身同构、参数深拷贝且已冻结的副本
+     * <p>
+     * 用于 DPO / Agent RL / 蒸馏中的参考模型与教师模型：
+     * <ul>
+     *   <li>参数深拷贝，与被训练模型内存独立，不会随训练漂移</li>
+     *   <li>{@code setTraining(false)} 关闭 Dropout，使参考 logProb 稳定可复现</li>
+     *   <li>所有参数 {@code requireGrad=false}，即使意外接入计算图也不会累积梯度</li>
+     * </ul>
+     * 注意：不要用"随机初始化的同构模型"充当参考模型——那样 KL 约束会把策略往一个
+     * 毫无意义的分布上拉，等价于给损失注入随机噪声。
+     *
+     * @param name 副本模型名称
+     * @return 冻结的模型副本
+     */
+    public MiniMindModel createFrozenCopy(String name) {
+        MiniMindModel copy = new MiniMindModel(name, config);
+        copy.copyParametersFrom(this);
+        copy.setTraining(false);
+        for (Parameter param : copy.getAllParams().values()) {
+            param.setRequiresGrad(false);
+        }
+        return copy;
     }
 
     /**
@@ -348,6 +425,28 @@ public class MiniMindModel extends Model {
                     injectedCount++;
                 }
             }
+            
+            if (targetModules.contains("keyProj") || targetModules.contains("key_proj")) {
+                if (attention.getKeyProj() instanceof Linear) {
+                    Linear originalLinear = (Linear) attention.getKeyProj();
+                    // in/out features 由 LoRALinear.fromLinear 从真实权重形状推断，
+                    // GQA 下 K 投影输出维为 numKVHeads*headDim，无需在此区分
+                    LoRALinear loraLinear = createLoRALinear(
+                        "key_proj_lora", originalLinear, hiddenSize, hiddenSize, loraConfig);
+                    attention.setKeyProj(loraLinear);
+                    injectedCount++;
+                }
+            }
+            
+            if (targetModules.contains("outputProj") || targetModules.contains("output_proj")) {
+                if (attention.getOutputProj() instanceof Linear) {
+                    Linear originalLinear = (Linear) attention.getOutputProj();
+                    LoRALinear loraLinear = createLoRALinear(
+                        "output_proj_lora", originalLinear, hiddenSize, hiddenSize, loraConfig);
+                    attention.setOutputProj(loraLinear);
+                    injectedCount++;
+                }
+            }
         }
         
         if (injectedCount > 0) {
@@ -405,6 +504,20 @@ public class MiniMindModel extends Model {
                 attention.setValueProj(mergedLinear);
                 mergedCount++;
             }
+
+            if (attention.getKeyProj() instanceof LoRALinear) {
+                LoRALinear loraLinear = (LoRALinear) attention.getKeyProj();
+                Linear mergedLinear = mergeLoRAToLinear("key_proj", loraLinear);
+                attention.setKeyProj(mergedLinear);
+                mergedCount++;
+            }
+
+            if (attention.getOutputProj() instanceof LoRALinear) {
+                LoRALinear loraLinear = (LoRALinear) attention.getOutputProj();
+                Linear mergedLinear = mergeLoRAToLinear("output_proj", loraLinear);
+                attention.setOutputProj(mergedLinear);
+                mergedCount++;
+            }
         }
 
         if (mergedCount > 0) {
@@ -427,16 +540,12 @@ public class MiniMindModel extends Model {
 
         Linear linear = new Linear(name, inFeatures, outFeatures, hasBias);
 
-        // 将合并后的权重复制到新 Linear 层
-        float[] src = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) mergedWeight).buffer;
-        float[] dst = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) linear.getWeight().data()).buffer;
-        System.arraycopy(src, 0, dst, 0, src.length);
+        // 将合并后的权重写入新 Linear 层（仅用 NdArray 公开接口，不假设 CPU 后端）
+        linear.getWeight().setData(mergedWeight);
 
         // 复制偏置
         if (hasBias) {
-            float[] biasSrc = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) loraLinear.getOriginalBias().data()).buffer;
-            float[] biasDst = ((io.leavesfly.tinyai.ndarr.cpu.NdArrayCpu) linear.getBias().data()).buffer;
-            System.arraycopy(biasSrc, 0, biasDst, 0, biasSrc.length);
+            linear.getBias().setData(loraLinear.getOriginalBias().data().copy());
         }
 
         return linear;

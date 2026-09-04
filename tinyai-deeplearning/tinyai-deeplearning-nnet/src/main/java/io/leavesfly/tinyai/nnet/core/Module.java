@@ -299,6 +299,11 @@ public abstract class Module extends Function implements Serializable {
      * 递归收集所有参数及其完整路径
      * <p>
      * 自动构建分层命名路径，如 "encoder.layer1.weight"
+     * <p>
+     * 权重共享去重：同一个 Parameter 实例被多个模块共享时（如 embedding 与 lm_head
+     * 绑定权重），只保留首次出现的路径。对标 PyTorch named_parameters(remove_duplicate=True)
+     * 的默认行为。若不去重，优化器会对同一参数执行多次 update（等效放大学习率并破坏动量），
+     * 梯度裁剪也会重复累加其范数导致过度裁剪。
      *
      * @param prefix  路径前缀
      * @param recurse 是否递归遍历子模块
@@ -306,12 +311,23 @@ public abstract class Module extends Function implements Serializable {
      */
     public Map<String, Parameter> namedParameters(String prefix, boolean recurse) {
         Map<String, Parameter> result = new LinkedHashMap<>();
+        collectNamedParameters(prefix, recurse, result,
+                Collections.newSetFromMap(new IdentityHashMap<>()));
+        return result;
+    }
 
+    /**
+     * 参数收集的内部实现，携带跨递归层级的"已见过参数实例"集合以完成去重
+     */
+    private void collectNamedParameters(String prefix, boolean recurse,
+                                        Map<String, Parameter> result,
+                                        Set<Parameter> seen) {
         // 收集当前模块的参数
         for (Map.Entry<String, Parameter> entry : _parameters.entrySet()) {
             String fullName = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
-            if (entry.getValue() != null) {
-                result.put(fullName, entry.getValue());
+            Parameter param = entry.getValue();
+            if (param != null && seen.add(param)) {
+                result.put(fullName, param);
             }
         }
 
@@ -320,12 +336,10 @@ public abstract class Module extends Function implements Serializable {
             for (Map.Entry<String, Module> entry : _modules.entrySet()) {
                 if (entry.getValue() != null) {
                     String childPrefix = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
-                    result.putAll(entry.getValue().namedParameters(childPrefix, true));
+                    entry.getValue().collectNamedParameters(childPrefix, true, result, seen);
                 }
             }
         }
-
-        return result;
     }
 
     /**

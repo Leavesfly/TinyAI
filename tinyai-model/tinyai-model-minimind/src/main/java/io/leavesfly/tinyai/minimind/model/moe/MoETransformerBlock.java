@@ -158,9 +158,17 @@ public class MoETransformerBlock extends Module {
 
     /**
      * 设置训练模式
+     * <p>
+     * 除自身的 training 标记（用于控制是否计算负载均衡损失）外，
+     * 必须向下传播到 attention / norm / MoE 子模块，
+     * 否则子模块里的 Dropout 在 eval 模式下仍会生效（参考模型前向、推理、验证均会被污染）。
      */
     public void setTraining(boolean training) {
         this.training = training;
+        // MultiHeadAttention 重写了 setTraining，需单独调用以同步其内部标记
+        attention.setTraining(training);
+        // 递归同步所有已注册子模块的 _training（含 MoE 内部的 Dropout）
+        train(training);
     }
 
     /**

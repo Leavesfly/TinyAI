@@ -1,6 +1,7 @@
 package io.leavesfly.tinyai.minimind.training;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.minimind.model.MiniMindBlock;
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
 import io.leavesfly.tinyai.minimind.training.dataset.SFTDataset;
 import io.leavesfly.tinyai.ml.loss.SoftmaxCrossEntropy;
@@ -27,12 +28,18 @@ import java.util.List;
  */
 public class SFTTrainer extends BaseTrainer {
     
+    /**
+     * 标签忽略位标记（对齐 SoftmaxCE 的 ignore_index 约定）
+     */
+    private static final int IGNORE_INDEX = -100;
+    
     private final SFTDataset dataset;
     private final SoftmaxCrossEntropy lossFunction;
     private final Adam optimizer;
     
     private float learningRate;
-    private int accumulationSteps = 1;  // 梯度累积步数
+    private int warmupSteps = 0;          // 学习率预热步数（默认不预热）
+    private int accumulationSteps = 1;    // 梯度累积步数
     private float currentLearningRate;
     private int accumulationCounter = 0;
     
@@ -77,6 +84,14 @@ public class SFTTrainer extends BaseTrainer {
         return this;
     }
     
+    /**
+     * 设置学习率预热步数
+     */
+    public SFTTrainer setWarmupSteps(int warmupSteps) {
+        this.warmupSteps = Math.max(0, warmupSteps);
+        return this;
+    }
+    
     // ==================== 实现抽象方法 ====================
     
     @Override
@@ -87,12 +102,20 @@ public class SFTTrainer extends BaseTrainer {
         SFTDataset.Batch sftBatch = (SFTDataset.Batch) batch;
         
         NdArray inputArray = sftBatch.getInput();
-        NdArray labelArray = sftBatch.getLabels();
+        // 关键：应用数据集提供的 lossMask，将 prompt / padding 位置的标签置为 -100。
+        // SoftmaxCE 对负数标签会前向跳过、反向置零，因此损失仅由 assistant 回复部分贡献。
+        // 若直接用原始 labels，prompt 会被当成学习目标（指令微调退化为续写整段对话），
+        // 且 padding 位的标签是 pad token id(0)，会把模型训成去预测 PAD。
+        NdArray labelArray = applyIgnoreIndex(
+            sftBatch.getLabels(), sftBatch.getLossMask(), IGNORE_INDEX);
         
         Variable input = new Variable(inputArray);
         Variable labels = new Variable(labelArray);
+        labels.setRequireGrad(false);
         
-        Variable logits = model.predict(input);
+        // 前向传播（同时取出 MoE 负载均衡损失；Dense 模式下为 0 常量）
+        MiniMindBlock.MoEOutput output = forwardWithAux(input);
+        Variable logits = output.getOutput();
         
         int[] logitsShape = logits.getValue().getShape().getShapeDims();
         int totalTokens = logitsShape[0] * logitsShape[1];
@@ -101,19 +124,22 @@ public class SFTTrainer extends BaseTrainer {
         Variable logitsReshaped = logits.reshape(Shape.of(totalTokens, vocabSize));
         Variable labelsReshaped = labels.reshape(Shape.of(totalTokens, 1));
         
-        Variable loss = lossFunction.loss(labelsReshaped, logitsReshaped);
+        Variable ceLoss = lossFunction.loss(labelsReshaped, logitsReshaped);
+        Variable loss = withMoeAuxLoss(ceLoss, output);
         float lossValue = loss.getValue().getNumber().floatValue();
         
+        // 损失异常时跳过本 batch：不反向、不推进累积计数，并释放计算图避免泄漏
         if (Float.isNaN(lossValue) || Float.isInfinite(lossValue)) {
             System.err.println("警告: 损失值异常 (" + lossValue + "), 跳过此batch");
+            loss.unChainBackward();
+            model.clearGrads();
+            accumulationCounter = 0;
             return Float.NaN;
         }
         
         // 梯度累积
         if (accumulationSteps > 1) {
-            Variable scaleVar = new Variable(1.0f / accumulationSteps);
-            scaleVar.setRequireGrad(false);
-            loss = loss.mul(scaleVar);
+            loss = loss.mul(constant(1.0f / accumulationSteps));
         }
         
         loss.backward();
@@ -137,8 +163,10 @@ public class SFTTrainer extends BaseTrainer {
      */
     private void updateLearningRate() {
         int totalSteps = maxEpochs * dataset.getBatchCount();
-        double cosineDecay = 0.1 + 0.45 * (1 + Math.cos(Math.PI * currentStep / Math.max(totalSteps, 1)));
-        currentLearningRate = learningRate * (float) cosineDecay;
+        // warmup 步数不得超过总步数，否则 LR 全程停在升温段、永远到不了峰值
+        int effectiveWarmup = Math.min(warmupSteps, totalSteps);
+        currentLearningRate = computeScheduledLearningRate(
+            learningRate, currentStep, totalSteps, effectiveWarmup);
         optimizer.setLearningRate(currentLearningRate);
     }
     
@@ -182,12 +210,5 @@ public class SFTTrainer extends BaseTrainer {
     @Override
     protected String getCheckpointPrefix() {
         return "sft_checkpoint";
-    }
-    
-    /**
-     * 设置检查点目录
-     */
-    public void setCheckpointDir(String checkpointDir) {
-        this.checkpointDir = checkpointDir;
     }
 }

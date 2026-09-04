@@ -366,8 +366,10 @@ public class MiniMindConfig implements Serializable {
         if (getIntermediateSize() <= 0) {
             throw new IllegalStateException("intermediateSize must be positive");
         }
-        if (numKVHeads <= 0 || numHeads % numKVHeads != 0) {
-            throw new IllegalStateException("numHeads must be divisible by numKVHeads");
+        if (numKVHeads <= 0 || numKVHeads > numHeads || numHeads % numKVHeads != 0) {
+            throw new IllegalStateException(
+                    "numHeads(" + numHeads + ") 必须是 numKVHeads(" + numKVHeads
+                            + ") 的整数倍且不小于它");
         }
         if (dropout < 0 || dropout >= 1) {
             throw new IllegalStateException("dropout must be in [0, 1)");
@@ -496,8 +498,27 @@ public class MiniMindConfig implements Serializable {
         return numHeads;
     }
 
+    /**
+     * 设置 Q 头数
+     * <p>
+     * 同时维护 GQA 不变量：{@code numKVHeads} 必须为正、不超过 {@code numHeads}，
+     * 且能整除 {@code numHeads}。单独修改 numHeads 很容易破坏它——例如只把默认的 8
+     * 改成 2，而 numKVHeads 仍是默认的 4，此时 {@code numKVGroups = numHeads / numKVHeads = 0}，
+     * 注意力里的 {@code repeatKV}（条件为 numKVGroups > 1）被跳过，K/V 的头数多于 Q，
+     * 最终在 {@code batchedMatMul} 的 reshape 处抛出难以定位的"形状大小不匹配"。
+     * <p>
+     * 不变量被破坏时<b>静默</b>退化为 MHA（numKVHeads = numHeads）：
+     * "先 setNumHeads 再 setNumKVHeads" 是完全正常的配置序列（中途必然存在不一致的
+     * 瞬态），在这里告警会对合法用法误报；而退化后的值会直接体现在
+     * {@link #toString()} 与 {@link #validate()} 里，并不隐蔽。若显式设置非法的
+     * numKVHeads，{@link #setNumKVHeads(int)} 会直接报错。
+     */
     public void setNumHeads(int numHeads) {
         this.numHeads = numHeads;
+        if (numHeads > 0 && (this.numKVHeads <= 0 || this.numKVHeads > numHeads
+                || numHeads % this.numKVHeads != 0)) {
+            this.numKVHeads = numHeads;
+        }
     }
 
     public int getFfnHiddenSize() {
@@ -517,7 +538,23 @@ public class MiniMindConfig implements Serializable {
         return numKVHeads;
     }
 
+    /**
+     * 设置 KV 头数（GQA）
+     * <p>
+     * 必须满足 {@code 0 < numKVHeads <= numHeads} 且 {@code numHeads % numKVHeads == 0}，
+     * 否则直接报错：这是调用方的显式意图，不适合静默纠正。
+     *
+     * @throws IllegalArgumentException 不构成合法 GQA 配置
+     */
     public void setNumKVHeads(int numKVHeads) {
+        if (numKVHeads <= 0) {
+            throw new IllegalArgumentException("numKVHeads must be positive, got " + numKVHeads);
+        }
+        if (numHeads > 0 && (numKVHeads > numHeads || numHeads % numKVHeads != 0)) {
+            throw new IllegalArgumentException(
+                    "numHeads(" + numHeads + ") 必须是 numKVHeads(" + numKVHeads
+                            + ") 的整数倍且不小于它；请先调用 setNumHeads 再设置 numKVHeads");
+        }
         this.numKVHeads = numKVHeads;
     }
 

@@ -1,6 +1,7 @@
 package io.leavesfly.tinyai.minimind.training.distillation;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.minimind.model.MiniMindBlock;
 import io.leavesfly.tinyai.minimind.model.MiniMindConfig;
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
 import io.leavesfly.tinyai.minimind.training.BaseTrainer;
@@ -44,6 +45,11 @@ import java.util.Map;
  * @since 2025
  */
 public class DistillationTrainer extends BaseTrainer {
+
+    /**
+     * 标签忽略位标记（对齐 SoftmaxCE 的 ignore_index 约定）
+     */
+    private static final int IGNORE_INDEX = -100;
 
     private final MiniMindModel teacherModel;      // 教师模型（冻结）
     private final MiniMindModel studentModel;       // 学生模型（训练）
@@ -109,6 +115,11 @@ public class DistillationTrainer extends BaseTrainer {
      */
     private void freezeTeacherModel() {
         teacherModel.setTraining(false);
+        // 显式关闭教师参数的梯度：反向传播到教师叶子即终止，
+        // 不会被优化器更新，也不会白耗内存累积梯度
+        for (Parameter param : teacherModel.getAllParams().values()) {
+            param.setRequiresGrad(false);
+        }
     }
 
     // ==================== 核心训练逻辑 ====================
@@ -121,81 +132,89 @@ public class DistillationTrainer extends BaseTrainer {
         SFTDataset.Batch sftBatch = (SFTDataset.Batch) batch;
 
         NdArray inputArray = sftBatch.getInput();
-        NdArray labelArray = sftBatch.getLabels();
+        // answer-only：prompt / padding 位置置 -100，CE 与 KL 均仅由回复部分贡献
+        NdArray labelArray = applyIgnoreIndex(
+                sftBatch.getLabels(), sftBatch.getLossMask(), IGNORE_INDEX);
+
+        int batchSize = sftBatch.getBatchSize();
+        int seqLen = sftBatch.getSeqLen();
+        int totalTokens = batchSize * seqLen;
 
         // ========== 1. 学生模型前向传播 ==========
         studentModel.setTraining(true);
         Variable input = new Variable(inputArray);
-        Variable studentLogits = studentModel.predict(input);
+        MiniMindBlock.MoEOutput studentOutput = forwardWithAux(input);
+        Variable studentLogits = studentOutput.getOutput();
+        int vocabSize = studentLogits.getValue().getShape().getDimension(2);
+
+        Variable studentFlat = studentLogits.reshape(Shape.of(totalTokens, vocabSize));
 
         // ========== 2. 教师模型前向传播（无梯度） ==========
         teacherModel.setTraining(false);
-        Variable teacherInput = new Variable(inputArray.copy());
-        Variable teacherLogitsVar = teacherModel.predict(teacherInput);
-        teacherLogitsVar = teacherLogitsVar.detach();
+        Variable teacherLogitsVar = teacherModel.predict(new Variable(inputArray.copy())).detach();
 
         // 如果词表大小不同，截断教师 logits（对标 Python: teacher_logits[..., :vocab_size_student]）
         NdArray teacherLogitsNd = teacherLogitsVar.getValue();
-        int[] studentShape = studentLogits.getValue().getShape().getShapeDims();
-        int[] teacherShape = teacherLogitsNd.getShape().getShapeDims();
-        int studentVocabSize = studentShape[2];
-        int teacherVocabSize = teacherShape[2];
-
-        if (teacherVocabSize > studentVocabSize) {
-            // 截断教师 logits 到学生词表大小
-            teacherLogitsNd = truncateLastDim(teacherLogitsNd, teacherShape, studentVocabSize);
-            teacherLogitsVar = new Variable(teacherLogitsNd);
-            teacherLogitsVar.setRequireGrad(false);
+        int teacherVocabSize = teacherLogitsNd.getShape().getDimension(2);
+        if (teacherVocabSize > vocabSize) {
+            teacherLogitsNd = truncateLastDim(teacherLogitsNd,
+                    teacherLogitsNd.getShape().getShapeDims(), vocabSize);
         }
-
-        // 释放教师模型计算图
+        // 教师已 detach，释放其计算图以节省内存
         teacherLogitsVar.unChainBackward();
+
+        Variable teacherFlat = new Variable(teacherLogitsNd).reshape(Shape.of(totalTokens, vocabSize));
+        teacherFlat.setRequireGrad(false);
 
         // ========== 3. 计算 CE 损失（Ground-Truth） ==========
         Variable labels = new Variable(labelArray);
-        int totalTokens = studentShape[0] * studentShape[1];
-        int vocabSize = studentShape[2];
-
-        Variable logitsReshaped = studentLogits.reshape(Shape.of(totalTokens, vocabSize));
+        labels.setRequireGrad(false);
         Variable labelsReshaped = labels.reshape(Shape.of(totalTokens, 1));
 
-        Variable ceLoss = ceLossFunction.loss(labelsReshaped, logitsReshaped);
-        float ceLossValue = ceLoss.getValue().getNumber().floatValue();
+        Variable ceLoss = ceLossFunction.loss(labelsReshaped, studentFlat);
 
-        // ========== 4. 计算蒸馏损失（KL 散度） ==========
-        float klLossValue = computeKLDivergenceLoss(
-                studentLogits.getValue(), teacherLogitsNd,
-                distillConfig.getTemperature());
+        // ========== 4. 计算蒸馏损失（可微 KL 散度） ==========
+        float[] maskData = sftBatch.getLossMask().getArray();
+        float maskSum = 0.0f;
+        for (float m : maskData) {
+            if (m > 0.5f) {
+                maskSum += 1.0f;
+            }
+        }
+        Variable tokenMask = constant(maskData).reshape(Shape.of(totalTokens, 1));
+
+        Variable klLoss = computeKLDivergenceLossVar(
+                studentFlat, teacherFlat, distillConfig.getTemperature(), tokenMask, maskSum);
 
         // ========== 5. 计算混合损失 ==========
         // 总损失 = alpha * CE + (1-alpha) * KL（对标 Python）
+        // 两项均为可微 Variable，梯度方向同时来自真实标签与教师分布
         float alpha = distillConfig.getAlpha();
-        float totalLossValue = alpha * ceLossValue + (1.0f - alpha) * klLossValue;
+        Variable loss = toScalar(
+                ceLoss.mul(constant(alpha)).add(klLoss.mul(constant(1.0f - alpha))));
+        loss = withMoeAuxLoss(loss, studentOutput);
 
-        // 使用 CE 损失作为可微分的梯度源（KL 部分通过缩放间接体现）
-        // 实际混合：根据 alpha 缩放 CE 损失进行反向传播
-        Variable scaledCeLoss;
-        if (alpha < 1.0f) {
-            // 增加 KL 的贡献：放大 CE 梯度以近似混合效果
-            // 直接使用 totalLoss/ceLoss 的比例缩放
-            float lossScale = (ceLossValue > 1e-8f) ? totalLossValue / ceLossValue : 1.0f;
-            Variable scaleVar = new Variable(lossScale);
-            scaleVar.setRequireGrad(false);
-            scaledCeLoss = ceLoss.mul(scaleVar);
-        } else {
-            scaledCeLoss = ceLoss;
+        float ceLossValue = ceLoss.getValue().getNumber().floatValue();
+        float klLossValue = klLoss.getValue().getNumber().floatValue();
+        float totalLossValue = loss.getValue().getNumber().floatValue();
+
+        // 损失异常时跳过本 batch：不反向、不推进累积计数，并释放计算图
+        if (Float.isNaN(totalLossValue) || Float.isInfinite(totalLossValue)) {
+            System.err.println("警告: 蒸馏损失异常 (" + totalLossValue + "), 跳过此batch");
+            loss.unChainBackward();
+            model.clearGrads();
+            accumulationCounter = 0;
+            return Float.NaN;
         }
 
         // 梯度累积
         int accumSteps = distillConfig.getAccumulationSteps();
         if (accumSteps > 1) {
-            Variable accumScale = new Variable(1.0f / accumSteps);
-            accumScale.setRequireGrad(false);
-            scaledCeLoss = scaledCeLoss.mul(accumScale);
+            loss = loss.mul(constant(1.0f / accumSteps));
         }
 
         // ========== 6. 反向传播 ==========
-        scaledCeLoss.backward();
+        loss.backward();
 
         accumulationCounter++;
 
@@ -207,7 +226,7 @@ public class DistillationTrainer extends BaseTrainer {
         }
 
         // 断开计算图
-        scaledCeLoss.unChainBackward();
+        loss.unChainBackward();
 
         // 记录损失
         ceLossHistory.add(ceLossValue);
@@ -217,7 +236,7 @@ public class DistillationTrainer extends BaseTrainer {
     }
 
     /**
-     * 计算 KL 散度蒸馏损失（纯数值计算，不需要梯度）
+     * 计算可微的 KL 散度蒸馏损失
      * <p>
      * 对标 Python distillation_loss():
      * <pre>
@@ -226,71 +245,52 @@ public class DistillationTrainer extends BaseTrainer {
      * kl = KL_div(student_log_probs, teacher_probs, reduction='batchmean')
      * return T² * kl
      * </pre>
+     * <p>
+     * 实现要点：
+     * 1. 学生侧全程使用 Variable 算子，保证 KL 对 logits 可微 —— 这是蒸馏真正生效的前提。
+     *    （旧实现用纯 float 循环算 KL，再用 totalLoss/ceLoss 的比例去缩放 CE 梯度，
+     *    结果梯度方向 100% 来自 CE，教师分布的信息完全没有传给学生）
+     * 2. 教师侧已 detach，softMax/logSoftmax 均不产生梯度
+     * 3. 用 sumTo([N,1]) 先在 vocab 维归约得到逐 token KL，再乘 token 掩码求和，
+     *    避开构造 [N,V] 的掩码广播张量（省 vocabSize 倍内存）
+     * 4. 归约采用"有效 token 均值"，与 CE 的 ignore_index 均值口径保持一致
      *
-     * @param studentLogits 学生模型 logits [B, L, V]
-     * @param teacherLogits 教师模型 logits [B, L, V]
-     * @param temperature   蒸馏温度
-     * @return KL 散度损失（已乘以 T²）
+     * @param studentFlat 学生 logits [N, V]（保留计算图）
+     * @param teacherFlat 教师 logits [N, V]（已 detach）
+     * @param temperature 蒸馏温度
+     * @param tokenMask   token 级掩码 [N, 1]，1 表示参与蒸馏
+     * @param maskSum     掩码中 1 的个数
+     * @return KL 散度损失标量（已乘以 T²）
      */
-    private float computeKLDivergenceLoss(NdArray studentLogits, NdArray teacherLogits,
-                                           float temperature) {
-        float[] studentData = studentLogits.getArray();
-        float[] teacherData = teacherLogits.getArray();
+    private Variable computeKLDivergenceLossVar(Variable studentFlat, Variable teacherFlat,
+                                                float temperature, Variable tokenMask,
+                                                float maskSum) {
+        Variable temperatureVar = constant(temperature);
 
-        int[] shape = studentLogits.getShape().getShapeDims();
-        int batchSize = shape[0];
-        int seqLen = shape[1];
-        int vocabSize = shape[2];
+        // 温度缩放
+        Variable studentScaled = studentFlat.div(temperatureVar);
+        Variable teacherScaled = teacherFlat.div(temperatureVar);
 
-        double klSum = 0.0;
-        int tokenCount = batchSize * seqLen;
+        // 学生 log 概率（可微）与教师概率/对数概率（无梯度）
+        Variable studentLogProbs = studentScaled.logSoftmax(-1);
+        Variable teacherLogProbs = teacherScaled.logSoftmax(-1);
+        Variable teacherProbs = teacherScaled.softMax();
 
-        // 逐 token 计算 KL 散度
-        for (int b = 0; b < batchSize; b++) {
-            for (int s = 0; s < seqLen; s++) {
-                int offset = (b * seqLen + s) * vocabSize;
+        // KL(teacher || student) = Σ_v p_teacher * (log p_teacher - log p_student)
+        Variable diff = teacherLogProbs.sub(studentLogProbs);
+        Variable weighted = teacherProbs.mul(diff);                        // [N, V]
+        Variable perTokenKl = weighted.sumTo(Shape.of(tokenMask.getValue()
+                .getShape().getDimension(0), 1));                          // [N, 1]
 
-                // 1. 温度缩放后的 softmax（教师）和 log_softmax（学生）
-                // 找最大值（数值稳定性）
-                float teacherMax = Float.NEGATIVE_INFINITY;
-                float studentMax = Float.NEGATIVE_INFINITY;
-                for (int v = 0; v < vocabSize; v++) {
-                    float tVal = teacherData[offset + v] / temperature;
-                    float sVal = studentData[offset + v] / temperature;
-                    if (tVal > teacherMax) teacherMax = tVal;
-                    if (sVal > studentMax) studentMax = sVal;
-                }
+        Variable maskedKl = perTokenKl.mul(tokenMask);                     // [N, 1]
+        Variable klSum = maskedKl.sum();                                   // 标量
 
-                // 计算 exp 和 sum
-                double teacherExpSum = 0.0;
-                double studentExpSum = 0.0;
-                for (int v = 0; v < vocabSize; v++) {
-                    teacherExpSum += Math.exp(teacherData[offset + v] / temperature - teacherMax);
-                    studentExpSum += Math.exp(studentData[offset + v] / temperature - studentMax);
-                }
-
-                double teacherLogSum = Math.log(teacherExpSum) + teacherMax;
-                double studentLogSum = Math.log(studentExpSum) + studentMax;
-
-                // 2. KL(teacher || student) = sum(teacher_prob * (log(teacher_prob) - log(student_prob)))
-                for (int v = 0; v < vocabSize; v++) {
-                    double teacherLogProb = teacherData[offset + v] / temperature - teacherLogSum;
-                    double studentLogProb = studentData[offset + v] / temperature - studentLogSum;
-
-                    double teacherProb = Math.exp(teacherLogProb);
-
-                    if (teacherProb > 1e-10) {
-                        klSum += teacherProb * (teacherLogProb - studentLogProb);
-                    }
-                }
-            }
-        }
-
-        // batchmean reduction: KL / batchSize
-        double klMean = klSum / batchSize;
+        float divisor = maskSum > 0 ? maskSum : 1.0f;
+        Variable klMean = klSum.div(constant(divisor));
 
         // 温度平方缩放（对标 Python: return temperature ** 2 * kl）
-        return (float) (temperature * temperature * klMean);
+        // toScalar 把框架的 [1,1] 标量归一到 [1]，与 CE 项形状一致
+        return toScalar(klMean.mul(constant(temperature * temperature)));
     }
 
     /**
@@ -320,8 +320,8 @@ public class DistillationTrainer extends BaseTrainer {
      */
     private void updateLearningRate() {
         int totalSteps = maxEpochs * dataset.getBatchCount();
-        double cosineDecay = 0.1 + 0.45 * (1 + Math.cos(Math.PI * currentStep / Math.max(totalSteps, 1)));
-        currentLearningRate = distillConfig.getLearningRate() * (float) cosineDecay;
+        currentLearningRate = computeScheduledLearningRate(
+                distillConfig.getLearningRate(), currentStep, totalSteps, 0);
         optimizer.setLearningRate(currentLearningRate);
     }
 
@@ -476,12 +476,5 @@ public class DistillationTrainer extends BaseTrainer {
 
     public MiniMindModel getTeacherModel() {
         return teacherModel;
-    }
-
-    /**
-     * 设置检查点目录
-     */
-    public void setCheckpointDir(String checkpointDir) {
-        this.checkpointDir = checkpointDir;
     }
 }

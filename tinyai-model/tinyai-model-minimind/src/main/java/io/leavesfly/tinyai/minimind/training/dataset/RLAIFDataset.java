@@ -81,14 +81,25 @@ public class RLAIFDataset {
         private final int numCandidates;
         private final String[] prompts;            // 保留原始prompt用于奖励计算
         private final String[][] candidateTexts;   // [batch_size, K]
+        /**
+         * 逐样本标记"是否带有预设奖励"，旧构造路径下为 null
+         */
+        private final boolean[] presetRewardFlags;
 
         public Batch(NdArray[] candidateInputs, NdArray[] candidateLabels,
                      float[][] rewards, String[] prompts, String[][] candidateTexts) {
+            this(candidateInputs, candidateLabels, rewards, prompts, candidateTexts, null);
+        }
+
+        public Batch(NdArray[] candidateInputs, NdArray[] candidateLabels,
+                     float[][] rewards, String[] prompts, String[][] candidateTexts,
+                     boolean[] presetRewardFlags) {
             this.candidateInputs = candidateInputs;
             this.candidateLabels = candidateLabels;
             this.rewards = rewards;
             this.prompts = prompts;
             this.candidateTexts = candidateTexts;
+            this.presetRewardFlags = presetRewardFlags;
             this.batchSize = candidateInputs[0].getShape().getShapeDims()[0];
             this.numCandidates = candidateInputs.length;
         }
@@ -103,6 +114,30 @@ public class RLAIFDataset {
 
         public float[][] getRewards() {
             return rewards;
+        }
+
+        /**
+         * 第 i 个样本是否带有预设奖励
+         * <p>
+         * 为什么需要这个标记：{@link #getRewards()} 对"没有预设奖励"的槽位填的是 0.0f，
+         * 而 0.0f 同样可能是一个合法的预设奖励值。调用方若用 {@code rewards[i][k] != 0.0f}
+         * 来判断，就会把"预设奖励恰好为 0"误判成"没有预设"，从而用规则奖励把它覆盖掉。
+         * <p>
+         * 旧构造路径（flags 为 null）退化为"该行存在非零奖励"的启发式判断，保持向后兼容。
+         */
+        public boolean hasPresetReward(int i) {
+            if (presetRewardFlags != null) {
+                return i < presetRewardFlags.length && presetRewardFlags[i];
+            }
+            if (i >= rewards.length) {
+                return false;
+            }
+            for (float r : rewards[i]) {
+                if (r != 0.0f) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         public int getBatchSize() {
@@ -205,6 +240,8 @@ public class RLAIFDataset {
         float[][] batchRewards = new float[actualBatchSize][maxCandidates];
         String[] batchPrompts = new String[actualBatchSize];
         String[][] batchCandidateTexts = new String[actualBatchSize][maxCandidates];
+        // 逐样本记录奖励是否来自数据集预设，供训练器区分"预设为 0"与"未预设"
+        boolean[] presetRewardFlags = new boolean[actualBatchSize];
 
         // 为每个候选位置创建数组
         for (int k = 0; k < maxCandidates; k++) {
@@ -240,8 +277,12 @@ public class RLAIFDataset {
                 }
 
                 // 奖励(如果有预设奖励)
-                if (sample.getRewards() != null && candidateIdx < sample.getRewards().length) {
-                    batchRewards[i][k] = sample.getRewards()[candidateIdx];
+                float[] presetRewards = sample.getRewards();
+                if (presetRewards != null && presetRewards.length > 0) {
+                    // 与候选一样做下标钳制，避免奖励数组比候选数组短时静默退化为 0
+                    int rewardIdx = Math.min(candidateIdx, presetRewards.length - 1);
+                    batchRewards[i][k] = presetRewards[rewardIdx];
+                    presetRewardFlags[i] = true;
                 } else {
                     batchRewards[i][k] = 0.0f;  // 默认奖励,训练时重新计算
                 }
@@ -251,7 +292,8 @@ public class RLAIFDataset {
             candidateLabels[k] = NdArray.of(labels);
         }
 
-        return new Batch(candidateInputs, candidateLabels, batchRewards, batchPrompts, batchCandidateTexts);
+        return new Batch(candidateInputs, candidateLabels, batchRewards, batchPrompts,
+                batchCandidateTexts, presetRewardFlags);
     }
 
     /**

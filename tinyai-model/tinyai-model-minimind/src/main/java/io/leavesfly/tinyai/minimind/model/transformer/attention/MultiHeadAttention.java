@@ -98,6 +98,15 @@ public class MultiHeadAttention extends Module {
         this.numKVGroups = numHeads / numKVHeads;
         this.dropoutRate = config.getDropout();
 
+        // GQA 不变量兜底校验：若 numKVGroups 退化为 0，repeatKV（条件 numKVGroups > 1）会被跳过，
+        // K/V 的头数就会多于 Q，直到 batchedMatMul 的 reshape 才报出"形状大小不匹配"。
+        // 在这里立即报错，把难以定位的形状异常换成可操作的配置提示。
+        if (numKVHeads <= 0 || numKVHeads > numHeads || numHeads % numKVHeads != 0) {
+            throw new IllegalArgumentException(
+                "非法的 GQA 配置: numHeads(" + numHeads + ") 必须是 numKVHeads(" + numKVHeads
+                + ") 的整数倍且不小于它");
+        }
+
         // Q 投影: hiddenSize -> numHeads * headDim
         this.queryProj = new Linear("query_proj", hiddenSize, numHeads * headDim, false);
         // K 投影: hiddenSize -> numKVHeads * headDim（GQA: KV 维度更小）
@@ -363,6 +372,20 @@ public class MultiHeadAttention extends Module {
     }
     
     /**
+     * 获取 Key 投影层
+     */
+    public Module getKeyProj() {
+        return keyProj;
+    }
+    
+    /**
+     * 获取 Output 投影层
+     */
+    public Module getOutputProj() {
+        return outputProj;
+    }
+    
+    /**
      * 设置 Query 投影层（用于 LoRA 注入）
      */
     public void setQueryProj(Module queryProj) {
@@ -383,6 +406,30 @@ public class MultiHeadAttention extends Module {
         _modules.put("value_proj", valueProj);
         if (valueProj != null) {
             valueProj.setParent(this);
+        }
+    }
+    
+    /**
+     * 设置 Key 投影层（用于 LoRA 注入）
+     */
+    public void setKeyProj(Module keyProj) {
+        this.keyProj = keyProj;
+        // 直接替换模块（绕过 registerModule 的重复检查）
+        _modules.put("key_proj", keyProj);
+        if (keyProj != null) {
+            keyProj.setParent(this);
+        }
+    }
+    
+    /**
+     * 设置 Output 投影层（用于 LoRA 注入）
+     */
+    public void setOutputProj(Module outputProj) {
+        this.outputProj = outputProj;
+        // 直接替换模块（绕过 registerModule 的重复检查）
+        _modules.put("output_proj", outputProj);
+        if (outputProj != null) {
+            outputProj.setParent(this);
         }
     }
     

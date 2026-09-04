@@ -1,8 +1,8 @@
 package io.leavesfly.tinyai.minimind.training.rlaif.grpo;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.minimind.model.MiniMindBlock;
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
-
 import io.leavesfly.tinyai.minimind.training.dataset.RLAIFDataset;
 import io.leavesfly.tinyai.minimind.training.rlaif.BaseRLTrainer;
 import io.leavesfly.tinyai.ml.optimize.Adam;
@@ -20,13 +20,21 @@ import java.util.List;
  * 3. 适合大规模候选场景 (K >> 2)
  * <p>
  * 训练流程:
- * 1. 收集 K 个候选回答, 用旧策略计算 logProb (detach, 不需要梯度)
- * 2. 计算组相对优势 (纯数值, 不需要梯度)
- * 3. 多轮 GRPO 更新: 用新策略前向传播, 通过 Variable 算子计算损失, 反向传播更新 actor
+ * 1. 收集 K 个候选回答, 用旧策略计算逐样本 logProb (detach, 不需要梯度)
+ * 2. 计算组相对优势 [batchSize, K] (纯数值, 不需要梯度)
+ * 3. 多轮 GRPO 更新: 用新策略前向传播, 逐样本计算 clipped surrogate, 反向传播更新 actor
  * <p>
  * 计算图连通性保证:
- * actor.predict() → computeLogProb() → grpoLoss.computeCandidateLoss() → totalLoss.backward()
+ * actor.predict() → computePerSampleLogProbs() → grpoLoss.computeCandidateLoss() → loss.backward()
  * 整条链路全部通过 Variable 算子连接, 梯度可以正确回传到 actor 参数。
+ * <p>
+ * 内存与正确性策略: 每个候选单独 backward（梯度在 actor 参数上自然累积），
+ * 全部候选完成后再统一裁剪与更新。这样既避免同时持有 K 份计算图，
+ * 也让 K 个候选的梯度按 1/K 等权合并，等价于对候选维度求平均。
+ * <p>
+ * 训练循环、日志、检查点、NaN 保护、结束后复位 eval 模式均复用 {@link BaseRLTrainer}
+ * 的基类实现，本类不再重复声明 maxEpochs/currentStep/lossHistory 等状态字段
+ * （重复声明会遮蔽基类字段，导致基类的检查点保存与日志读到永远为 0/空的另一份状态）。
  *
  * @author leavesfly
  * @since 2024
@@ -40,13 +48,12 @@ public class GRPOTrainer extends BaseRLTrainer {
 
     private final Adam actorOptimizer;
 
-    private int maxEpochs;
-    private int logInterval;
-    private int currentEpoch;
-    private int currentStep;
-
-    private final List<Float> lossHistory;
     private final List<Float> rewardHistory;
+
+    /**
+     * 是否已经就"全零奖励"告过警（只警告一次，避免刷屏）
+     */
+    private boolean zeroRewardWarned = false;
 
     /**
      * 构造函数
@@ -65,12 +72,13 @@ public class GRPOTrainer extends BaseRLTrainer {
         this.actorOptimizer = new Adam(actor, config.getActorLearningRate(),
                 0.9f, 0.999f, 1e-8f);
 
+        // 训练配置写入基类字段，保证基类的训练循环/日志/检查点逻辑读到同一份状态
         this.maxEpochs = 1;
         this.logInterval = 10;
-        this.currentEpoch = 0;
-        this.currentStep = 0;
+        this.saveInterval = 500;
+        this.maxGradNorm = config.getMaxGradNorm();
+        this.checkpointDir = "./checkpoints/minimind/grpo";
 
-        this.lossHistory = new ArrayList<>();
         this.rewardHistory = new ArrayList<>();
     }
 
@@ -83,99 +91,65 @@ public class GRPOTrainer extends BaseRLTrainer {
         return this;
     }
 
-    /**
-     * 设置检查点目录
-     */
-    public GRPOTrainer setCheckpointDir(String checkpointDir) {
-        this.checkpointDir = checkpointDir;
-        return this;
-    }
+    // ==================== 核心训练逻辑 ====================
 
     /**
-     * 训练
+     * 训练一步：采集旧策略 logProb 与优势，再执行 grpoEpochs 轮更新
      */
-    public void train() {
-        System.out.println("=".repeat(70));
-        System.out.println("开始GRPO训练");
-        System.out.println("配置: " + config);
-        System.out.println("样本数: " + dataset.getSampleCount());
-        System.out.println("=".repeat(70));
+    @Override
+    protected float trainStep(Object batch) {
+        RLAIFDataset.Batch rlBatch = (RLAIFDataset.Batch) batch;
 
-        createCheckpointDir();
+        // 1. 用旧策略收集逐样本 logProb（detach, 不需要梯度）
+        float[][] oldLogProbs = collectOldLogProbs(rlBatch);
 
-        for (currentEpoch = 0; currentEpoch < maxEpochs; currentEpoch++) {
-            trainOneEpoch();
+        // 2. 计算组相对优势（纯数值, 不需要梯度）
+        float[][] rewards = rlBatch.getRewards();
+        warnIfAllRewardsZero(rewards);
+        float[][] advantages = grpoLoss.computeGroupRelativeAdvantages(rewards);
+
+        // 记录平均奖励，便于观察 RL 是否真的在提升
+        rewardHistory.add(averageReward(rewards));
+
+        // 3. 多轮 GRPO 更新（复用同一批 rollout，每轮各自完成一次参数更新）
+        int innerEpochs = Math.max(1, config.getGrpoEpochs());
+        float totalLoss = 0.0f;
+        for (int epoch = 0; epoch < innerEpochs; epoch++) {
+            totalLoss += grpoUpdate(rlBatch, oldLogProbs, advantages);
         }
-
-        System.out.println("\nGRPO训练完成!");
+        return totalLoss / innerEpochs;
     }
 
     /**
-     * 训练一个 epoch
-     */
-    protected void trainOneEpoch() {
-        dataset.prepare(true);
-        float epochLoss = 0.0f;
-        int batchCount = 0;
-
-        while (dataset.hasNext()) {
-            RLAIFDataset.Batch batch = dataset.nextBatch();
-
-            // 1. 用旧策略收集 logProb（detach, 不需要梯度）
-            float[] oldLogProbs = collectOldLogProbs(batch);
-
-            // 2. 计算组相对优势（纯数值, 不需要梯度）
-            float[][] rewards = batch.getRewards();
-            float[][] advantages = grpoLoss.computeGroupRelativeAdvantages(rewards);
-
-            // 3. 多轮 GRPO 更新
-            float avgLoss = 0.0f;
-            for (int epoch = 0; epoch < config.getGrpoEpochs(); epoch++) {
-                float loss = grpoUpdate(batch, oldLogProbs, advantages);
-                avgLoss += loss;
-            }
-            avgLoss /= config.getGrpoEpochs();
-
-            epochLoss += avgLoss;
-            batchCount++;
-            currentStep++;
-            lossHistory.add(avgLoss);
-
-            if (currentStep % logInterval == 0) {
-                System.out.printf("Epoch %d | Step %d | Loss: %.4f%n",
-                        currentEpoch + 1, currentStep, avgLoss);
-            }
-        }
-
-        System.out.printf("Epoch %d 完成 | 平均损失: %.4f%n",
-                currentEpoch + 1, epochLoss / batchCount);
-
-        dataset.reset();
-    }
-
-    /**
-     * 收集旧策略的对数概率（detach, 不参与计算图）
+     * 收集旧策略的逐样本对数概率（detach, 不参与计算图）
      * <p>
-     * 旧策略的 logProb 只需要数值, 不需要梯度,
-     * 所以提取为 float 是正确的。
+     * 旧策略的 logProb 只需要数值, 不需要梯度。
+     * 必须保留 batch 维：优势是 per-sample 信号，与该样本自己的 logProb 相乘才有意义。
+     *
+     * @return [batchSize][numCandidates]
      */
-    private float[] collectOldLogProbs(RLAIFDataset.Batch batch) {
+    private float[][] collectOldLogProbs(RLAIFDataset.Batch batch) {
         actor.setTraining(false);
 
         int numCandidates = batch.getNumCandidates();
+        int batchSize = batch.getBatchSize();
         NdArray[] candidateInputs = batch.getCandidateInputs();
         NdArray[] candidateLabels = batch.getCandidateLabels();
 
-        float[] oldLogProbs = new float[numCandidates];
+        float[][] oldLogProbs = new float[batchSize][numCandidates];
 
         for (int k = 0; k < numCandidates; k++) {
             Variable inputVar = new Variable(candidateInputs[k]);
             Variable labelVar = new Variable(candidateLabels[k]);
+            labelVar.setRequireGrad(false);
 
-            Variable logits = actor.predict(inputVar);
-            Variable logProb = computeLogProb(logits, labelVar);
-
-            oldLogProbs[k] = logProb.getValue().getNumber().floatValue();
+            // detach：旧策略只需要数值，不必保留计算图
+            Variable logits = actor.predict(inputVar).detach();
+            float[] perSample = computePerSampleLogProbValues(logits, labelVar);
+            for (int i = 0; i < perSample.length && i < batchSize; i++) {
+                oldLogProbs[i][k] = perSample[i];
+            }
+            logits.unChainBackward();
         }
 
         return oldLogProbs;
@@ -184,90 +158,132 @@ public class GRPOTrainer extends BaseRLTrainer {
     /**
      * GRPO 更新（计算图连通版本）
      * <p>
-     * 关键修复: 新策略的 logProb 必须保持为 Variable, 不能提取为 float,
+     * 关键: 新策略的 logProb 必须保持为 Variable（且保留 batch 维），不能提取为 float,
      * 否则计算图断裂, 梯度无法回传到 actor 参数。
      * <p>
      * 计算图链路:
      * actor.predict(input) → logits [Variable, 有 creator]
-     *   → computeLogProb(logits, label) → newLogProb [Variable, 有 creator]
-     *     → grpoLoss.computeCandidateLoss(newLogProb, oldLogProb, advantage) → candidateLoss [Variable, 有 creator]
-     *       → totalLoss.backward() → 梯度回传到 actor 参数 ✓
+     *   → computePerSampleLogProbs(logits, label) → newLogProbs [batch] [Variable, 有 creator]
+     *     → grpoLoss.computeCandidateLoss(newLogProbs, oldLogProbs, advantages) → 标量损失
+     *       → loss.backward() → 梯度回传到 actor 参数 ✓
      *
      * @param batch       当前批次数据
-     * @param oldLogProbs 旧策略的 logProb（float[], 已 detach）
-     * @param advantages  组相对优势 [batchSize, numCandidates]
+     * @param oldLogProbs 旧策略的逐样本 logProb [batchSize][numCandidates]（已 detach）
+     * @param advantages  组相对优势 [batchSize][numCandidates]
      * @return 损失值
      */
-    private float grpoUpdate(RLAIFDataset.Batch batch, float[] oldLogProbs,
+    private float grpoUpdate(RLAIFDataset.Batch batch, float[][] oldLogProbs,
                              float[][] advantages) {
         actor.setTraining(true);
+        actor.clearGrads();
 
         int numCandidates = batch.getNumCandidates();
         int batchSize = batch.getBatchSize();
         NdArray[] candidateInputs = batch.getCandidateInputs();
         NdArray[] candidateLabels = batch.getCandidateLabels();
 
-        // 累加所有候选的策略损失, 保持计算图连通
-        Variable totalPolicyLoss = null;
-        Variable lastLogits = null;
-        int candidateCount = 0;
+        float entropyCoef = config.getEntropyCoef();
+        float lossSum = 0.0f;
+        int validCandidates = 0;
 
         for (int k = 0; k < numCandidates; k++) {
             Variable inputVar = new Variable(candidateInputs[k]);
             Variable labelVar = new Variable(candidateLabels[k]);
+            labelVar.setRequireGrad(false);
 
-            // 新策略前向传播, logits 是 Variable, 有 creator, 计算图连通
-            Variable logits = actor.predict(inputVar);
-            lastLogits = logits;
+            // 新策略前向传播（同时取出 MoE 负载均衡损失；Dense 模式为 0 常量）
+            MiniMindBlock.MoEOutput output = forwardWithAux(inputVar);
+            Variable logits = output.getOutput();
 
-            // computeLogProb 返回 Variable, 计算图连通
-            Variable newLogProb = computeLogProb(logits, labelVar);
+            // 逐样本 logProb [batch]，计算图连通
+            Variable newLogProbs = computePerSampleLogProbs(logits, labelVar);
 
-            // 对 batch 中每个样本计算损失并累加
-            for (int i = 0; i < batchSize; i++) {
-                float oldLogProb = oldLogProbs[k];
-                float advantage = advantages[i][k];
+            // 该候选的旧策略 logProb 与优势（均为 per-sample 常量）
+            float[] oldLogProbsK = column(oldLogProbs, k, batchSize);
+            float[] advantagesK = column(advantages, k, batchSize);
 
-                // computeCandidateLoss 全部通过 Variable 算子, 计算图连通
-                Variable candidateLoss = grpoLoss.computeCandidateLoss(
-                        newLogProb, oldLogProb, advantage);
+            Variable policyLoss = grpoLoss.computeCandidateLoss(
+                    newLogProbs, oldLogProbsK, advantagesK);
 
-                totalPolicyLoss = (totalPolicyLoss == null)
-                        ? candidateLoss
-                        : totalPolicyLoss.add(candidateLoss);
-                candidateCount++;
+            // 熵正则化（鼓励探索）：标量平均熵，避免损失退化为非标量张量
+            Variable entropy = computeScalarEntropy(logits);
+            Variable loss = policyLoss.sub(entropy.mul(constant(entropyCoef)));
+
+            // 并入 MoE 辅助损失，并按候选数等权平均
+            loss = withMoeAuxLoss(loss, output).mul(constant(1.0f / numCandidates));
+
+            float lossValue = loss.getValue().getNumber().floatValue();
+            if (Float.isNaN(lossValue) || Float.isInfinite(lossValue)) {
+                System.err.println("警告: GRPO 候选 " + k + " 损失异常 (" + lossValue + "), 跳过");
+                loss.unChainBackward();
+                continue;
             }
+
+            // 逐候选反向传播：梯度在 actor 参数上累积，避免同时持有 K 份计算图
+            loss.backward();
+            loss.unChainBackward();
+
+            lossSum += lossValue;
+            validCandidates++;
         }
 
-        // 平均策略损失
-        Variable count = new Variable(NdArray.of((float) candidateCount));
-        count.setRequireGrad(false);
-        Variable avgPolicyLoss = totalPolicyLoss.div(count);
-
-        // 熵正则化（鼓励探索, 使用最后一个 logits 的熵作为近似）
-        Variable entropyLoss = grpoLoss.computeEntropyLoss(lastLogits);
-        Variable entropyCoef = new Variable(NdArray.of(config.getEntropyCoef()));
-        entropyCoef.setRequireGrad(false);
-        Variable totalLoss = avgPolicyLoss.sub(entropyLoss.mul(entropyCoef));
-
-        // 反向传播: totalLoss → avgPolicyLoss → candidateLoss → newLogProb → logits → actor 参数
-        actor.clearGrads();
-        totalLoss.backward();
-
-        // 梯度裁剪
+        // 全部候选累积完成后统一裁剪与更新
         clipGradients(actor, config.getMaxGradNorm());
-
-        // 更新 actor 参数
         actorOptimizer.update();
+        actor.clearGrads();
 
-        float lossValue = totalLoss.getValue().getNumber().floatValue();
-        totalLoss.unChainBackward();
-
-        return lossValue;
+        return validCandidates > 0 ? lossSum / validCandidates : 0.0f;
     }
 
-    public List<Float> getLossHistory() {
-        return new ArrayList<>(lossHistory);
+    // ==================== 工具方法 ====================
+
+    /**
+     * 取出 [batchSize][numCandidates] 矩阵的第 k 列
+     */
+    private static float[] column(float[][] matrix, int k, int batchSize) {
+        float[] column = new float[batchSize];
+        for (int i = 0; i < batchSize; i++) {
+            column[i] = (i < matrix.length && k < matrix[i].length) ? matrix[i][k] : 0.0f;
+        }
+        return column;
+    }
+
+    /**
+     * 全零奖励时给出一次性警告
+     * <p>
+     * GRPO 的优势来自组内奖励差异：若整批奖励都是 0（典型原因是
+     * {@code RLAIFDataset.addSample(prompt, candidates)} 没有传奖励，数据集会填 0.0f），
+     * 优势全为 0，策略梯度不会产生任何有效更新——训练看起来在跑，实际是空转。
+     */
+    private void warnIfAllRewardsZero(float[][] rewards) {
+        if (zeroRewardWarned) {
+            return;
+        }
+        for (float[] row : rewards) {
+            for (float r : row) {
+                if (r != 0.0f) {
+                    return;
+                }
+            }
+        }
+        zeroRewardWarned = true;
+        System.err.println("警告: GRPO 本批次全部奖励为 0，组相对优势将全为 0，策略梯度不会产生任何更新；"
+                + "请确认 RLAIFDataset.addSample 传入了奖励，或改用带规则奖励兜底的 SPOTrainer");
+    }
+
+    /**
+     * 计算平均奖励
+     */
+    private static float averageReward(float[][] rewards) {
+        float sum = 0.0f;
+        int count = 0;
+        for (float[] row : rewards) {
+            for (float r : row) {
+                sum += r;
+                count++;
+            }
+        }
+        return count > 0 ? sum / count : 0.0f;
     }
 
     public List<Float> getRewardHistory() {
@@ -277,21 +293,36 @@ public class GRPOTrainer extends BaseRLTrainer {
     // ==================== BaseTrainer 抽象方法实现 ====================
 
     @Override
-    protected float trainStep(Object batch) {
-        RLAIFDataset.Batch rlBatch = (RLAIFDataset.Batch) batch;
-        float[] oldLogProbs = collectOldLogProbs(rlBatch);
-        float[][] advantages = grpoLoss.computeGroupRelativeAdvantages(rlBatch.getRewards());
-        return grpoUpdate(rlBatch, oldLogProbs, advantages);
-    }
-
-    @Override
     protected String getTrainerName() {
         return "GRPO";
     }
 
     @Override
     protected void printTrainingInfo() {
-        System.out.println("GRPO训练器 | 配置: " + config);
+        System.out.println("=".repeat(70));
+        System.out.println("开始GRPO训练");
+        System.out.println("配置: " + config);
+        System.out.println("样本数: " + dataset.getSampleCount());
+        System.out.println("最大轮次: " + maxEpochs);
+        System.out.println("=".repeat(70));
+    }
+
+    @Override
+    protected void printTrainingLog() {
+        double avgLoss = lossHistory.stream()
+                .skip(Math.max(0, lossHistory.size() - logInterval))
+                .mapToDouble(Float::doubleValue)
+                .average()
+                .orElse(0.0);
+
+        double avgReward = rewardHistory.stream()
+                .skip(Math.max(0, rewardHistory.size() - logInterval))
+                .mapToDouble(Float::doubleValue)
+                .average()
+                .orElse(0.0);
+
+        System.out.printf("Epoch %d/%d | Step %d | Loss: %.4f | Reward: %.4f%n",
+                currentEpoch + 1, maxEpochs, currentStep, avgLoss, avgReward);
     }
 
     @Override

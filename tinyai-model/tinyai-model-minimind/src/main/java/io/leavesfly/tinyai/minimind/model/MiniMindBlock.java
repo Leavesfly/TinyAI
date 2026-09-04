@@ -185,6 +185,9 @@ public class MiniMindBlock extends Module {
         // 3. 最终归一化
         x = finalNorm.forward(x);
 
+        // 保留最终隐藏状态（lm_head 之前），供 PPO Critic 等需要 hidden state 的场景使用
+        Variable hiddenState = x;
+
         // 4. LM Head
         Variable logits = lmHead.forward(x);
 
@@ -194,7 +197,7 @@ public class MiniMindBlock extends Module {
             totalBalanceLossVar.setRequireGrad(false);
         }
 
-        return new MoEOutput(logits, totalBalanceLoss, totalBalanceLossVar);
+        return new MoEOutput(logits, totalBalanceLoss, totalBalanceLossVar, hiddenState);
     }
 
     /**
@@ -213,6 +216,13 @@ public class MiniMindBlock extends Module {
 
     /**
      * 创建 KV-Cache 列表
+     * <p>
+     * 缓存的头数必须是 {@code numKVHeads} 而不是 {@code numHeads}：
+     * {@code MultiHeadAttention.forwardWithCache} 写入的是 {@code repeatKV} <b>之前</b>的
+     * K/V，形状为 {@code [batch, numKVHeads, seqLen, headDim]}。在 GQA（numKVHeads < numHeads）下
+     * 若按 numHeads 分配，{@code KVCache.copyToBuffer} 会按过多的头数去读传入数组，
+     * 直接抛 {@code ArrayIndexOutOfBoundsException: arraycopy: last source index ...}，
+     * 使所有生成/推理在开启 GQA 时均不可用。
      *
      * @param batchSize 批次大小
      * @return KV-Cache 列表
@@ -222,8 +232,8 @@ public class MiniMindBlock extends Module {
         for (int i = 0; i < config.getNumLayers(); i++) {
             KVCache cache = new KVCache(
                     batchSize,
-                    config.getNumHeads(),
-                    config.getHiddenSize() / config.getNumHeads(),
+                    config.getNumKVHeads(),
+                    config.getHeadDim(),
                     config.getMaxSeqLen()
             );
             kvCaches.add(cache);
@@ -256,6 +266,8 @@ public class MiniMindBlock extends Module {
                 layer.setTraining(training);
             }
         }
+        // 同步 embedding / finalNorm / lmHead 等其余子模块的 _training
+        train(training);
     }
 
     /**
@@ -428,20 +440,30 @@ public class MiniMindBlock extends Module {
      * 损失，保留完整计算图连通性。训练循环应使用 {@code balanceLossVar} 参与总 loss 的
      * 反向传播，使得各层 ExpertRouter 的 gate_linear 参数可获得梯度。
      * 旧字段 {@code balanceLoss}（float）保留用于日志/监控用途。
+     * <p>
+     * {@code hiddenState} 为 lm_head 之前的最终隐藏状态 [batch, seq, hidden]，
+     * 供 PPO Critic 等需要真实隐藏状态（而非 logits）的组件使用。
      */
     public static class MoEOutput {
         private final Variable output;
         private final float balanceLoss;
         private final Variable balanceLossVar;
+        private final Variable hiddenState;
 
         public MoEOutput(Variable output, float balanceLoss) {
-            this(output, balanceLoss, null);
+            this(output, balanceLoss, null, null);
         }
 
         public MoEOutput(Variable output, float balanceLoss, Variable balanceLossVar) {
+            this(output, balanceLoss, balanceLossVar, null);
+        }
+
+        public MoEOutput(Variable output, float balanceLoss, Variable balanceLossVar,
+                         Variable hiddenState) {
             this.output = output;
             this.balanceLoss = balanceLoss;
             this.balanceLossVar = balanceLossVar;
+            this.hiddenState = hiddenState;
         }
 
         public Variable getOutput() {
@@ -458,6 +480,13 @@ public class MiniMindBlock extends Module {
          */
         public Variable getBalanceLossVar() {
             return balanceLossVar;
+        }
+
+        /**
+         * 获取 lm_head 之前的最终隐藏状态 [batch, seq, hidden]，可能为 null（旧构造路径）。
+         */
+        public Variable getHiddenState() {
+            return hiddenState;
         }
 
         @Override

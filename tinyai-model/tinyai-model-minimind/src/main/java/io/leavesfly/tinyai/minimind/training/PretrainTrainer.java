@@ -1,6 +1,7 @@
 package io.leavesfly.tinyai.minimind.training;
 
 import io.leavesfly.tinyai.func.Variable;
+import io.leavesfly.tinyai.minimind.model.MiniMindBlock;
 import io.leavesfly.tinyai.minimind.model.MiniMindConfig;
 import io.leavesfly.tinyai.minimind.model.MiniMindModel;
 import io.leavesfly.tinyai.minimind.training.dataset.PretrainDataset;
@@ -55,7 +56,7 @@ public class PretrainTrainer extends BaseTrainer {
         this.saveInterval = 1000;
         this.checkpointDir = "./checkpoints";
         
-        // 创建优化器(AdamW)
+        // 创建优化器(Adam，本框架未实现权重衰减)
         this.optimizer = new Adam(model, initialLearningRate, 0.9f, 0.999f, 1e-8f);
         
         // 初始化状态
@@ -82,19 +83,6 @@ public class PretrainTrainer extends BaseTrainer {
         return this;
     }
     
-    /**
-     * 设置检查点配置
-     * 
-     * @param checkpointDir 检查点目录
-     * @param saveInterval 保存间隔(步数)
-     * @return this
-     */
-    public PretrainTrainer setCheckpoint(String checkpointDir, int saveInterval) {
-        this.checkpointDir = checkpointDir;
-        this.saveInterval = saveInterval;
-        return this;
-    }
-    
     // ==================== 实现抽象方法 ====================
     
     @Override
@@ -110,8 +98,9 @@ public class PretrainTrainer extends BaseTrainer {
         Variable input = new Variable(inputArray);
         Variable target = new Variable(targetArray);
         
-        // 前向传播
-        Variable logits = model.predict(input);
+        // 前向传播（同时取出 MoE 负载均衡损失；Dense 模式下为 0 常量）
+        MiniMindBlock.MoEOutput output = forwardWithAux(input);
+        Variable logits = output.getOutput();
         
         int[] logitsShape = logits.getValue().getShape().getShapeDims();
         int totalTokens = logitsShape[0] * logitsShape[1];
@@ -120,15 +109,24 @@ public class PretrainTrainer extends BaseTrainer {
         Variable logitsReshaped = logits.reshape(Shape.of(totalTokens, vocabSize));
         Variable targetReshaped = target.reshape(Shape.of(totalTokens, 1));
         
-        // 计算损失
-        Variable loss = lossFunction.loss(targetReshaped, logitsReshaped);
+        // 计算损失：语言建模 CE + MoE 负载均衡辅助损失
+        Variable ceLoss = lossFunction.loss(targetReshaped, logitsReshaped);
+        Variable loss = withMoeAuxLoss(ceLoss, output);
         float lossValue = loss.getValue().getNumber().floatValue();
+        
+        // 损失异常时跳过本 batch：不反向、不推进累积计数，并释放计算图
+        // （若继续 backward，NaN 会污染已累积的梯度，使后续所有参数变成 NaN）
+        if (Float.isNaN(lossValue) || Float.isInfinite(lossValue)) {
+            System.err.println("警告: 损失值异常 (" + lossValue + "), 跳过此batch");
+            loss.unChainBackward();
+            model.clearGrads();
+            accumulationCounter = 0;
+            return Float.NaN;
+        }
         
         // 梯度累积：将损失除以累积步数（对标 Python: loss = loss / accumulation_steps）
         if (accumulationSteps > 1) {
-            Variable scaleVar = new Variable(1.0f / accumulationSteps);
-            scaleVar.setRequireGrad(false);
-            loss = loss.mul(scaleVar);
+            loss = loss.mul(constant(1.0f / accumulationSteps));
         }
         
         // 反向传播（累积梯度）
@@ -224,30 +222,15 @@ public class PretrainTrainer extends BaseTrainer {
     /**
      * 更新学习率（对标 Python get_lr）
      * <p>
-     * Python 公式: lr * (0.1 + 0.45 * (1 + cos(π * step / total_steps)))
-     * 即余弦退火到初始 LR 的 10%（floor = 10%）
+     * 预热段：线性升温，首步为 {@code lr/warmupSteps} 而非 0（避开一次空更新）；
+     * 退火段：{@code lr * (0.1 + 0.45 * (1 + cos(π * step / total_steps)))}，即余弦退火到 10% floor。
      */
     private void updateLearningRate() {
         int totalSteps = maxEpochs * dataset.getBatchCount();
-        
-        if (currentStep < warmupSteps) {
-            // 线性预热
-            currentLearningRate = initialLearningRate * ((float) currentStep / warmupSteps);
-        } else {
-            // 余弦退火（floor = 10%，对标 Python）
-            double cosineDecay = 0.1 + 0.45 * (1 + Math.cos(Math.PI * currentStep / totalSteps));
-            currentLearningRate = initialLearningRate * (float) cosineDecay;
-        }
-        
+        // warmup 步数不得超过总步数，否则 LR 全程停在升温段、永远到不了峰值
+        int effectiveWarmup = Math.min(warmupSteps, totalSteps);
+        currentLearningRate = computeScheduledLearningRate(
+            initialLearningRate, currentStep, totalSteps, effectiveWarmup);
         optimizer.setLearningRate(currentLearningRate);
-    }
-    
-    /**
-     * 设置日志间隔
-     * 
-     * @param logInterval 日志打印间隔
-     */
-    public void setLogInterval(int logInterval) {
-        this.logInterval = logInterval;
     }
 }

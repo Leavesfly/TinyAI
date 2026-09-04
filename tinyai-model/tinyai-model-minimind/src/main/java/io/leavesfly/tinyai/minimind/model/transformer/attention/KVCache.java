@@ -88,6 +88,8 @@ public class KVCache {
      */
     public NdArray[] update(NdArray newK, NdArray newV) {
         int[] newShape = newK.getShape().getShapeDims();
+        checkIncomingShape("newK", newShape);
+        checkIncomingShape("newV", newV.getShape().getShapeDims());
         int newSeqLen = newShape[2];
         
         // 检查是否会超出最大长度
@@ -111,6 +113,25 @@ public class KVCache {
         };
     }
     
+    /**
+     * 校验传入的 K/V 形状与缓存的预分配形状一致
+     * <p>
+     * 头数不匹配的典型成因是：缓存按 Q 头数（numHeads）分配，而写入的是 GQA 下
+     * 未经 repeatKV 扩展的 K/V（numKVHeads）。不拦住的话会在 {@code System.arraycopy}
+     * 处报出与真实原因无关的数组越界。
+     */
+    private void checkIncomingShape(String name, int[] shape) {
+        if (shape.length != 4
+                || shape[0] != batchSize
+                || shape[1] != numHeads
+                || shape[3] != headDim) {
+            throw new IllegalArgumentException(String.format(
+                    "%s 形状 %s 与 KVCache 预分配形状 [batchSize=%d, numHeads=%d, *, headDim=%d] 不匹配；"
+                            + "GQA 下缓存必须按 numKVHeads 分配",
+                    name, java.util.Arrays.toString(shape), batchSize, numHeads, headDim));
+        }
+    }
+
     /**
      * 将新数据拷贝到预分配缓冲区的指定位置
      * 

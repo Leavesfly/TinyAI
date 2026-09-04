@@ -99,7 +99,7 @@ public class DemoTrainingStages {
         // 4. 训练
         System.out.println("\n📝 开始无监督预训练...");
         System.out.println("  - 训练目标: 因果语言建模 (下一个词预测)");
-        System.out.println("  - 学习率: 1e-2 (余弦退火, 10%% floor)");
+        System.out.println("  - 学习率: 1e-2 (余弦退火, 10% floor)");
         System.out.println("  - 训练轮次: 30 epochs");
         System.out.println("-".repeat(80));
 
@@ -146,7 +146,7 @@ public class DemoTrainingStages {
         System.out.println("\n📝 开始监督微调训练...");
         System.out.println("  - 训练目标: 指令跟随和对话生成");
         System.out.println("  - 学习率: 1e-3");
-        System.out.println("  - 训练轮次: 10 epochs");
+        System.out.println("  - 训练轮次: 30 epochs");
         System.out.println("-".repeat(80));
 
         SFTTrainer trainer = new SFTTrainer(pretrainedModel, dataset);
@@ -259,8 +259,10 @@ public class DemoTrainingStages {
 
     /**
      * 执行DPO训练 - 直接偏好优化（人类偏好对齐）
+     *
+     * @param policyModel 策略模型（前置阶段的产出，尚未注入 LoRA）
      */
-    public static MiniMindModel runDPOTraining(MiniMindModel loraModel) throws IOException {
+    public static MiniMindModel runDPOTraining(MiniMindModel policyModel) throws IOException {
         System.out.println("\n" + "=".repeat(80));
         System.out.println("🎯 步骤4: MiniMind DPO训练 (Direct Preference Optimization)");
         System.out.println("=".repeat(80));
@@ -282,7 +284,7 @@ public class DemoTrainingStages {
         String dpoPath = DATA_DIR + "/dpo_train.jsonl";
         List<String> dpoJsonLines = readJsonlFile(dpoPath);
 
-        MiniMindConfig config = loraModel.getConfig();
+        MiniMindConfig config = policyModel.getConfig();
         int batchSize = 1;
         DPODataset dpoDataset = new DPODataset(getSharedTokenizer(), config.getMaxSeqLen(), batchSize);
 
@@ -299,7 +301,7 @@ public class DemoTrainingStages {
         System.out.println("  - 训练轮次: 20 epochs");
         System.out.println("-".repeat(80));
 
-        DPOTrainer dpoTrainer = new DPOTrainer(loraModel, dpoDataset, dpoConfig);
+        DPOTrainer dpoTrainer = new DPOTrainer(policyModel, dpoDataset, dpoConfig);
         dpoTrainer.configure(20, 5e-4f, 1.0f);
         dpoTrainer.setCheckpoint(CHECKPOINT_DIR + "/dpo", 50);
         dpoTrainer.train();
@@ -308,7 +310,7 @@ public class DemoTrainingStages {
         System.out.println("\n✅ DPO训练完成!");
         printDPOSummary();
 
-        return loraModel;
+        return policyModel;
     }
 
     // ========== 步骤5: 强化学习训练 ==========
@@ -342,12 +344,14 @@ public class DemoTrainingStages {
             String response = json.getString("response");
             float reward = (float) json.getDouble("reward");
 
-            // 基于原始response生成多个候选，模拟不同质量的回答
-            List<String> candidates = new ArrayList<>();
+            // 基于原始 response 构造"质量递减"的多个候选，模拟不同质量的回答
+            List<String> candidates = new ArrayList<>(numCandidates);
             float[] rewards = new float[numCandidates];
+            // 数据集中所有 reward 都是同一个常数，因此组内的奖励差异必须在这里显式构造
+            float rewardScale = Math.max(Math.abs(reward), 0.1f);
             for (int i = 0; i < numCandidates; i++) {
-                candidates.add(response);
-                rewards[i] = reward * (0.8f + i * 0.1f);
+                candidates.add(degradeResponse(response, i));
+                rewards[i] = reward - 0.2f * i * rewardScale;
             }
 
             dataset.addSample(prompt, candidates, rewards);
@@ -396,6 +400,35 @@ public class DemoTrainingStages {
         return model;
     }
 
+    /**
+     * 基于原始 response 构造质量递减的候选回答
+     * <p>
+     * 为什么必须让 K 个候选互不相同：GRPO 的优势是组内相对的，{@code Σ_k A_k = 0}。
+     * 若 K 个候选是同一段文本，它们的 {@code ∇log π(y|x)} 完全一致，合成梯度就是
+     * {@code (Σ_k A_k)·∇log π = 0}——训练看起来在跑，参数一步也不会动。
+     *
+     * @param response 原始高质量回答
+     * @param level    降级档位（0 表示原样保留）
+     * @return 该档位的候选文本
+     */
+    private static String degradeResponse(String response, int level) {
+        if (level <= 0 || response.isEmpty()) {
+            return response;
+        }
+
+        // 按档位递增地截断回答，模拟"信息量逐步下降"
+        double keepRatio = Math.max(0.2, 1.0 - 0.2 * level);
+        int keepLen = Math.max(1, (int) (response.length() * keepRatio));
+        String truncated = response.substring(0, Math.min(keepLen, response.length()));
+
+        // 最高档位额外追加复读片段，模拟典型的低质量退化输出
+        if (keepRatio <= 0.4) {
+            String tail = truncated.substring(Math.max(0, truncated.length() - 16));
+            truncated = truncated + tail + tail;
+        }
+        return truncated;
+    }
+
     // ========== 步骤6: Agent RL训练 ==========
 
     /**
@@ -439,13 +472,12 @@ public class DemoTrainingStages {
         System.out.println("  ✓ Agent 训练样本数: " + agentDataset.getSampleCount());
         System.out.println("  ✓ 批次数量: " + agentDataset.getBatchCount());
 
-        // 3. 创建参考模型（复制当前模型权重，然后冻结）
+        // 3. 创建参考模型（深拷贝当前模型权重，然后冻结）
         System.out.println("\n📝 创建参考模型 (用于 KL 散度约束)...");
-        MiniMindConfig refConfig = model.getConfig();
-        MiniMindModel refModel = new MiniMindModel("ref-minimind", refConfig);
-        // 参考模型使用相同架构，在 Demo 场景下随机初始化即可
-        refModel.setTraining(false);
-        System.out.println("  ✓ 参考模型已创建并冻结 (eval + no_grad)");
+        // 必须是当前策略的副本：用随机初始化的同构模型充当参考，KL 约束会把策略
+        // 往一个毫无意义的分布上拉，等价于给损失注入随机噪声
+        MiniMindModel refModel = model.createFrozenCopy("ref-minimind");
+        System.out.println("  ✓ 参考模型已创建并冻结 (参数深拷贝 + eval + requireGrad=false)");
 
         // 4. 创建 Agent 训练器
         System.out.println("\n📝 创建 Agent RL 训练器...");
